@@ -20,14 +20,14 @@ COPY alembic/ ./alembic/
 COPY alembic.ini ./
 COPY scripts/ ./scripts/
 
+RUN chmod +x scripts/start_api.sh scripts/start_worker.sh
+
 # ── API target ──────────────────────────────────────────────────────────────
 FROM base AS api
 
-CMD ["uv", "run", "uvicorn", "agri_agent.api.app:app", \
-     "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["sh", "scripts/start_api.sh"]
 
 # ── Celery worker target ─────────────────────────────────────────────────────
 FROM base AS worker
 
-CMD ["uv", "run", "celery", "-A", "agri_agent.queue.celery_app", \
-     "worker", "--loglevel=info", "--concurrency=4"]
+CMD ["sh", "scripts/start_worker.sh"]
