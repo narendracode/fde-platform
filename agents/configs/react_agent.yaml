@@ -1,0 +1,55 @@
+agent:
+  name: react-agent
+  description: >
+    General-purpose ReAct agent for AgriScience. Reasons step-by-step
+    using available tools before delivering a final answer.
+  version: "1.0.0"
+
+  model:
+    provider: anthropic          # anthropic | openai
+    name: claude-sonnet-4-6
+    temperature: 0.2
+    max_tokens: 4096
+    # cost guardrail — run is rejected if estimated cost exceeds this (USD)
+    max_cost_usd: 0.50
+
+  system_prompt: |
+    You are an intelligent assistant for AgriScience.
+    Think step-by-step. Use tools when you need data or calculations.
+    Always cite your sources when using search results.
+    Be concise and accurate.
+
+  tools:
+    - name: calculator
+      enabled: true
+
+    - name: web_search
+      enabled: true
+      config:
+        max_results: 5
+
+    - name: get_crop_recommendation
+      enabled: true
+
+    - name: get_pest_alert
+      enabled: true
+
+    - name: calculate_fertilizer
+      enabled: true
+
+    - name: get_weather_data
+      enabled: true
+
+  guardrails:
+    max_iterations: 15
+    timeout_seconds: 120
+    # block prompts that contain these patterns (regex)
+    blocked_patterns:
+      - "ignore previous instructions"
+      - "jailbreak"
+
+  observability:
+    langsmith_tracing: true
+    log_inputs: true
+    log_outputs: true
+    log_tool_calls: true
