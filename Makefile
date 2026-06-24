@@ -56,9 +56,12 @@ seed:
 #   make sync-flows
 #   make sync-flows AGENT=react-agent
 #   make sync-flows DRY_RUN=1
-AGENT     ?=
-DRY_RUN   ?=
-_SYNC_FLAGS = $(if $(AGENT),--agent $(AGENT),) $(if $(DRY_RUN),--dry-run,)
+AGENT          ?=
+DRY_RUN        ?=
+FORCE_RECREATE ?=
+_SYNC_FLAGS = $(if $(AGENT),--agent $(AGENT),) \
+              $(if $(DRY_RUN),--dry-run,) \
+              $(if $(FORCE_RECREATE),--force-recreate,)
 
 sync-flows:
 	uv run python scripts/sync_langflow_flows.py $(_SYNC_FLAGS)
