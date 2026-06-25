@@ -411,9 +411,18 @@ curl -s -X POST "http://localhost:8000/api/v1/agents/my-agent/run" \
   ],
   "input_tokens": 412,
   "output_tokens": 87,
+  "cost_usd": 0.002438,
   "elapsed_seconds": 3.2,
-  "blocked": false
+  "blocked": false,
+  "langsmith_run_id": "85596777-fce1-4361-9b0b-1376761df421",
+  "langsmith_trace_url": "https://smith.langchain.com/o/.../r/85596777-...",
+  "otel_trace_id": "c6676430e4db8a752f441f0f5b8f42e8",
+  "otel_trace_url": "http://localhost:16686/trace/c6676430e4db8a752f441f0f5b8f42e8"
 }
+```
+
+> `langsmith_trace_url` and `otel_trace_url` are populated only when their respective
+> tracing systems are enabled (`LANGSMITH_TRACING=true` / `OTEL_ENABLED=true` in `.env`).
 ```
 
 ```bash
@@ -519,6 +528,20 @@ or the message.
 **Smoke test fails with empty output**
 → LLM API key is not set. The agent config loads fine, but the model call fails.
 Set `ANTHROPIC_API_KEY` in `.env` and run `docker compose up -d`.
+
+**`langsmith_trace_url` is null**
+→ Check that `LANGSMITH_TRACING=true`, `LANGSMITH_API_KEY`, and `LANGSMITH_PROJECT`
+are all set in `.env`. Check `docker compose logs api | grep LangSmith` for errors.
+
+**`otel_trace_url` is null**
+→ Check that `OTEL_ENABLED=true` is set in `.env`. Check
+`docker compose logs api | grep -i otel` for startup errors.
+Verify Jaeger is running: `docker compose ps jaeger` and open http://localhost:16686.
+
+**`cost_usd` is 0**
+→ Cost is read from LangSmith after each run. Requires `LANGSMITH_TRACING=true` and a
+valid `LANGSMITH_API_KEY`. If LangSmith's pricing database doesn't cover your model,
+`total_cost` will be null and the platform stores 0.
 
 ```
 curl -s -X POST 'http://localhost:8000/api/v1/agents/agri-assistant/run' \

@@ -54,8 +54,17 @@ choosing their own models, or bypassing compliance guardrails.
                     ┌─────────────▼──────────────────────────────────────────────┐
                     │                  Observability Layer                        │
                     │                                                             │
-                    │   LangSmith  — per-run traces, token counts, latency       │
-                    │   agent_runs table — input/output/cost stored in Postgres  │
+                    │   LangSmith  :smith.langchain.com                          │
+                    │     └── LLM traces: prompts, completions, token counts     │
+                    │         cost per run (server-side pricing), latency        │
+                    │                                                             │
+                    │   OpenTelemetry → Jaeger  :16686                          │
+                    │     └── Distributed traces: HTTP spans, DB queries,        │
+                    │         Redis ops, Celery tasks, agent.run span            │
+                    │                                                             │
+                    │   agent_runs table (PostgreSQL)                            │
+                    │     └── Every run: input/output/tokens/cost +              │
+                    │         langsmith_trace_url + otel_trace_url               │
                     └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -129,6 +138,7 @@ environment variables from `.env` or the container environment.
 - LangSmith API key and project name
 - Platform API key for request authentication
 - Log level
+- OpenTelemetry settings: `OTEL_ENABLED`, `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `JAEGER_UI_URL`
 
 **Why it matters:** Every configurable value is typed and documented in one place.
 Adding a new environment variable means adding one line here — not hunting through code.
@@ -256,20 +266,24 @@ updated_at   timestamp (auto-updated)
 
 **`agent_runs` table — Audit Trail:**
 ```
-id             UUID PK
-agent_id       FK → agents
-thread_id      LangGraph thread — links runs in the same conversation
-task_id        Celery task ID — use to look up async run status
-status         pending | running | completed | failed | blocked | cancelled
-input          JSONB — user message + extra context
-output         JSONB — agent text response + tool call log
-error          text — exception message if failed
-input_tokens   int  — LLM input tokens consumed
-output_tokens  int  — LLM output tokens consumed
-cost_usd       float — estimated cost (populated from token counts)
-started_at     timestamp — when agent execution began
-completed_at   timestamp — when execution finished
-created_at     timestamp — when the run record was created
+id                  UUID PK
+agent_id            FK → agents
+thread_id           LangGraph thread — links runs in the same conversation
+task_id             Celery task ID — use to look up async run status
+status              pending | running | completed | failed | blocked | cancelled
+input               JSONB — user message + extra context
+output              JSONB — agent text response + tool call log
+error               text — exception message if failed
+input_tokens        int  — LLM input tokens consumed
+output_tokens       int  — LLM output tokens consumed
+cost_usd            float — actual cost fetched from LangSmith after each run
+langsmith_run_id    text — LangSmith root trace UUID (set when tracing enabled)
+langsmith_trace_url text — full LangSmith deep-link URL
+otel_trace_id       text — OTel trace ID (32-char hex, set when OTEL_ENABLED)
+otel_trace_url      text — full Jaeger deep-link URL
+started_at          timestamp — when agent execution began
+completed_at        timestamp — when execution finished
+created_at          timestamp — when the run record was created
 ```
 
 **Migrations:** Managed by Alembic (`alembic upgrade head`). Every schema change
@@ -333,20 +347,44 @@ LangFlow with the custom agent platform.
 
 ### 10. Observability
 
-**LangSmith (optional):**
-Set `LANGCHAIN_TRACING_V2=true` in `.env`. Every agent invocation automatically
-sends a trace to LangSmith including: full message history, tool call inputs/outputs,
-token counts, latency per step. No code changes required — LangChain instruments
-automatically when tracing is enabled.
+The platform has three complementary observability layers that cover different scopes:
+
+**LangSmith (LLM-layer traces — optional):**
+Set `LANGSMITH_TRACING=true` and `LANGSMITH_API_KEY` in `.env`. Every agent invocation
+automatically sends a trace to LangSmith including: full prompt/completion text,
+tool call inputs/outputs, token counts, per-step latency, and cost. LangSmith computes
+cost server-side using its own model pricing database — the platform reads this back via
+`client.read_run()` and stores it as `cost_usd` in `agent_runs`.
+
+Each run response includes `langsmith_run_id` and `langsmith_trace_url` (a clickable
+deep-link to the trace in the LangSmith UI).
+
+**OpenTelemetry → Jaeger (infrastructure-layer traces — optional):**
+Set `OTEL_ENABLED=true` in `.env`. The platform auto-instruments:
+
+| Layer | What is traced |
+|---|---|
+| FastAPI | Every HTTP request — method, path, status code, latency |
+| SQLAlchemy | Every DB query — SQL statement, table, duration |
+| Redis | Every redis-py call (Celery broker/result ops) |
+| Celery | Task enqueue + execution, W3C TraceContext propagated across process boundary |
+| `agent.run` | Manual span with model name, token counts, cost, tool count, LangSmith run ID |
+
+Open **http://localhost:16686** to explore traces in the Jaeger UI. Each run response
+includes `otel_trace_id` and `otel_trace_url` (a direct Jaeger deep-link). Both are
+stored in `agent_runs` so you can jump from any DB record to the full distributed trace.
+
+The `otel_service_name` differs by container (`agri-agent-api` vs `agri-agent-worker`)
+so traces from async runs span both services in the same trace tree.
 
 **Platform audit trail (always on):**
-Every run — sync or async — creates an `agent_runs` row regardless of LangSmith.
-This is the compliance-grade record: stores input, output, token counts, cost,
-timing, and status in your own PostgreSQL. You own the data.
+Every run — sync or async — creates an `agent_runs` row regardless of LangSmith or OTel.
+This is the compliance-grade record: input, output, token counts, cost, timing, status,
+and both trace URLs are stored in your own PostgreSQL. You own the data.
 
 **Structured logging:**
-The FastAPI service and Celery worker write structured logs at `INFO` level by default.
-Set `LOG_LEVEL=debug` to see SQL queries and LangGraph step details.
+FastAPI and Celery write structured logs at `INFO` by default.
+Set `LOG_LEVEL=debug` for SQL queries and LangGraph step detail.
 
 ---
 
@@ -395,7 +433,7 @@ Client polls:
 ## Deployment Topology
 
 ```
-docker-compose.yml defines 5 services:
+docker-compose.yml defines 7 services:
 
   postgres   ─ Single instance, two databases:
                agri_agent  (platform data)
@@ -414,6 +452,7 @@ docker-compose.yml defines 5 services:
                reads: agents/configs/*.yaml (mounted read-only)
                reads/writes: postgres/agri_agent
                publishes: redis/db/1 (Celery tasks)
+               sends OTLP traces: jaeger:4318
                exposes: :8000
 
   worker     ─ Celery worker (4 processes)
@@ -421,6 +460,14 @@ docker-compose.yml defines 5 services:
                reads/writes: postgres/agri_agent
                consumes: redis/db/1 (Celery tasks)
                writes: redis/db/2 (task results)
+               sends OTLP traces: jaeger:4318
+
+  jaeger     ─ Jaeger all-in-one (OTel collector + trace UI)
+               receives: OTLP HTTP on :4318, OTLP gRPC on :4317
+               exposes: :16686 (Jaeger UI)
+
+  adminer    ─ Lightweight DB browser (PostgreSQL)
+               exposes: :8080
 ```
 
 ---
@@ -478,7 +525,8 @@ Engineer writes new agent config
 | New API endpoint | `api/routes/` |
 | New DB table | New model in `db/models.py` + Alembic migration |
 | JWT auth | Replace `dependencies.verify_api_key()` |
-| Cost calculation | `queue/tasks.py` — map token counts to USD per model |
+| Cost calculation | Automatic — fetched from LangSmith `run.total_cost` after each run |
+| OTel backend swap | Change `OTEL_EXPORTER_OTLP_ENDPOINT` to any OTLP-compatible backend (Grafana Tempo, Honeycomb, Datadog) |
 | Conversation memory | Add `AsyncPostgresSaver` checkpointer in `react_agent.build_agent()` |
 | Horizontal scaling | Add more `worker` containers; point them at the same Redis + Postgres |
 | Kubernetes deployment | Replace `docker-compose.yml` with Helm chart — services map 1:1 |

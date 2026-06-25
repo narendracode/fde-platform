@@ -155,63 +155,55 @@ langflow:
 JSON and `POST`s it to LangFlow's REST API. Engineers push YAML to Git; the pipeline
 automatically creates or updates the matching flow in LangFlow.
 
-**LangFlow API endpoints:**
+> **This option is fully implemented.** See `scripts/sync_langflow_flows.py` and
+> `docs/launch-new-agent.md` for the complete usage guide. The summary below describes
+> how it works.
+
+**LangFlow API endpoints used:**
 ```
 POST   /api/v1/flows/          Create a new flow
-PUT    /api/v1/flows/{flow_id} Update an existing flow
+PATCH  /api/v1/flows/{flow_id} Update an existing flow
 GET    /api/v1/flows/          List all flows
 DELETE /api/v1/flows/{flow_id} Delete a flow
 ```
 
-**Rough pipeline script** (`scripts/sync_flows_to_langflow.py`):
+**How `scripts/sync_langflow_flows.py` works:**
 
-```python
-"""Convert YAML agent configs to LangFlow flows and import them."""
-import httpx
-from agri_agent.config.loader import list_agent_configs
+Each YAML agent config is converted to a LangFlow flow with three nodes wired together:
+```
+ChatInput  ──►  AgriAgent Custom Component  ──►  ChatOutput
+```
+The custom component is embedded Python code that calls the platform API
+(`POST /api/v1/agents/{name}/run`), so all execution stays in the platform's audit trail.
 
-LANGFLOW_URL = "http://localhost:7860"
-LANGFLOW_TOKEN = "..."  # obtained via POST /api/v1/login
+The script is idempotent: it tracks platform-managed flows via an `agri-platform` tag,
+creates on first run, and updates in place on subsequent runs while preserving any edges
+you wired manually.
 
-def yaml_to_langflow_flow(cfg) -> dict:
-    """Map AgentConfig to LangFlow's flow graph JSON format."""
-    # LangFlow flow schema: { name, description, data: { nodes, edges, viewport } }
-    # Each node is a LangFlow component with an id, type, position, and data dict.
-    # This mapping must be maintained as LangFlow's schema evolves.
-    return {
-        "name": cfg.name,
-        "description": cfg.description,
-        "data": {
-            "nodes": [...],   # ChatInput, Agent, LLM, Tools, ChatOutput nodes
-            "edges": [...],   # connections between nodes
-            "viewport": {"x": 0, "y": 0, "zoom": 1},
-        },
-    }
+```bash
+uv run python scripts/sync_langflow_flows.py            # sync all configs
+uv run python scripts/sync_langflow_flows.py --agent react-agent   # sync one
+uv run python scripts/sync_langflow_flows.py --dry-run  # print JSON, no changes
+uv run python scripts/sync_langflow_flows.py --delete-all  # remove all platform flows
+```
 
-def sync():
-    headers = {"Authorization": f"Bearer {LANGFLOW_TOKEN}"}
-    existing = {f["name"]: f["id"] for f in
-                httpx.get(f"{LANGFLOW_URL}/api/v1/flows/", headers=headers).json()}
-    for cfg in list_agent_configs():
-        flow = yaml_to_langflow_flow(cfg)
-        if cfg.name in existing:
-            httpx.put(f"{LANGFLOW_URL}/api/v1/flows/{existing[cfg.name]}",
-                      json=flow, headers=headers)
-            print(f"Updated: {cfg.name}")
-        else:
-            httpx.post(f"{LANGFLOW_URL}/api/v1/flows/", json=flow, headers=headers)
-            print(f"Created: {cfg.name}")
+Or via Makefile:
+```bash
+make sync-flows
+make sync-flows AGENT=react-agent
+make ci-deploy          # full pipeline: migrate → seed → sync → smoke test
 ```
 
 **Pros:**
 - True GitOps: YAML is the single source of truth for both platforms
-- New agent in Git → CI runs script → appears in LangFlow automatically
+- New agent in Git → `make ci-deploy` → appears in LangFlow automatically
 - No manual work in the UI to keep flows in sync
+- All runs go through the platform audit trail — LangFlow is just a visual trigger
 
 **Cons:**
-- Most complex to implement — requires maintaining the YAML→LangFlow schema mapping
+- LangFlow Custom Components have lazy port discovery — edges can be rejected on
+  first import and must be wired manually once (see `docs/launch-new-agent.md` Step 6)
 - LangFlow's internal flow JSON schema can change across versions
-- Needs a LangFlow API token (service account) in the CI environment
 
 **Best for:** Mature teams with GitOps discipline who want LangFlow to reflect Git state
 without any manual clicks.
@@ -236,10 +228,11 @@ tracing UI alongside LangSmith.
 
 | Phase | Recommended option | Reason |
 |---|---|---|
-| **POC / now** | Option 1 (native LangFlow) | Fastest to see value in the UI |
-| **Team onboarding** | Option 3 (custom component) | Engineers stay in LangFlow, execution stays in platform |
+| **POC / now** | **Option 4** (already implemented) | `make ci-deploy` syncs all YAML configs to LangFlow automatically |
+| **Non-engineer testing** | Option 1 (native LangFlow) | Fastest path for product/design to iterate without touching YAML |
+| **Team onboarding** | Option 3 (custom component) | Engineers stay in LangFlow, execution stays in the platform |
 | **Production** | Option 2 + Option 4 | API is the engine; GitOps keeps LangFlow in sync |
 
-The long-term target: YAML in Git is the authoritative config, Option 4 syncs it to
-LangFlow automatically, and Option 2/3 ensures all runs go through the platform's
-audit trail and queue.
+The current state: YAML in Git is the authoritative config, Option 4 (`sync_langflow_flows.py`)
+syncs it to LangFlow on every CI deploy, and the Custom Component (Option 4's output) ensures
+all runs flow through the platform's audit trail and queue.
