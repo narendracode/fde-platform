@@ -11,7 +11,7 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
 
 from agri_agent.agent.tools import get_tools_for_config
 from agri_agent.config.loader import AgentConfig
@@ -157,10 +157,10 @@ def build_agent(config: AgentConfig):
         os.environ.setdefault("LANGCHAIN_API_KEY", settings.langchain_api_key)
         os.environ.setdefault("LANGCHAIN_PROJECT", settings.langchain_project)
 
-    compiled = create_react_agent(
+    compiled = create_agent(
         model=model,
         tools=tools,
-        prompt=config.system_prompt.strip(),
+        system_prompt=config.system_prompt.strip(),
     )
     return compiled
 
