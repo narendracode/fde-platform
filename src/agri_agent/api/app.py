@@ -12,10 +12,7 @@ logging.basicConfig(level=settings.log_level.upper())
 
 app = FastAPI(
     title="Fundly Agent Platform",
-    description=(
-        "Central API for deploying, running, and auditing AI agents. "
-        "Pairs with LangFlow UI at http://localhost:7860."
-    ),
+    description="Central API for deploying, running, and auditing AI agents.",
     version="0.1.0",
     docs_url="/docs",
     redoc_url="/redoc",

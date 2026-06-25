@@ -102,8 +102,6 @@ steps needed = 1                          (first LLM call)
 
 ## Where the limit is configured
 
-### Platform API (via `run_agent`)
-
 The `max_iterations` field in the agent's YAML maps directly to `recursion_limit`:
 
 ```yaml
@@ -119,15 +117,6 @@ runnable_config = RunnableConfig(
     ...
 )
 ```
-
-### LangFlow (direct invocation)
-
-LangFlow has its own recursion limit field inside the flow configuration
-(**not** inherited from the YAML). Its default is **5**, which is why runs
-that go through LangFlow directly hit the limit even when the YAML says 20.
-
-To fix it: open the flow in LangFlow UI → Agent component settings →
-increase **Max Iterations** / **Recursion Limit**.
 
 ---
 
@@ -162,7 +151,7 @@ The `+ 5` provides headroom for:
 
 | `recursion_limit` value | What it means in practice |
 |---|---|
-| 5 (LangFlow default) | Handles at most ~1 tool call before crashing on any real workflow |
+| 5 | Handles at most ~1 tool call before crashing on any real workflow |
 | 15 (platform YAML default) | Safe for up to ~6 tool calls — fine for simple lookup + filter tasks |
 | 25 | Safe for up to ~10 tool calls — covers most single-region outreach runs |
 | 50+ | Needed for bulk operations or agents that loop over large lists |

@@ -19,7 +19,6 @@ make launch-agent
                              CI/CD: make ci-deploy
                                → alembic migrate
                                → seed_data.py (is_active=false)
-                               → sync to LangFlow
                              Agent is INACTIVE
                                                       Dashboard: activate
                                                       PATCH /agents/{name}/activate
@@ -223,7 +222,7 @@ uv run agri-agent run my-agent "Your question here"
 ## CI/CD deploy
 
 ```bash
-make ci-deploy AGENT=my-agent        # migrate → seed → sync to LangFlow → smoke test
+make ci-deploy AGENT=my-agent        # migrate → seed → smoke test
 make ci-deploy AGENT=my-agent DRY_RUN=1   # dry run
 make ci-deploy SKIP_SMOKE=1          # skip smoke test (useful without LLM key)
 ```
@@ -235,27 +234,14 @@ dashboard or via the API (see above).
 
 ## Platform Scripts reference
 
-### `scripts/sync_langflow_flows.py`
-
-Reads YAML configs and pushes them to LangFlow as visual flows via the LangFlow REST API.
-Each flow wraps the platform API (`POST /api/v1/agents/{name}/run`), so all execution
-stays inside the audit trail.
-
-```bash
-uv run python scripts/sync_langflow_flows.py            # sync all
-uv run python scripts/sync_langflow_flows.py --agent my-agent
-uv run python scripts/sync_langflow_flows.py --dry-run
-```
-
 ### `scripts/ci_deploy.sh`
 
-Full pipeline: health checks → alembic migrate → seed agents → sync flows → smoke test.
+Full pipeline: health checks → alembic migrate → seed agents → smoke test.
 
 ### Makefile targets
 
 ```bash
 make launch-agent                    # create new agent (conversational)
-make sync-flows                      # sync YAML configs → LangFlow
 make ci-deploy AGENT=my-agent        # full deploy pipeline
 make ci-deploy DRY_RUN=1             # dry run
 ```

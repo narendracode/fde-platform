@@ -1,4 +1,4 @@
-.PHONY: help up down logs migrate seed sync-flows ci-deploy launch-agent lint test shell-api shell-worker
+.PHONY: help up down logs migrate seed ci-deploy launch-agent lint test shell-api shell-worker
 
 help:
 	@echo "Fundly Agent Platform"
@@ -12,13 +12,8 @@ help:
 	@echo "  make migrate       Run Alembic DB migrations"
 	@echo "  make seed          Seed agent configs into platform DB (inactive)"
 	@echo ""
-	@echo "  ── LangFlow (GitOps Option 4) ────────────────────────"
-	@echo "  make sync-flows    Sync all YAML configs → LangFlow flows"
-	@echo "  make sync-flows AGENT=react-agent   Sync one agent"
-	@echo "  make sync-flows DRY_RUN=1  Preview JSON, no changes"
-	@echo ""
 	@echo "  ── CI/CD Simulation ──────────────────────────────────"
-	@echo "  make ci-deploy     Full pipeline: migrate→seed→sync→smoke"
+	@echo "  make ci-deploy     Full pipeline: migrate→seed→smoke"
 	@echo "  make ci-deploy AGENT=react-agent     Single agent deploy"
 	@echo "  make ci-deploy DRY_RUN=1   Dry run (no mutations)"
 	@echo "  make ci-deploy SKIP_SMOKE=1  Skip smoke test"
@@ -40,8 +35,9 @@ up:
 	chmod +x scripts/init_postgres.sh scripts/start_api.sh scripts/start_worker.sh
 	docker compose up --build
 	@echo ""
-	@echo "✓ LangFlow UI  → http://localhost:7860  (admin / adminpass123)"
 	@echo "✓ Agent API    → http://localhost:8000/docs"
+	@echo "✓ Jaeger UI    → http://localhost:16686"
+	@echo "✓ Adminer      → http://localhost:8080"
 
 down:
 	docker compose down
@@ -56,27 +52,9 @@ migrate:
 seed:
 	docker compose exec api uv run python scripts/seed_data.py
 
-# ── LangFlow sync (Option 4) ───────────────────────────────────────────────────
-# Examples:
-#   make sync-flows
-#   make sync-flows AGENT=react-agent
-#   make sync-flows DRY_RUN=1
-AGENT          ?=
-DRY_RUN        ?=
-FORCE_RECREATE ?=
-_SYNC_FLAGS = $(if $(AGENT),--agent $(AGENT),) \
-              $(if $(DRY_RUN),--dry-run,) \
-              $(if $(FORCE_RECREATE),--force-recreate,)
-
-sync-flows:
-	uv run python scripts/sync_langflow_flows.py $(_SYNC_FLAGS)
-
 # ── CI/CD simulation ───────────────────────────────────────────────────────────
-# Examples:
-#   make ci-deploy
-#   make ci-deploy AGENT=react-agent
-#   make ci-deploy DRY_RUN=1
-#   make ci-deploy SKIP_SMOKE=1
+AGENT   ?=
+DRY_RUN ?=
 SKIP_SMOKE ?=
 _CI_FLAGS = $(if $(AGENT),--agent=$(AGENT),) \
             $(if $(DRY_RUN),--dry-run,) \

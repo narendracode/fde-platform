@@ -1,25 +1,23 @@
 # Fundly Agent Platform
 
-A centralized AI agent platform built on LangFlow, LangGraph, FastAPI, PostgreSQL, and Redis.
+A centralized AI agent platform built on LangGraph, FastAPI, PostgreSQL, and Redis.
 
 ## Quick start
 
 ```bash
 cp .env.example .env   # fill in your API keys
-make up                # starts all services
+make up                # starts all services (postgres, redis, api, worker, jaeger, adminer)
 make migrate           # run DB migrations
 make seed              # seed demo agents
 ```
 
-- LangFlow UI: http://localhost:7860
 - Agent API docs: http://localhost:8000/docs
+- Jaeger UI: http://localhost:16686
+- Adminer (DB browser): http://localhost:8080
 
 ## Run an agent locally (no Docker)
 
 ```bash
 uv run agri-agent list
 uv run agri-agent run react-agent "What crops should I plant in Punjab this rabi season on loamy soil?"
-
-uv run python scripts/sync_langflow_flows.py --delete-all
-uv run python scripts/sync_langflow_flows.py
 ```

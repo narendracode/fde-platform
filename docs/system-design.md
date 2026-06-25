@@ -15,8 +15,8 @@ choosing their own models, or bypassing compliance guardrails.
                            ┌──────────────────────────────────────────────────┐
                            │                  Client Layer                     │
                            │                                                  │
-                           │   LangFlow UI        REST Clients     CLI        │
-                           │   :7860              (curl / SDK)     fundly-agent│
+                           │   REST Clients                         CLI        │
+                           │   (curl / SDK / Swagger)               fundly-agent│
                            └──────┬───────────────────┬────────────────┬──────┘
                                   │                   │                │
                           ────────┼───────────────────┼────────────────┼────────
@@ -48,7 +48,6 @@ choosing their own models, or bypassing compliance guardrails.
                     │   PostgreSQL                          Redis               │
                     │   ├── agents         (registry)      ├── Celery broker   │
                     │   └── agent_runs     (audit trail)   └── Celery results  │
-                    │   └── LangFlow DB    (flows/UI)                          │
                     └───────────────────────────────────────────────────────────┘
                                   │
                     ┌─────────────▼──────────────────────────────────────────────┐
@@ -216,7 +215,7 @@ No changes to the agent engine, API, or database are needed.
 
 ### 6. FastAPI Service (`src/agri_agent/api/`)
 
-**What it is:** The HTTP interface to the platform. All external systems — LangFlow,
+**What it is:** The HTTP interface to the platform. All external systems —
 CI pipelines, dashboards, mobile apps — interact with agents through this API.
 
 **Endpoints:**
@@ -329,25 +328,7 @@ Scale horizontally by adding more `worker` containers in Docker Compose or Kuber
 
 ---
 
-### 9. LangFlow UI (`localhost:7860`)
-
-**What it is:** An open-source visual flow builder. In this platform it serves as:
-- A prototyping canvas for trying new agent designs quickly
-- A non-engineer-friendly interface for testing existing agents (via HTTP component)
-- A visual documentation layer showing how agent components connect
-
-**What it is not:** The execution engine. LangFlow uses its own runtime for flows
-built natively. For production runs the custom FastAPI service is the engine.
-
-**Storage:** LangFlow has its own PostgreSQL database (`langflow` DB) separate from
-the platform's `agri_agent` DB. Flows built in LangFlow are stored there.
-
-**See `docs/langflow-integration-options.md`** for detailed options on bridging
-LangFlow with the custom agent platform.
-
----
-
-### 10. Observability
+### 9. Observability
 
 The platform has three complementary observability layers that cover different scopes:
 
@@ -435,20 +416,15 @@ Client polls:
 ## Deployment Topology
 
 ```
-docker-compose.yml defines 7 services:
+docker-compose.yml defines 6 services:
 
-  postgres   ─ Single instance, two databases:
+  postgres   ─ Single instance, one database:
                agri_agent  (platform data)
-               langflow    (LangFlow flows)
 
   redis      ─ Single instance, three logical DBs:
                db/0  general cache
                db/1  Celery broker (task queue)
                db/2  Celery result backend
-
-  langflow   ─ LangFlow server
-               reads/writes: postgres/langflow
-               exposes: :7860
 
   api        ─ FastAPI + Uvicorn
                reads: agents/configs/*.yaml (mounted read-only)
@@ -495,7 +471,7 @@ Engineer writes new agent config
   CI/CD pipeline
   ├── docker compose build / push image
   ├── docker compose up (rolling restart of api + worker)
-  └── make ci-deploy AGENT=new-agent   (migrate → seed → sync → smoke)
+  └── make ci-deploy AGENT=new-agent   (migrate → seed → smoke)
          │
          ▼
   Agent registered with is_active=false
@@ -519,7 +495,6 @@ Engineer writes new agent config
 | LLM prompt injection | `blocked_patterns` regex guardrail | Add semantic classifier layer |
 | Tool sandboxing | Calculator uses AST (no `eval`) | Restrict network/FS access per tool |
 | Data residency | All data in your Postgres | Disable LangSmith if data must stay on-prem |
-| LangFlow access | Protected by username/password | Add SSO via LangFlow's enterprise config |
 | TLS | Not configured (POC) | Terminate at load balancer (nginx/ALB) |
 
 ---

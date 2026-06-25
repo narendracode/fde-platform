@@ -6,9 +6,8 @@
 #   1. Check services are healthy
 #   2. Run DB migrations
 #   3. Register agents in the platform DB
-#   4. Sync flows to LangFlow
-#   5. Smoke test the platform API
-#   6. Print a deployment summary
+#   4. Smoke test the platform API
+#   5. Print a deployment summary
 #
 # Usage:
 #   bash scripts/ci_deploy.sh                    # deploy all agents
@@ -46,12 +45,10 @@ done
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 API_URL="${API_URL:-http://localhost:8000}"
-LANGFLOW_URL="${LANGFLOW_URL:-http://localhost:7860}"
 API_KEY="${API_KEY:-dev-secret-key-change-in-prod}"
 
 echo -e "\n${BOLD}Fundly Agent Platform — CI/CD Deploy${RESET}"
 echo   "  Platform API : ${API_URL}"
-echo   "  LangFlow     : ${LANGFLOW_URL}"
 if [[ "$DRY_RUN" == "true" ]]; then
   warn "DRY RUN mode — no changes will be made"
 fi
@@ -66,15 +63,6 @@ if curl -sf "${API_URL}/health" >/dev/null 2>&1; then
   success "Platform API is up"
 else
   error "Platform API not reachable at ${API_URL}. Run: make up"
-fi
-
-info "Checking LangFlow..."
-if curl -sf "${LANGFLOW_URL}/health" >/dev/null 2>&1 || \
-   curl -sf "${LANGFLOW_URL}/api/v1/version" >/dev/null 2>&1; then
-  success "LangFlow is up"
-else
-  warn "LangFlow not reachable at ${LANGFLOW_URL} — flow sync will be skipped"
-  SKIP_LANGFLOW=true
 fi
 
 info "Checking database (via API health endpoint)..."
@@ -110,24 +98,7 @@ else
 fi
 
 # ══════════════════════════════════════════════════════════════════════════════
-section "STEP 4 — Sync flows to LangFlow"
-# ══════════════════════════════════════════════════════════════════════════════
-
-if [[ "${SKIP_LANGFLOW:-false}" == "true" ]]; then
-  warn "LangFlow unreachable — skipping flow sync"
-else
-  SYNC_FLAGS="$AGENT_FLAG"
-  if [[ "$DRY_RUN" == "true" ]]; then
-    SYNC_FLAGS="$SYNC_FLAGS --dry-run"
-  fi
-
-  info "Syncing YAML configs to LangFlow flows..."
-  LANGFLOW_URL="$LANGFLOW_URL" \
-    uv run python scripts/sync_langflow_flows.py $SYNC_FLAGS
-fi
-
-# ══════════════════════════════════════════════════════════════════════════════
-section "STEP 5 — Smoke test"
+section "STEP 4 — Smoke test"
 # ══════════════════════════════════════════════════════════════════════════════
 
 if [[ "$SKIP_SMOKE" == "true" ]] || [[ "$DRY_RUN" == "true" ]]; then
@@ -168,7 +139,6 @@ section "DEPLOYMENT SUMMARY"
 
 echo
 echo -e "  ${GREEN}Platform API${RESET}   →  ${API_URL}/docs"
-echo -e "  ${GREEN}LangFlow UI${RESET}    →  ${LANGFLOW_URL}"
 echo
 echo -e "  ${BOLD}Quick commands:${RESET}"
 echo -e "  Invoke agent (sync):   curl -X POST ${API_URL}/api/v1/agents/react-agent/run \\"
