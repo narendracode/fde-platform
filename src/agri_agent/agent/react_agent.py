@@ -16,8 +16,10 @@ from langgraph.prebuilt import create_react_agent
 from agri_agent.agent.tools import get_tools_for_config
 from agri_agent.config.loader import AgentConfig
 from agri_agent.config.settings import settings
+from agri_agent.telemetry import current_trace_id, get_tracer, jaeger_url
 
 _log = logging.getLogger(__name__)
+_tracer = get_tracer("agri_agent.agent")
 
 # ── LangSmith helpers ─────────────────────────────────────────────────────────
 
@@ -190,85 +192,111 @@ def run_agent(
           "elapsed_seconds": float,
         }
     """
-    # ── Guardrail: blocked patterns ───────────────────────────────────────────
-    matched = _check_blocked_patterns(
-        user_message, config.guardrails.blocked_patterns
-    )
-    if matched:
+    with _tracer.start_as_current_span("agent.run") as span:
+        span.set_attribute("agent.name", config.name)
+        span.set_attribute("agent.model.name", config.model.name)
+        span.set_attribute("agent.model.provider", config.model.provider)
+        span.set_attribute("message.length", len(user_message))
+
+        # ── Guardrail: blocked patterns ───────────────────────────────────────
+        matched = _check_blocked_patterns(
+            user_message, config.guardrails.blocked_patterns
+        )
+        if matched:
+            span.set_attribute("agent.blocked", True)
+            span.set_attribute("agent.blocked_pattern", matched)
+            _tid = current_trace_id()
+            return {
+                "output": f"Request blocked by guardrail (matched pattern: '{matched}').",
+                "messages": [],
+                "thread_id": thread_id or str(uuid.uuid4()),
+                "tool_calls": [],
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "elapsed_seconds": 0.0,
+                "blocked": True,
+                "otel_trace_id": _tid,
+                "otel_trace_url": jaeger_url(_tid),
+            }
+
+        agent = build_agent(config)
+
+        # Build message list
+        messages: list = [HumanMessage(content=user_message)]
+        if extra_context:
+            ctx_text = "\n".join(f"{k}: {v}" for k, v in extra_context.items())
+            messages = [HumanMessage(content=f"Context:\n{ctx_text}\n\n{user_message}")]
+
+        # Use a fixed run_id so the LangSmith root trace ID is stable and storable.
+        ls_run_id = uuid.uuid4()
+        span.set_attribute("langsmith.run_id", str(ls_run_id))
+
+        runnable_config = RunnableConfig(
+            recursion_limit=config.guardrails.max_iterations,
+            configurable={"thread_id": thread_id or str(uuid.uuid4())},
+            run_id=ls_run_id,
+        )
+
+        start = time.perf_counter()
+        result = agent.invoke({"messages": messages}, config=runnable_config)
+        elapsed = round(time.perf_counter() - start, 3)
+
+        # Extract final AI message
+        ai_messages = [m for m in result["messages"] if hasattr(m, "content") and m.__class__.__name__ == "AIMessage"]
+        output_text = ai_messages[-1].content if ai_messages else ""
+
+        # Collect tool calls from all messages
+        tool_calls = []
+        for msg in result["messages"]:
+            if hasattr(msg, "tool_calls") and msg.tool_calls:
+                tool_calls.extend(msg.tool_calls)
+
+        # Token accounting (available via usage_metadata on response messages)
+        input_tokens = output_tokens = 0
+        for msg in result["messages"]:
+            meta = getattr(msg, "usage_metadata", None)
+            if meta:
+                input_tokens += meta.get("input_tokens", 0)
+                output_tokens += meta.get("output_tokens", 0)
+
+        # Cost + trace URL — both sourced from LangSmith.
+        # _cost_from_langsmith() flushes the trace uploader first; _langsmith_url()
+        # then reuses the already-uploaded run (no extra wait needed).
+        cost_usd: float = 0.0
+        langsmith_trace_url: str | None = None
+        if config.observability.langsmith_tracing:
+            cost_usd = _cost_from_langsmith(str(ls_run_id))
+            langsmith_trace_url = _langsmith_url(str(ls_run_id))
+
+        # OTel span attributes — set after we have all the numbers.
+        span.set_attribute("tokens.input", input_tokens)
+        span.set_attribute("tokens.output", output_tokens)
+        span.set_attribute("cost.usd", cost_usd)
+        span.set_attribute("tool.count", len(tool_calls))
+        span.set_attribute("elapsed.seconds", elapsed)
+        span.set_attribute("agent.blocked", False)
+
+        otel_trace_id = current_trace_id()
+        otel_trace_url = jaeger_url(otel_trace_id)
+
         return {
-            "output": f"Request blocked by guardrail (matched pattern: '{matched}').",
-            "messages": [],
-            "thread_id": thread_id or str(uuid.uuid4()),
-            "tool_calls": [],
-            "input_tokens": 0,
-            "output_tokens": 0,
-            "elapsed_seconds": 0.0,
-            "blocked": True,
+            "output": output_text,
+            "messages": [
+                {"role": m.__class__.__name__.replace("Message", "").lower(), "content": str(m.content)}
+                for m in result["messages"]
+            ],
+            "thread_id": runnable_config["configurable"]["thread_id"],
+            "tool_calls": [
+                {"name": tc.get("name", ""), "args": tc.get("args", {})}
+                for tc in tool_calls
+            ],
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "cost_usd": cost_usd,
+            "elapsed_seconds": elapsed,
+            "langsmith_run_id": str(ls_run_id),
+            "langsmith_trace_url": langsmith_trace_url,
+            "otel_trace_id": otel_trace_id,
+            "otel_trace_url": otel_trace_url,
+            "blocked": False,
         }
-
-    agent = build_agent(config)
-
-    # Build message list
-    messages: list = [HumanMessage(content=user_message)]
-    if extra_context:
-        ctx_text = "\n".join(f"{k}: {v}" for k, v in extra_context.items())
-        messages = [HumanMessage(content=f"Context:\n{ctx_text}\n\n{user_message}")]
-
-    # Use a fixed run_id so the LangSmith root trace ID is stable and storable.
-    ls_run_id = uuid.uuid4()
-    runnable_config = RunnableConfig(
-        recursion_limit=config.guardrails.max_iterations,
-        configurable={"thread_id": thread_id or str(uuid.uuid4())},
-        run_id=ls_run_id,
-    )
-
-    start = time.perf_counter()
-    result = agent.invoke({"messages": messages}, config=runnable_config)
-    elapsed = round(time.perf_counter() - start, 3)
-
-    # Extract final AI message
-    ai_messages = [m for m in result["messages"] if hasattr(m, "content") and m.__class__.__name__ == "AIMessage"]
-    output_text = ai_messages[-1].content if ai_messages else ""
-
-    # Collect tool calls from all messages
-    tool_calls = []
-    for msg in result["messages"]:
-        if hasattr(msg, "tool_calls") and msg.tool_calls:
-            tool_calls.extend(msg.tool_calls)
-
-    # Token accounting (available via usage_metadata on response messages)
-    input_tokens = output_tokens = 0
-    for msg in result["messages"]:
-        meta = getattr(msg, "usage_metadata", None)
-        if meta:
-            input_tokens += meta.get("input_tokens", 0)
-            output_tokens += meta.get("output_tokens", 0)
-
-    # Cost + trace URL — both sourced from LangSmith.
-    # _cost_from_langsmith() flushes the trace uploader first; _langsmith_url()
-    # then reuses the already-uploaded run (no extra wait needed).
-    cost_usd: float = 0.0
-    langsmith_trace_url: str | None = None
-    if config.observability.langsmith_tracing:
-        cost_usd = _cost_from_langsmith(str(ls_run_id))
-        langsmith_trace_url = _langsmith_url(str(ls_run_id))
-
-    return {
-        "output": output_text,
-        "messages": [
-            {"role": m.__class__.__name__.replace("Message", "").lower(), "content": str(m.content)}
-            for m in result["messages"]
-        ],
-        "thread_id": runnable_config["configurable"]["thread_id"],
-        "tool_calls": [
-            {"name": tc.get("name", ""), "args": tc.get("args", {})}
-            for tc in tool_calls
-        ],
-        "input_tokens": input_tokens,
-        "output_tokens": output_tokens,
-        "cost_usd": cost_usd,
-        "elapsed_seconds": elapsed,
-        "langsmith_run_id": str(ls_run_id),
-        "langsmith_trace_url": langsmith_trace_url,
-        "blocked": False,
-    }

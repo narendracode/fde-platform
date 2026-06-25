@@ -44,6 +44,8 @@ class RunResponse(BaseModel):
     blocked: bool
     langsmith_run_id: str | None = None
     langsmith_trace_url: str | None = None
+    otel_trace_id: str | None = None
+    otel_trace_url: str | None = None
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -179,6 +181,8 @@ async def run_agent_sync(
     run.cost_usd = result.get("cost_usd", 0.0)
     run.langsmith_run_id = result.get("langsmith_run_id")
     run.langsmith_trace_url = result.get("langsmith_trace_url")
+    run.otel_trace_id = result.get("otel_trace_id")
+    run.otel_trace_url = result.get("otel_trace_url")
     run.completed_at = datetime.now(timezone.utc)
     await session.commit()
 
@@ -193,6 +197,8 @@ async def run_agent_sync(
         blocked=result.get("blocked", False),
         langsmith_run_id=result.get("langsmith_run_id"),
         langsmith_trace_url=result.get("langsmith_trace_url"),
+        otel_trace_id=result.get("otel_trace_id"),
+        otel_trace_url=result.get("otel_trace_url"),
     )
 
 

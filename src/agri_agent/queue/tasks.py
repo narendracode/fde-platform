@@ -69,6 +69,11 @@ def run_agent_task(
                 run.thread_id = result["thread_id"]
                 run.input_tokens = result["input_tokens"]
                 run.output_tokens = result["output_tokens"]
+                run.cost_usd = result.get("cost_usd", 0.0)
+                run.langsmith_run_id = result.get("langsmith_run_id")
+                run.langsmith_trace_url = result.get("langsmith_trace_url")
+                run.otel_trace_id = result.get("otel_trace_id")
+                run.otel_trace_url = result.get("otel_trace_url")
                 run.completed_at = datetime.now(UTC)
                 session.commit()
 

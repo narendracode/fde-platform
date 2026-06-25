@@ -1,6 +1,7 @@
 """Celery application configuration."""
 
 from celery import Celery
+from celery.signals import worker_init
 
 from agri_agent.config.settings import settings
 
@@ -27,3 +28,17 @@ celery_app.conf.update(
     task_acks_late=True,           # ack only after task completes (safe retry on crash)
     task_reject_on_worker_lost=True,
 )
+
+
+@worker_init.connect
+def _setup_otel_in_worker(**_kwargs):
+    """Initialize OTel in the Celery worker process.
+
+    Celery workers are separate processes — they don't inherit the API's OTel
+    setup, so we initialize here. CeleryInstrumentor propagates the W3C
+    TraceContext from task message headers, linking worker spans to the API trace.
+    """
+    from agri_agent.telemetry import instrument_celery, instrument_redis, setup_otel
+    setup_otel()
+    instrument_celery()
+    instrument_redis()

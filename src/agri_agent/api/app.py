@@ -35,4 +35,12 @@ app.include_router(runs.router)
 
 @app.on_event("startup")
 async def on_startup():
+    from agri_agent.telemetry import (
+        instrument_fastapi,
+        instrument_redis,
+        setup_otel,
+    )
+    setup_otel()
+    instrument_fastapi(app)
+    instrument_redis()
     logging.info("AgriScience Agent API started")

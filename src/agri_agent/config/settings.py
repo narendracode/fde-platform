@@ -30,5 +30,11 @@ class Settings(BaseSettings):
     log_level: str = "info"
     agents_config_dir: str = "agents/configs"
 
+    # OpenTelemetry
+    otel_enabled: bool = False
+    otel_service_name: str = "agri-agent"
+    otel_exporter_otlp_endpoint: str = "http://jaeger:4318"
+    jaeger_ui_url: str = "http://localhost:16686"
+
 
 settings = Settings()
