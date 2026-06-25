@@ -3,6 +3,13 @@
 from langchain_core.tools import BaseTool
 
 from agri_agent.agent.tools.calculator import calculator
+from agri_agent.agent.tools.dispatch import (
+    dispatch_order,
+    get_dispatch_rules,
+    get_order_details,
+    get_pending_orders,
+    recommend_dispatch,
+)
 from agri_agent.agent.tools.outreach import filter_prospects, list_retailers, send_email
 from agri_agent.agent.tools.search import web_search
 
@@ -12,6 +19,11 @@ _TOOL_REGISTRY: dict[str, BaseTool] = {
     "list_retailers": list_retailers,
     "filter_prospects": filter_prospects,
     "send_email": send_email,
+    "get_pending_orders": get_pending_orders,
+    "get_order_details": get_order_details,
+    "get_dispatch_rules": get_dispatch_rules,
+    "dispatch_order": dispatch_order,
+    "recommend_dispatch": recommend_dispatch,
 }
 
 

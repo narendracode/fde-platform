@@ -230,19 +230,17 @@ def run_agent(
             else:
                 resolved_context = extra_context
 
-        # Build message — inject resolved context as a clearly labelled block
-        # so the LLM can reliably read each named parameter.
+        # Build message — inject resolved context and feature flags as clearly
+        # labelled blocks so the LLM can reliably read each named parameter.
+        parts: list[str] = []
         if resolved_context:
-            ctx_lines = "\n".join(
-                f"  {k}: {v}" for k, v in resolved_context.items()
-            )
-            content = (
-                f"[Runtime context]\n{ctx_lines}\n\n"
-                f"[Task]\n{user_message}"
-            )
-            messages: list = [HumanMessage(content=content)]
-        else:
-            messages = [HumanMessage(content=user_message)]
+            ctx_lines = "\n".join(f"  {k}: {v}" for k, v in resolved_context.items())
+            parts.append(f"[Runtime context]\n{ctx_lines}")
+        if config.feature_flags:
+            flag_lines = "\n".join(f"  {k}: {v}" for k, v in config.feature_flags.items())
+            parts.append(f"[Feature flags]\n{flag_lines}")
+        parts.append(f"[Task]\n{user_message}")
+        messages: list = [HumanMessage(content="\n\n".join(parts))]
 
         # Use a fixed run_id so the LangSmith root trace ID is stable and storable.
         ls_run_id = uuid.uuid4()

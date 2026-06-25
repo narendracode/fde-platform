@@ -1,4 +1,4 @@
-.PHONY: help up down logs migrate seed ci-deploy launch-agent lint test shell-api shell-worker
+.PHONY: help up down logs migrate seed seed-orders dashboard ci-deploy launch-agent lint test shell-api shell-worker
 
 help:
 	@echo "Fundly Agent Platform"
@@ -11,6 +11,12 @@ help:
 	@echo "  ── Database ──────────────────────────────────────────"
 	@echo "  make migrate       Run Alembic DB migrations"
 	@echo "  make seed          Seed agent configs into platform DB (inactive)"
+	@echo "  make seed-orders   Seed 20 demo pharma orders"
+	@echo ""
+	@echo "  ── Dispatch Demo ─────────────────────────────────────"
+	@echo "  make dashboard     Open dispatch dashboard in browser"
+	@echo "  make run-dispatch-review  Run AI + human review agent once"
+	@echo "  make run-dispatch-auto    Run full-auto dispatch agent once"
 	@echo ""
 	@echo "  ── CI/CD Simulation ──────────────────────────────────"
 	@echo "  make ci-deploy     Full pipeline: migrate→seed→smoke"
@@ -51,6 +57,30 @@ migrate:
 
 seed:
 	docker compose exec api uv run python scripts/seed_data.py
+
+seed-orders:
+	docker compose exec api uv run python scripts/seed_orders.py
+
+# ── Dispatch Demo ───────────────────────────────────────────────────────────────
+API_URL ?= http://localhost:8000
+API_KEY ?= dev-secret-key-change-in-prod
+
+dashboard:
+	open $(API_URL)/dashboard
+
+run-dispatch-review:
+	curl -s -X POST $(API_URL)/api/v1/agents/order-dispatch-review/run \
+	  -H "X-API-Key: $(API_KEY)" \
+	  -H "Content-Type: application/json" \
+	  -d '{"message":"Process all pending orders and recommend shipment mode for each."}' \
+	  | python3 -m json.tool
+
+run-dispatch-auto:
+	curl -s -X POST $(API_URL)/api/v1/agents/order-dispatch-auto/run \
+	  -H "X-API-Key: $(API_KEY)" \
+	  -H "Content-Type: application/json" \
+	  -d '{"message":"Process all pending orders and dispatch them with the optimal shipment mode."}' \
+	  | python3 -m json.tool
 
 # ── CI/CD simulation ───────────────────────────────────────────────────────────
 AGENT   ?=

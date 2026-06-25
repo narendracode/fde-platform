@@ -77,6 +77,7 @@ class AgentConfig(BaseModel):
     tools: list[ToolConfig] = []
     guardrails: GuardrailsConfig = GuardrailsConfig()
     observability: ObservabilityConfig = ObservabilityConfig()
+    feature_flags: dict[str, Any] = {}
 
     @field_validator("name")
     @classmethod

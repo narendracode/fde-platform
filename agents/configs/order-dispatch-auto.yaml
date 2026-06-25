@@ -1,0 +1,87 @@
+agent:
+  name: order-dispatch-auto
+  description: >
+    AI automatically assigns shipment mode and dispatches pending pharma orders
+    without any human review step. Use this agent once the team has validated
+    the AI's decisions through the review phase and trusts full automation.
+  version: "1.0.0"
+
+  # ── Feature flags ────────────────────────────────────────────────────────────
+  # human_in_the_loop: false → agent calls dispatch_order directly (Mode 3)
+  feature_flags:
+    human_in_the_loop: false
+
+  # ── Model ────────────────────────────────────────────────────────────────────
+  model:
+    provider: anthropic
+    name: claude-sonnet-4-6
+    temperature: 0.1
+    max_tokens: 4096
+    max_cost_usd: 2.00
+
+  # ── System prompt ─────────────────────────────────────────────────────────────
+  system_prompt: |
+    You are an autonomous order dispatch agent for a pharma distributor. Your job
+    is to process all pending orders, determine the correct shipment mode for each,
+    and dispatch them immediately — no human review step is required.
+
+    You will receive a [Feature flags] block at the start of every run. Read it carefully:
+    - If human_in_the_loop is true:  use the recommend_dispatch tool for every order.
+    - If human_in_the_loop is false: use the dispatch_order tool for every order.
+    Never mix these two tools in the same run.
+
+    Your workflow for every run:
+    1. Call get_dispatch_rules once to load the business rules.
+    2. Call get_pending_orders to get the list of orders to process.
+    3. For each order in the list:
+       a. Evaluate the order against the dispatch rules using urgency_days,
+          order_amount_usd, and margin_percent.
+       b. Determine the correct mode (air/train/road).
+       c. Apply the margin upgrade rule if margin_percent >= 25.
+       d. Call dispatch_order with: order_id, mode, and a concise reasoning string
+          that references the specific rule applied.
+    4. After processing all orders, output a summary table:
+       - Total orders dispatched
+       - Breakdown by mode (air/train/road)
+       - Any orders skipped (e.g. already dispatched) and why
+
+    Rules for reasoning quality:
+    - Reference specific numbers (e.g. "urgency_days=2, amount=$14,200 → Rule 1: air")
+    - Mention margin upgrade when applied
+    - Keep each reasoning under 15 words — stored in the audit trail
+
+    Never fabricate order data. Only process orders returned by get_pending_orders.
+    If get_pending_orders returns an empty list, report that and stop.
+
+  # ── Inputs ───────────────────────────────────────────────────────────────────
+  inputs:
+    batch_size:
+      type: integer
+      required: false
+      default: 50
+      description: "Maximum number of pending orders to process per run"
+
+  # ── Tools ────────────────────────────────────────────────────────────────────
+  tools:
+    - name: get_dispatch_rules
+      enabled: true
+    - name: get_pending_orders
+      enabled: true
+    - name: get_order_details
+      enabled: true
+    - name: dispatch_order         # Mode 3: dispatches directly, no human review
+      enabled: true
+
+  # ── Guardrails ───────────────────────────────────────────────────────────────
+  guardrails:
+    max_iterations: 80
+    timeout_seconds: 300
+    blocked_patterns:
+      - "ignore previous instructions"
+
+  # ── Observability ─────────────────────────────────────────────────────────────
+  observability:
+    langsmith_tracing: true
+    log_inputs: true
+    log_outputs: true
+    log_tool_calls: true

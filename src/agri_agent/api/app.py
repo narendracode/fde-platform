@@ -5,7 +5,8 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from agri_agent.api.routes import agents, health, runs
+from agri_agent.api.routes import agents, dashboard, health, orders, runs
+from agri_agent.api.routes import settings as settings_router
 from agri_agent.config.settings import settings
 
 logging.basicConfig(level=settings.log_level.upper())
@@ -28,6 +29,9 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(agents.router)
 app.include_router(runs.router)
+app.include_router(orders.router)
+app.include_router(settings_router.router)
+app.include_router(dashboard.router)
 
 
 @app.on_event("startup")
