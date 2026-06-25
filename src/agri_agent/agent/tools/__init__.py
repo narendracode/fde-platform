@@ -9,6 +9,7 @@ from agri_agent.agent.tools.agri import (
     get_weather_data,
 )
 from agri_agent.agent.tools.calculator import calculator
+from agri_agent.agent.tools.outreach import filter_prospects, list_retailers, send_email
 from agri_agent.agent.tools.search import web_search
 
 _TOOL_REGISTRY: dict[str, BaseTool] = {
@@ -18,6 +19,9 @@ _TOOL_REGISTRY: dict[str, BaseTool] = {
     "get_pest_alert": get_pest_alert,
     "calculate_fertilizer": calculate_fertilizer,
     "get_weather_data": get_weather_data,
+    "list_retailers": list_retailers,
+    "filter_prospects": filter_prospects,
+    "send_email": send_email,
 }
 
 
