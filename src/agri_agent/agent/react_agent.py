@@ -19,60 +19,86 @@ from agri_agent.config.settings import settings
 
 _log = logging.getLogger(__name__)
 
-# Cached URL template built on first successful call: "…/o/{tenant}/projects/p/{proj}/r/{run_id}"
-_langsmith_url_template: str | None = None
+# ── LangSmith helpers ─────────────────────────────────────────────────────────
+
+# Shared lazy Client (avoids re-authenticating on every run).
+_ls_client: Any = None
+# Cached URL template: "…/o/{tenant}/projects/p/{proj}/r/{run_id}"
+_ls_url_template: str | None = None
 
 
-class _FakeRun:
-    """Duck-type shim — langsmith.Client.get_run_url() only accesses .id."""
+def _get_ls_client() -> Any:
+    global _ls_client
+    if _ls_client is None and settings.langchain_api_key:
+        try:
+            from langsmith import Client
+            _ls_client = Client(api_key=settings.langchain_api_key)
+        except Exception as exc:
+            _log.error("LangSmith Client init failed: %s", exc)
+    return _ls_client
+
+
+class _RunRef:
+    """Duck-type shim — Client.get_run_url() only accesses .id."""
     def __init__(self, run_id: str) -> None:
         self.id = uuid.UUID(run_id)
 
 
+def _wait_traces() -> None:
+    """Flush LangSmith's background upload queue before reading run data."""
+    try:
+        from langsmith import wait_for_all_tracers
+        wait_for_all_tracers()
+        return
+    except (ImportError, AttributeError):
+        pass
+    try:
+        from langchain.callbacks.tracers.langchain import wait_for_all_tracers
+        wait_for_all_tracers()
+        return
+    except (ImportError, AttributeError):
+        pass
+    time.sleep(1.5)
+
+
 def _langsmith_url(run_id: str) -> str | None:
-    """Return a LangSmith trace URL by delegating URL construction to the SDK.
+    """Return a LangSmith trace URL. Builds a template on first call (one API
+    round-trip) then just substitutes the run ID on subsequent calls."""
+    global _ls_url_template
 
-    Uses a dummy run ID on first call to prime a URL template, then substitutes
-    the real run ID on every subsequent call — one API round-trip total.
-    """
-    global _langsmith_url_template
-
-    api_key = settings.langchain_api_key
-    project = settings.langchain_project
-    if not api_key or not project:
+    client = _get_ls_client()
+    if not client or not settings.langchain_project:
         return None
 
-    if _langsmith_url_template is None:
+    if _ls_url_template is None:
         _DUMMY = "00000000-0000-0000-0000-000000000000"
         try:
-            from langsmith import Client
-            client = Client(api_key=api_key)
-            url = client.get_run_url(run=_FakeRun(_DUMMY), project_name=project)
-            _langsmith_url_template = url.replace(_DUMMY, "{run_id}")
+            url = client.get_run_url(run=_RunRef(_DUMMY),
+                                     project_name=settings.langchain_project)
+            _ls_url_template = url.replace(_DUMMY, "{run_id}")
         except Exception as exc:
             _log.error("LangSmith URL setup failed: %s", exc)
             return None
 
-    return _langsmith_url_template.format(run_id=run_id)
-
-# Cost per 1M tokens (USD). Add new models here as needed.
-_PRICING: dict[str, tuple[float, float]] = {
-    # model-name: (input_per_1m, output_per_1m)
-    "claude-sonnet-4-6":         (3.00,  15.00),
-    "claude-opus-4-8":           (15.00, 75.00),
-    "claude-haiku-4-5-20251001": (0.80,  4.00),
-    "gpt-4o":                    (2.50,  10.00),
-    "gpt-4o-mini":               (0.15,  0.60),
-    "gpt-4-turbo":               (10.00, 30.00),
-}
+    return _ls_url_template.format(run_id=run_id)
 
 
-def _calc_cost(model_name: str, input_tokens: int, output_tokens: int) -> float:
-    pricing = _PRICING.get(model_name)
-    if not pricing:
+def _cost_from_langsmith(run_id: str) -> float:
+    """Read the cost LangSmith computed from the run's token usage.
+
+    Flushes the background trace uploader first so the run is guaranteed to
+    exist in LangSmith when we read it back. Returns 0.0 on any failure.
+    """
+    client = _get_ls_client()
+    if not client:
         return 0.0
-    in_cost, out_cost = pricing
-    return round((input_tokens * in_cost + output_tokens * out_cost) / 1_000_000, 6)
+    _wait_traces()
+    try:
+        run = client.read_run(run_id)
+        return float(run.total_cost or 0.0)
+    except Exception as exc:
+        _log.warning("Could not read LangSmith cost for run %s: %s", run_id, exc)
+        return 0.0
 
 
 # ── Model factory ─────────────────────────────────────────────────────────────
@@ -200,11 +226,6 @@ def run_agent(
     result = agent.invoke({"messages": messages}, config=runnable_config)
     elapsed = round(time.perf_counter() - start, 3)
 
-    # Resolve LangSmith trace URL (SDK-independent, cached after first call).
-    langsmith_trace_url: str | None = None
-    if config.observability.langsmith_tracing:
-        langsmith_trace_url = _langsmith_url(str(ls_run_id))
-
     # Extract final AI message
     ai_messages = [m for m in result["messages"] if hasattr(m, "content") and m.__class__.__name__ == "AIMessage"]
     output_text = ai_messages[-1].content if ai_messages else ""
@@ -223,7 +244,14 @@ def run_agent(
             input_tokens += meta.get("input_tokens", 0)
             output_tokens += meta.get("output_tokens", 0)
 
-    cost_usd = _calc_cost(config.model.name, input_tokens, output_tokens)
+    # Cost + trace URL — both sourced from LangSmith.
+    # _cost_from_langsmith() flushes the trace uploader first; _langsmith_url()
+    # then reuses the already-uploaded run (no extra wait needed).
+    cost_usd: float = 0.0
+    langsmith_trace_url: str | None = None
+    if config.observability.langsmith_tracing:
+        cost_usd = _cost_from_langsmith(str(ls_run_id))
+        langsmith_trace_url = _langsmith_url(str(ls_run_id))
 
     return {
         "output": output_text,
