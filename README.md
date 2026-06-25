@@ -19,4 +19,7 @@ make seed              # seed demo agents
 ```bash
 uv run agri-agent list
 uv run agri-agent run react-agent "What crops should I plant in Punjab this rabi season on loamy soil?"
+
+uv run python scripts/sync_langflow_flows.py --delete-all
+uv run python scripts/sync_langflow_flows.py
 ```
