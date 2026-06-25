@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -41,6 +42,8 @@ class RunResponse(BaseModel):
     output_tokens: int
     elapsed_seconds: float
     blocked: bool
+    langsmith_run_id: str | None = None
+    langsmith_trace_url: str | None = None
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -151,10 +154,12 @@ async def run_agent_sync(
         raise HTTPException(status_code=404, detail=f"Agent config '{agent_name}' not found")
 
     # Persist the run record
+    now = datetime.now(timezone.utc)
     run = AgentRun(
         agent_id=await _resolve_agent_id(session, agent_name),
         input={"message": req.message, "extra_context": req.extra_context},
         status="running",
+        started_at=now,
     )
     session.add(run)
     await session.commit()
@@ -171,6 +176,10 @@ async def run_agent_sync(
     run.thread_id = result["thread_id"]
     run.input_tokens = result["input_tokens"]
     run.output_tokens = result["output_tokens"]
+    run.cost_usd = result.get("cost_usd", 0.0)
+    run.langsmith_run_id = result.get("langsmith_run_id")
+    run.langsmith_trace_url = result.get("langsmith_trace_url")
+    run.completed_at = datetime.now(timezone.utc)
     await session.commit()
 
     return RunResponse(
@@ -182,6 +191,8 @@ async def run_agent_sync(
         output_tokens=result["output_tokens"],
         elapsed_seconds=result["elapsed_seconds"],
         blocked=result.get("blocked", False),
+        langsmith_run_id=result.get("langsmith_run_id"),
+        langsmith_trace_url=result.get("langsmith_trace_url"),
     )
 
 

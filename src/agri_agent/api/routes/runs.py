@@ -59,6 +59,8 @@ def _run_dict(run: AgentRun, include_output: bool = False) -> dict:
         "input_tokens": run.input_tokens,
         "output_tokens": run.output_tokens,
         "cost_usd": run.cost_usd,
+        "langsmith_run_id": run.langsmith_run_id,
+        "langsmith_trace_url": run.langsmith_trace_url,
         "started_at": run.started_at.isoformat() if run.started_at else None,
         "completed_at": run.completed_at.isoformat() if run.completed_at else None,
         "created_at": run.created_at.isoformat(),
