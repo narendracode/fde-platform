@@ -151,10 +151,9 @@ agent:
 |---|---|
 | `calculator` | Safe math expressions (no eval) |
 | `web_search` | Tavily web search (mock if no API key) |
-| `get_crop_recommendation` | Crops by season + soil type |
-| `get_pest_alert` | Pest risks + IPM for a crop |
-| `calculate_fertilizer` | NPK requirements by crop, area, pH |
-| `get_weather_data` | Current weather by Indian state |
+| `list_retailers` | Mock: pharma retailers by region |
+| `filter_prospects` | Filters retailers by revenue threshold |
+| `send_email` | Mock: sends marketing email (prints to console) |
 
 ---
 

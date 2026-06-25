@@ -19,5 +19,5 @@ make seed              # seed demo agents
 
 ```bash
 uv run agri-agent list
-uv run agri-agent run react-agent "What crops should I plant in Punjab this rabi season on loamy soil?"
+uv run agri-agent run pharma-outreach "Run outreach for Mumbai"
 ```

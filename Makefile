@@ -14,7 +14,7 @@ help:
 	@echo ""
 	@echo "  ── CI/CD Simulation ──────────────────────────────────"
 	@echo "  make ci-deploy     Full pipeline: migrate→seed→smoke"
-	@echo "  make ci-deploy AGENT=react-agent     Single agent deploy"
+	@echo "  make ci-deploy AGENT=pharma-outreach  Single agent deploy"
 	@echo "  make ci-deploy DRY_RUN=1   Dry run (no mutations)"
 	@echo "  make ci-deploy SKIP_SMOKE=1  Skip smoke test"
 	@echo ""

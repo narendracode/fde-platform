@@ -2,12 +2,6 @@
 
 from langchain_core.tools import BaseTool
 
-from agri_agent.agent.tools.agri import (
-    calculate_fertilizer,
-    get_crop_recommendation,
-    get_pest_alert,
-    get_weather_data,
-)
 from agri_agent.agent.tools.calculator import calculator
 from agri_agent.agent.tools.outreach import filter_prospects, list_retailers, send_email
 from agri_agent.agent.tools.search import web_search
@@ -15,10 +9,6 @@ from agri_agent.agent.tools.search import web_search
 _TOOL_REGISTRY: dict[str, BaseTool] = {
     "calculator": calculator,
     "web_search": web_search,
-    "get_crop_recommendation": get_crop_recommendation,
-    "get_pest_alert": get_pest_alert,
-    "calculate_fertilizer": calculate_fertilizer,
-    "get_weather_data": get_weather_data,
     "list_retailers": list_retailers,
     "filter_prospects": filter_prospects,
     "send_email": send_email,

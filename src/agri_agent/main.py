@@ -16,7 +16,7 @@ def main():
     sub = parser.add_subparsers(dest="cmd")
 
     run_p = sub.add_parser("run", help="Run an agent")
-    run_p.add_argument("agent", help="Agent config name (e.g. react-agent)")
+    run_p.add_argument("agent", help="Agent config name (e.g. pharma-outreach)")
     run_p.add_argument("message", help="User message")
     run_p.add_argument("--thread-id", help="Thread ID for conversation continuity")
 

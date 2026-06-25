@@ -11,7 +11,7 @@
 #
 # Usage:
 #   bash scripts/ci_deploy.sh                    # deploy all agents
-#   bash scripts/ci_deploy.sh --agent react-agent  # deploy one agent
+#   bash scripts/ci_deploy.sh --agent pharma-outreach  # deploy one agent
 #   bash scripts/ci_deploy.sh --skip-smoke       # skip the smoke test
 #   bash scripts/ci_deploy.sh --dry-run          # print what would change, no mutations
 #
@@ -118,11 +118,11 @@ else
     -H "X-API-Key: ${API_KEY}" | python3 -c "import json,sys; print(len(json.load(sys.stdin)['tools']))")
   success "Found ${TOOL_COUNT} tool(s) in registry"
 
-  info "Running agent smoke test (react-agent, tool-only query)..."
-  SMOKE_RESP=$(curl -sf -X POST "${API_URL}/api/v1/agents/react-agent/run" \
+  info "Running agent smoke test (pharma-outreach, single-region query)..."
+  SMOKE_RESP=$(curl -sf -X POST "${API_URL}/api/v1/agents/pharma-outreach/run" \
     -H "Content-Type: application/json" \
     -H "X-API-Key: ${API_KEY}" \
-    -d '{"message": "What is the square root of 144?"}' 2>/dev/null || echo '{}')
+    -d '{"message": "Run outreach", "extra_context": {"region": "Mumbai"}}' 2>/dev/null || echo '{}')
 
   if echo "$SMOKE_RESP" | python3 -c "import json,sys; d=json.load(sys.stdin); exit(0 if d.get('output') else 1)" 2>/dev/null; then
     OUTPUT=$(echo "$SMOKE_RESP" | python3 -c "import json,sys; print(json.load(sys.stdin)['output'][:120])")
@@ -141,9 +141,9 @@ echo
 echo -e "  ${GREEN}Platform API${RESET}   →  ${API_URL}/docs"
 echo
 echo -e "  ${BOLD}Quick commands:${RESET}"
-echo -e "  Invoke agent (sync):   curl -X POST ${API_URL}/api/v1/agents/react-agent/run \\"
+echo -e "  Invoke agent (sync):   curl -X POST ${API_URL}/api/v1/agents/pharma-outreach/run \\"
 echo -e "                           -H 'X-API-Key: ${API_KEY}' \\"
-echo -e "                           -d '{\"message\": \"your question\"}'"
+echo -e "                           -d '{\"message\": \"Run outreach\", \"extra_context\": {\"region\": \"Mumbai\"}}'"
 echo
 echo -e "  View runs:             curl ${API_URL}/api/v1/runs -H 'X-API-Key: ${API_KEY}'"
 echo

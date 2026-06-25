@@ -92,16 +92,20 @@ versioned in Git, and deployed via CI just like application code.
 **Example:**
 ```yaml
 agent:
-  name: agri-assistant
+  name: pharma-outreach
   model:
     provider: anthropic
     name: claude-sonnet-4-6
     max_cost_usd: 1.00
+  inputs:
+    region:
+      type: string
+      required: true
   tools:
-    - name: get_crop_recommendation
+    - name: list_retailers
       enabled: true
   guardrails:
-    max_iterations: 20
+    max_iterations: 40
     blocked_patterns: ["ignore previous instructions"]
 ```
 
@@ -113,7 +117,7 @@ agent:
 Pydantic models (`AgentConfig`, `ModelConfig`, `ToolConfig`, etc.).
 
 **How it works:**
-1. `load_agent_config("react-agent")` searches `agents/configs/` for a matching file
+1. `load_agent_config("pharma-outreach")` searches `agents/configs/` for a matching file
 2. Parses YAML with PyYAML
 3. Validates and coerces all fields via Pydantic v2 — invalid configs fail fast with
    clear error messages before any LLM call is made
@@ -199,10 +203,9 @@ accumulated context until it decides to stop.
 |---|---|---|
 | `calculator` | `calculator.py` | Safe AST-based math — no `eval()`, no code injection risk |
 | `web_search` | `search.py` | Tavily search if API key set; graceful mock fallback otherwise |
-| `get_crop_recommendation` | `agri.py` | Returns crop list by season + soil type from an in-memory DB |
-| `get_pest_alert` | `agri.py` | Returns pest risks + IPM strategies for a crop |
-| `calculate_fertilizer` | `agri.py` | NPK requirements adjusted for area and soil pH |
-| `get_weather_data` | `agri.py` | Current weather mock by Indian state |
+| `list_retailers` | `outreach.py` | Mock: returns pharma retailers for a given region |
+| `filter_prospects` | `outreach.py` | Filters retailer list by yearly revenue threshold |
+| `send_email` | `outreach.py` | Mock: prints email to console, returns sent status |
 
 **How new tools are added:**
 1. Write a `@tool`-decorated function in `src/agri_agent/agent/tools/`
@@ -375,16 +378,17 @@ Set `LOG_LEVEL=debug` for SQL queries and LangGraph step detail.
 
 ```
 Client
-  │  POST /api/v1/agents/react-agent/run/async
+  │  POST /api/v1/agents/pharma-outreach/run/async
   │  X-API-Key: <key>
-  │  {"message": "What should I plant in Punjab this rabi season?"}
+  │  {"message": "Run outreach", "extra_context": {"region": "Mumbai"}}
   │
   ▼
 FastAPI (api container :8000)
-  ├── verify_api_key()                    ← auth check
-  ├── load_agent_config("react-agent")   ← validate config exists
-  ├── INSERT agent_runs (status=pending)  ← create audit record
-  ├── run_agent_task.delay(run_id, ...)   ← enqueue to Redis
+  ├── verify_api_key()                        ← auth check
+  ├── load_agent_config("pharma-outreach")   ← validate config exists
+  ├── _validate_inputs(config, extra_context) ← validate required inputs
+  ├── INSERT agent_runs (status=pending)      ← create audit record
+  ├── run_agent_task.delay(run_id, ...)       ← enqueue to Redis
   └── return {run_id, task_id, status="queued"}  ← immediate 202 response
 
 Redis (broker)
@@ -393,22 +397,23 @@ Redis (broker)
 Celery Worker (worker container)
   ├── picks up task
   ├── UPDATE agent_runs SET status=running
-  ├── load_agent_config("react-agent")
+  ├── load_agent_config("pharma-outreach")
   ├── build_agent(config)
   │     ├── ChatAnthropic(claude-sonnet-4-6)
-  │     └── tools: [calculator, web_search, get_crop_recommendation, ...]
-  ├── agent.invoke({"messages": [HumanMessage("What should I plant...")]})
+  │     └── tools: [list_retailers, filter_prospects, send_email]
+  ├── agent.invoke({"messages": [HumanMessage("[Runtime context]\n  region: Mumbai\n\n[Task]\nRun outreach")]})
   │     LangGraph ReAct loop:
-  │       → LLM decides to call get_crop_recommendation(season=rabi, soil=loamy)
-  │       → tool returns ["wheat", "mustard", "chickpea", "lentil"]
-  │       → LLM calls get_weather_data(location=Punjab)
-  │       → tool returns temp/humidity/rainfall
-  │       → LLM formulates final answer
+  │       → LLM calls list_retailers(region="Mumbai")
+  │       → tool returns 10 retailers with revenue data
+  │       → LLM calls filter_prospects(retailers_json=...)
+  │       → tool returns 6 prospects above $100k threshold
+  │       → LLM calls send_email(...) for each prospect
+  │       → LLM formulates final summary
   └── UPDATE agent_runs SET status=completed, output=..., tokens=..., completed_at=now
 
 Client polls:
   GET /api/v1/runs/{run_id}
-  └── returns {status: "completed", output: "For Punjab rabi season on loamy soil..."}
+  └── returns {status: "completed", output: "Outreach complete: 6 emails sent to Mumbai prospects..."}
 ```
 
 ---
