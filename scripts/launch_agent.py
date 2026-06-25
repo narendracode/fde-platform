@@ -23,6 +23,7 @@ import argparse
 import json
 import os
 import re
+import select
 import subprocess
 import sys
 from pathlib import Path
@@ -103,12 +104,43 @@ def _file_block(label: str, content: str) -> None:
 
 
 def _ask(prompt: str = "") -> str:
+    """Read user input.
+
+    With a prompt  → single-line via input() (choices, y/n, short answers).
+    Without prompt → multi-line via select-drain (free-form conversation).
+                     All lines pasted at once are joined into one message so
+                     that multi-line paste does not fragment into separate turns.
+    """
+    if prompt:
+        try:
+            return input(f"\n{BOLD}You:{RESET} {prompt}").strip()
+        except (EOFError, KeyboardInterrupt):
+            print(f"\n{DIM}Exiting.{RESET}")
+            sys.exit(0)
+
+    # Free-form: print prompt, then collect all lines that arrive "at once".
+    # Paste delivers every line to stdin within a few milliseconds; the 200ms
+    # window is wide enough to catch a full paste but short enough that it
+    # never blocks normal single-line typing.
+    print(f"\n{BOLD}You:{RESET} ", end="", flush=True)
+    lines: list[str] = []
     try:
-        raw = input(f"\n{BOLD}You:{RESET} {prompt}")
-        return raw.strip()
+        first = sys.stdin.readline()
+        if not first:           # EOF (e.g. piped input ended)
+            raise EOFError
+        lines.append(first.rstrip("\n"))
+
+        while select.select([sys.stdin], [], [], 0.2)[0]:
+            chunk = sys.stdin.readline()
+            if not chunk:       # EOF mid-paste
+                break
+            lines.append(chunk.rstrip("\n"))
+
     except (EOFError, KeyboardInterrupt):
         print(f"\n{DIM}Exiting.{RESET}")
         sys.exit(0)
+
+    return "\n".join(lines).strip()
 
 
 def _confirm(question: str) -> bool:
@@ -333,6 +365,11 @@ def run_discovery(client: Any, model: str, tools: list[dict]) -> dict:
 
     while True:
         user_text = _ask()
+
+        if not user_text:
+            # Empty submit (stray Enter or trailing newline from paste) — ignore silently
+            continue
+
         if user_text.lower() in ("quit", "exit", "q"):
             sys.exit(0)
 

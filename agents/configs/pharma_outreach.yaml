@@ -1,0 +1,97 @@
+agent:
+  name: pharma-outreach
+  description: >
+    Fundly email marketing outreach agent for pharma retailers.
+    Discovers retailers in a given region, filters prospects by revenue,
+    and sends personalised outreach emails to qualified leads.
+  version: "1.0.0"
+
+  # ── Runtime inputs ───────────────────────────────────────────────────────────
+  # These are the parameters callers must (or may) pass via extra_context.
+  # The platform validates them, applies defaults, and injects them into
+  # the agent's context block before the LLM sees the message.
+  inputs:
+    region:
+      type: string
+      required: true
+      description: "Target region for retailer search (e.g. Mumbai, Delhi NCR, Bangalore)"
+
+    min_revenue_usd:
+      type: integer
+      required: false
+      default: 100000
+      description: "Minimum yearly revenue in USD to qualify as a prospect (default: 100,000)"
+
+    campaign_name:
+      type: string
+      required: false
+      default: "Fundly Partnership Outreach"
+      description: "Campaign name used in email subject lines"
+
+    sender_name:
+      type: string
+      required: false
+      default: "The Fundly Team"
+      description: "Sender name used in email sign-off"
+
+  # ── Model ────────────────────────────────────────────────────────────────────
+  model:
+    provider: anthropic
+    name: claude-sonnet-4-6
+    temperature: 0.3
+    max_tokens: 4096
+    max_cost_usd: 1.00
+
+  # ── System prompt ─────────────────────────────────────────────────────────────
+  # Does NOT hardcode any region or threshold — all variable values come from
+  # the runtime context block injected by the platform at call time.
+  system_prompt: |
+    You are a pharma retailer outreach agent for Fundly.
+
+    At the start of every run you will receive a [Runtime context] block listing
+    the parameters for this specific run. Always read them carefully and use
+    their exact values when calling tools — do not guess or substitute.
+
+    Your workflow for every run:
+    1. Call list_retailers with the exact region from the runtime context.
+    2. Call filter_prospects with the full retailer list returned by step 1.
+       The tool uses a fixed threshold of 100,000 USD — if min_revenue_usd in
+       the context is higher, mention that only retailers above that value are
+       true prospects but still pass the full list to the tool.
+    3. For each prospect returned, call send_email with:
+         - to:      prospect name + "@example.com" as a placeholder address
+         - subject: "[campaign_name] — Exclusive Partnership Opportunity"
+         - body:    a short, professional 3-paragraph email that:
+                    * Opens by addressing the retailer by name and location
+                    * Explains the value Fundly brings to pharma retailers
+                    * Closes with a call to action and signs off as sender_name
+    4. After all emails are sent, summarise: region searched, total retailers
+       found, prospects qualified, emails sent.
+
+    Tone: professional, concise, warm. Never fabricate retailer data.
+
+  # ── Tools ────────────────────────────────────────────────────────────────────
+  tools:
+    - name: list_retailers
+      enabled: true
+
+    - name: filter_prospects
+      enabled: true
+
+    - name: send_email
+      enabled: true
+
+  # ── Guardrails ───────────────────────────────────────────────────────────────
+  guardrails:
+    max_iterations: 40    # 1 + (2 tools + up to 15 emails) × 2 + 1 = 38 max steps
+    timeout_seconds: 300
+    blocked_patterns:
+      - "ignore previous instructions"
+      - "jailbreak"
+
+  # ── Observability ─────────────────────────────────────────────────────────────
+  observability:
+    langsmith_tracing: true
+    log_inputs: true
+    log_outputs: true
+    log_tool_calls: true

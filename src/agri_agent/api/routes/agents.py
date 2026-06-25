@@ -83,6 +83,10 @@ async def list_configs(_: str = Depends(verify_api_key)):
             "version": c.version,
             "model": c.model.model_dump(),
             "enabled_tools": c.enabled_tools(),
+            "inputs": {
+                name: param.model_dump()
+                for name, param in c.inputs.items()
+            },
         }
         for c in configs
     ]
@@ -196,6 +200,7 @@ async def run_agent_sync(
         raise HTTPException(status_code=404, detail=f"Agent config '{agent_name}' not found")
 
     await _require_active(session, agent_name)
+    _validate_inputs(cfg, req.extra_context)
 
     now = datetime.now(timezone.utc)
     run = AgentRun(
@@ -258,11 +263,12 @@ async def run_agent_async(
     from agri_agent.queue.tasks import run_agent_task
 
     try:
-        load_agent_config(agent_name)
+        cfg = load_agent_config(agent_name)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"Agent config '{agent_name}' not found")
 
     await _require_active(session, agent_name)
+    _validate_inputs(cfg, req.extra_context)
 
     run = AgentRun(
         agent_id=await _resolve_agent_id(session, agent_name),
@@ -304,6 +310,19 @@ async def _require_active(session: AsyncSession, agent_name: str) -> None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Agent '{agent_name}' is not active. Activate it via PATCH /api/v1/agents/{agent_name}/activate",
+        )
+
+
+def _validate_inputs(cfg: Any, extra_context: dict | None) -> None:
+    """Raise 422 if required inputs are missing. No-op when no inputs are declared."""
+    if not cfg.inputs:
+        return
+    try:
+        cfg.resolve_context(extra_context or {})
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
         )
 
 

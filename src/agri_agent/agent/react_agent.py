@@ -221,11 +221,28 @@ def run_agent(
 
         agent = build_agent(config)
 
-        # Build message list
-        messages: list = [HumanMessage(content=user_message)]
+        # Resolve declared inputs: validate required params, apply defaults, cast types.
+        # Falls back to the raw dict when the agent declares no inputs schema.
+        resolved_context: dict[str, Any] = {}
         if extra_context:
-            ctx_text = "\n".join(f"{k}: {v}" for k, v in extra_context.items())
-            messages = [HumanMessage(content=f"Context:\n{ctx_text}\n\n{user_message}")]
+            if config.inputs:
+                resolved_context = config.resolve_context(extra_context)
+            else:
+                resolved_context = extra_context
+
+        # Build message — inject resolved context as a clearly labelled block
+        # so the LLM can reliably read each named parameter.
+        if resolved_context:
+            ctx_lines = "\n".join(
+                f"  {k}: {v}" for k, v in resolved_context.items()
+            )
+            content = (
+                f"[Runtime context]\n{ctx_lines}\n\n"
+                f"[Task]\n{user_message}"
+            )
+            messages: list = [HumanMessage(content=content)]
+        else:
+            messages = [HumanMessage(content=user_message)]
 
         # Use a fixed run_id so the LangSmith root trace ID is stable and storable.
         ls_run_id = uuid.uuid4()

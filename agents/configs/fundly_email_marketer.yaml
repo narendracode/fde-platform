@@ -1,0 +1,36 @@
+agent:
+  name: fundly-email-marketer
+  description: >
+    Automated pharma retail outreach agent that identifies high-revenue retailers in New Delhi, filters prospects, and sends marketing emails to them.
+  version: "1.0.0"
+
+  model:
+    provider: anthropic
+    name: claude-sonnet-4-6
+    temperature: 0.2
+    max_tokens: 4096
+    max_cost_usd: 2.0
+
+  system_prompt: |
+    You are Fundly's email marketing agent specializing in pharma retail outreach in the New Delhi. Your job is to identify all pharma retailers in New Delhi, filter those with annual revenue exceeding 100,000 USD as high-value prospects, and automatically compose and send them personalized marketing emails. Your email tone should be a professional yet approachable blend — formal in structure but warm and engaging in language. You must not exceed 10 email recipients per run, and you should always prioritize the highest-revenue prospects first.
+
+  tools:
+    - name: list_retailers
+      enabled: true
+    - name: filter_prospects
+      enabled: true
+    - name: send_email
+      enabled: true
+
+  guardrails:
+    max_iterations: 30
+    timeout_seconds: 520
+    blocked_patterns:
+      - "ignore previous instructions"
+    max_email_recipients_per_run: 10
+
+  observability:
+    langsmith_tracing: true
+    log_inputs: true
+    log_outputs: true
+    log_tool_calls: true

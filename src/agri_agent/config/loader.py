@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, field_validator
@@ -41,12 +41,39 @@ class ObservabilityConfig(BaseModel):
     log_tool_calls: bool = True
 
 
+class InputParam(BaseModel):
+    """Declaration of a single runtime input parameter for an agent.
+
+    Declared under the `inputs:` key in the YAML.  At run time the caller
+    passes values via the `extra_context` field of the RunRequest.  The
+    platform validates required params, applies defaults, and injects all
+    resolved values into the agent's message as a structured context block.
+    """
+    type: Literal["string", "integer", "number", "boolean"] = "string"
+    required: bool = True
+    default: Any = None
+    description: str = ""
+
+    def cast(self, value: Any) -> Any:
+        """Coerce a string value (e.g. from JSON) to the declared type."""
+        if self.type == "integer":
+            return int(value)
+        if self.type == "number":
+            return float(value)
+        if self.type == "boolean":
+            if isinstance(value, bool):
+                return value
+            return str(value).lower() in ("true", "1", "yes")
+        return str(value)
+
+
 class AgentConfig(BaseModel):
     name: str
     description: str = ""
     version: str = "1.0.0"
     model: ModelConfig = ModelConfig()
     system_prompt: str = "You are a helpful AI assistant."
+    inputs: dict[str, InputParam] = {}
     tools: list[ToolConfig] = []
     guardrails: GuardrailsConfig = GuardrailsConfig()
     observability: ObservabilityConfig = ObservabilityConfig()
@@ -66,6 +93,36 @@ class AgentConfig(BaseModel):
             if t.name == tool_name:
                 return t.config
         return {}
+
+    def resolve_context(self, provided: dict[str, Any]) -> dict[str, Any]:
+        """Validate and resolve runtime inputs against the declared schema.
+
+        - Required params with no value raise ValueError.
+        - Optional params with no value get their declared default.
+        - Values are type-cast to the declared type.
+        - Extra keys not in the schema pass through unchanged.
+
+        Returns the fully resolved context dict ready for injection.
+        """
+        resolved: dict[str, Any] = {}
+
+        for name, param in self.inputs.items():
+            if name in provided:
+                resolved[name] = param.cast(provided[name])
+            elif not param.required and param.default is not None:
+                resolved[name] = param.cast(param.default)
+            elif param.required:
+                raise ValueError(
+                    f"Required input '{name}' ({param.description or param.type}) "
+                    f"was not provided. Pass it via extra_context."
+                )
+
+        # Pass through any caller-supplied keys not declared in the schema
+        for k, v in provided.items():
+            if k not in resolved:
+                resolved[k] = v
+
+        return resolved
 
 
 # ── Loader ────────────────────────────────────────────────────────────────────
