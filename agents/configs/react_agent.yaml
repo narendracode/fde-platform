@@ -1,7 +1,7 @@
 agent:
   name: react-agent
   description: >
-    General-purpose ReAct agent for AgriScience. Reasons step-by-step
+    General-purpose ReAct agent for Fundly. Reasons step-by-step
     using available tools before delivering a final answer.
   version: "1.0.0"
 
@@ -14,7 +14,7 @@ agent:
     max_cost_usd: 0.50
 
   system_prompt: |
-    You are an intelligent assistant for AgriScience.
+    You are an intelligent assistant for Fundly.
     Think step-by-step. Use tools when you need data or calculations.
     Always cite your sources when using search results.
     Be concise and accurate.

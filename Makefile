@@ -1,7 +1,7 @@
-.PHONY: help up down logs migrate seed sync-flows ci-deploy lint test shell-api shell-worker
+.PHONY: help up down logs migrate seed sync-flows ci-deploy launch-agent lint test shell-api shell-worker
 
 help:
-	@echo "AgriScience Agent Platform — POC"
+	@echo "Fundly Agent Platform"
 	@echo ""
 	@echo "  ── Infrastructure ────────────────────────────────────"
 	@echo "  make up            Start all services (Docker)"
@@ -10,7 +10,7 @@ help:
 	@echo ""
 	@echo "  ── Database ──────────────────────────────────────────"
 	@echo "  make migrate       Run Alembic DB migrations"
-	@echo "  make seed          Seed agent configs into platform DB"
+	@echo "  make seed          Seed agent configs into platform DB (inactive)"
 	@echo ""
 	@echo "  ── LangFlow (GitOps Option 4) ────────────────────────"
 	@echo "  make sync-flows    Sync all YAML configs → LangFlow flows"
@@ -19,9 +19,14 @@ help:
 	@echo ""
 	@echo "  ── CI/CD Simulation ──────────────────────────────────"
 	@echo "  make ci-deploy     Full pipeline: migrate→seed→sync→smoke"
-	@echo "  make ci-deploy AGENT=agri-assistant  Single agent deploy"
+	@echo "  make ci-deploy AGENT=react-agent     Single agent deploy"
 	@echo "  make ci-deploy DRY_RUN=1   Dry run (no mutations)"
 	@echo "  make ci-deploy SKIP_SMOKE=1  Skip smoke test"
+	@echo ""
+	@echo "  ── Agent Launcher ────────────────────────────────────"
+	@echo "  make launch-agent  Conversational agent creator (YAML only)"
+	@echo "  make launch-agent MODEL=claude-opus-4-8  Use a different model"
+	@echo "  make launch-agent NO_GIT=1   Skip git/PR step"
 	@echo ""
 	@echo "  ── Development ───────────────────────────────────────"
 	@echo "  make lint          Run ruff + mypy"
@@ -69,7 +74,7 @@ sync-flows:
 # ── CI/CD simulation ───────────────────────────────────────────────────────────
 # Examples:
 #   make ci-deploy
-#   make ci-deploy AGENT=agri-assistant
+#   make ci-deploy AGENT=react-agent
 #   make ci-deploy DRY_RUN=1
 #   make ci-deploy SKIP_SMOKE=1
 SKIP_SMOKE ?=
@@ -79,6 +84,20 @@ _CI_FLAGS = $(if $(AGENT),--agent=$(AGENT),) \
 
 ci-deploy:
 	bash scripts/ci_deploy.sh $(_CI_FLAGS)
+
+# ── Agent Launcher ─────────────────────────────────────────────────────────────
+# Interactive CLI: converse → generate YAML manifest → review → push PR
+# The launcher creates the YAML only; developers add tool implementations separately.
+# Examples:
+#   make launch-agent
+#   make launch-agent MODEL=claude-opus-4-8
+#   make launch-agent NO_GIT=1
+MODEL  ?= claude-sonnet-4-6
+NO_GIT ?=
+_LAUNCH_FLAGS = --model $(MODEL) $(if $(NO_GIT),--no-git,)
+
+launch-agent:
+	uv run python scripts/launch_agent.py $(_LAUNCH_FLAGS)
 
 # ── Development ────────────────────────────────────────────────────────────────
 lint:

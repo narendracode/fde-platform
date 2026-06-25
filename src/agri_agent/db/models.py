@@ -24,7 +24,7 @@ class Agent(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     version: Mapped[str] = mapped_column(String(20), default="1.0.0")
     config: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ci_deploy.sh — Mock CI/CD pipeline for the AgriScience Agent Platform
+# ci_deploy.sh — Mock CI/CD pipeline for the Fundly Agent Platform
 #
 # Simulates what would happen in a real CI/CD pipeline (GitHub Actions, etc.)
 # when a YAML agent config is merged to main:
@@ -49,7 +49,7 @@ API_URL="${API_URL:-http://localhost:8000}"
 LANGFLOW_URL="${LANGFLOW_URL:-http://localhost:7860}"
 API_KEY="${API_KEY:-dev-secret-key-change-in-prod}"
 
-echo -e "\n${BOLD}AgriScience Agent Platform — CI/CD Deploy${RESET}"
+echo -e "\n${BOLD}Fundly Agent Platform — CI/CD Deploy${RESET}"
 echo   "  Platform API : ${API_URL}"
 echo   "  LangFlow     : ${LANGFLOW_URL}"
 if [[ "$DRY_RUN" == "true" ]]; then

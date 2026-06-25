@@ -1,4 +1,4 @@
-"""Agent management endpoints — CRUD + sync run."""
+"""Agent management endpoints — CRUD, activation, and run."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agri_agent.agent.react_agent import run_agent
-from agri_agent.agent.tools import list_available_tools
+from agri_agent.agent.tools import list_available_tools, list_tools_with_descriptions
 from agri_agent.api.dependencies import verify_api_key
 from agri_agent.config.loader import list_agent_configs, load_agent_config
 from agri_agent.db.models import Agent, AgentRun
@@ -40,6 +40,7 @@ class RunResponse(BaseModel):
     tool_calls: list[dict]
     input_tokens: int
     output_tokens: int
+    cost_usd: float
     elapsed_seconds: float
     blocked: bool
     langsmith_run_id: str | None = None
@@ -55,8 +56,8 @@ async def list_agents(
     session: AsyncSession = Depends(get_session),
     _: str = Depends(verify_api_key),
 ):
-    """List all registered agents from the database."""
-    rows = await session.execute(select(Agent).where(Agent.is_active == True))
+    """List all registered agents with their activation status."""
+    rows = await session.execute(select(Agent))
     agents = rows.scalars().all()
     return [
         {
@@ -64,6 +65,7 @@ async def list_agents(
             "name": a.name,
             "description": a.description,
             "version": a.version,
+            "is_active": a.is_active,
             "created_at": a.created_at.isoformat(),
         }
         for a in agents
@@ -88,8 +90,8 @@ async def list_configs(_: str = Depends(verify_api_key)):
 
 @router.get("/tools")
 async def list_tools(_: str = Depends(verify_api_key)):
-    """List all tools available in the tool registry."""
-    return {"tools": list_available_tools()}
+    """List all tools available in the registry (name + description)."""
+    return {"tools": list_tools_with_descriptions()}
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
@@ -98,31 +100,66 @@ async def register_agent(
     session: AsyncSession = Depends(get_session),
     _: str = Depends(verify_api_key),
 ):
-    """Load a YAML config and register/upsert the agent in the database."""
+    """Load a YAML config and register/upsert the agent in the database.
+
+    Newly registered agents are inactive by default. Activate via PATCH /{name}/activate.
+    """
     try:
         cfg = load_agent_config(req.config_name)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
 
-    # Upsert: update if exists, insert if not
     result = await session.execute(select(Agent).where(Agent.name == cfg.name))
     agent = result.scalar_one_or_none()
     if agent:
         agent.description = cfg.description
         agent.version = cfg.version
         agent.config = cfg.model_dump()
+        # is_active is NOT changed on update — preserves dashboard-set state
     else:
         agent = Agent(
             name=cfg.name,
             description=cfg.description,
             version=cfg.version,
             config=cfg.model_dump(),
+            is_active=False,
         )
         session.add(agent)
 
     await session.commit()
     await session.refresh(agent)
-    return {"id": str(agent.id), "name": agent.name, "status": "registered"}
+    return {
+        "id": str(agent.id),
+        "name": agent.name,
+        "is_active": agent.is_active,
+        "status": "registered",
+    }
+
+
+@router.patch("/{agent_name}/activate")
+async def activate_agent(
+    agent_name: str,
+    session: AsyncSession = Depends(get_session),
+    _: str = Depends(verify_api_key),
+):
+    """Mark an agent as active — it can now accept run requests."""
+    agent = await _get_agent_or_404(session, agent_name)
+    agent.is_active = True
+    await session.commit()
+    return {"name": agent.name, "is_active": True}
+
+
+@router.patch("/{agent_name}/deactivate")
+async def deactivate_agent(
+    agent_name: str,
+    session: AsyncSession = Depends(get_session),
+    _: str = Depends(verify_api_key),
+):
+    """Mark an agent as inactive — run requests will be rejected."""
+    agent = await _get_agent_or_404(session, agent_name)
+    agent.is_active = False
+    await session.commit()
+    return {"name": agent.name, "is_active": False}
 
 
 @router.get("/{agent_name}")
@@ -132,11 +169,13 @@ async def get_agent(
     _: str = Depends(verify_api_key),
 ):
     """Get a registered agent by name."""
-    result = await session.execute(select(Agent).where(Agent.name == agent_name))
-    agent = result.scalar_one_or_none()
-    if not agent:
-        raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' not found")
-    return {"id": str(agent.id), "name": agent.name, "config": agent.config}
+    agent = await _get_agent_or_404(session, agent_name)
+    return {
+        "id": str(agent.id),
+        "name": agent.name,
+        "is_active": agent.is_active,
+        "config": agent.config,
+    }
 
 
 @router.post("/{agent_name}/run", response_model=RunResponse)
@@ -148,6 +187,7 @@ async def run_agent_sync(
 ):
     """Run an agent synchronously and return the result immediately.
 
+    The agent must be active (PATCH /{name}/activate) before it can be invoked.
     Use POST /{agent_name}/run/async for long-running tasks.
     """
     try:
@@ -155,7 +195,8 @@ async def run_agent_sync(
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"Agent config '{agent_name}' not found")
 
-    # Persist the run record
+    await _require_active(session, agent_name)
+
     now = datetime.now(timezone.utc)
     run = AgentRun(
         agent_id=await _resolve_agent_id(session, agent_name),
@@ -193,6 +234,7 @@ async def run_agent_sync(
         tool_calls=result["tool_calls"],
         input_tokens=result["input_tokens"],
         output_tokens=result["output_tokens"],
+        cost_usd=result.get("cost_usd", 0.0),
         elapsed_seconds=result["elapsed_seconds"],
         blocked=result.get("blocked", False),
         langsmith_run_id=result.get("langsmith_run_id"),
@@ -209,16 +251,18 @@ async def run_agent_async(
     session: AsyncSession = Depends(get_session),
     _: str = Depends(verify_api_key),
 ):
-    """Queue an agent run via Celery and return a task/run ID for polling.
+    """Queue an agent run via Celery and return a run ID for polling.
 
-    Poll GET /api/v1/runs/{run_id} for status.
+    The agent must be active. Poll GET /api/v1/runs/{run_id} for status.
     """
     from agri_agent.queue.tasks import run_agent_task
 
     try:
-        load_agent_config(agent_name)  # validate config exists
+        load_agent_config(agent_name)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"Agent config '{agent_name}' not found")
+
+    await _require_active(session, agent_name)
 
     run = AgentRun(
         agent_id=await _resolve_agent_id(session, agent_name),
@@ -244,18 +288,37 @@ async def run_agent_async(
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+async def _get_agent_or_404(session: AsyncSession, agent_name: str) -> Agent:
+    result = await session.execute(select(Agent).where(Agent.name == agent_name))
+    agent = result.scalar_one_or_none()
+    if not agent:
+        raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' not found")
+    return agent
+
+
+async def _require_active(session: AsyncSession, agent_name: str) -> None:
+    """Raise 403 if the agent exists but is not active."""
+    result = await session.execute(select(Agent).where(Agent.name == agent_name))
+    agent = result.scalar_one_or_none()
+    if agent and not agent.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Agent '{agent_name}' is not active. Activate it via PATCH /api/v1/agents/{agent_name}/activate",
+        )
+
+
 async def _resolve_agent_id(session: AsyncSession, agent_name: str) -> uuid.UUID:
     result = await session.execute(select(Agent).where(Agent.name == agent_name))
     agent = result.scalar_one_or_none()
     if agent:
         return agent.id
-    # Auto-register on first use
     cfg = load_agent_config(agent_name)
     agent = Agent(
         name=cfg.name,
         description=cfg.description,
         version=cfg.version,
         config=cfg.model_dump(),
+        is_active=False,
     )
     session.add(agent)
     await session.flush()

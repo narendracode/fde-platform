@@ -1,4 +1,4 @@
-"""AgriScience domain tools — crop recommendations, pest alerts, fertiliser, weather."""
+"""Fundly domain tools — example agriculture — crop recommendations, pest alerts, fertiliser, weather."""
 
 from langchain_core.tools import tool
 

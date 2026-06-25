@@ -12,7 +12,7 @@ from agri_agent.config.loader import list_agent_configs, load_agent_config
 
 
 def main():
-    parser = argparse.ArgumentParser(description="AgriScience Agent CLI")
+    parser = argparse.ArgumentParser(description="Fundly Agent CLI")
     sub = parser.add_subparsers(dest="cmd")
 
     run_p = sub.add_parser("run", help="Run an agent")

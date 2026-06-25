@@ -1,3 +1,3 @@
-"""AgriScience AI Agent Platform."""
+"""Fundly AI Agent Platform."""
 
 __version__ = "0.1.0"

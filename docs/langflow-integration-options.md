@@ -13,7 +13,7 @@ custom FastAPI service. This document describes every practical way to bridge th
 │                                     │   │                                     │
 │  agents/configs/*.yaml              │   │  Flows built visually in browser    │
 │  FastAPI  →  LangGraph  →  Celery   │   │  Stored in LangFlow's own Postgres  │
-│  Audit trail in agri_agent DB       │   │  Runs managed by LangFlow runtime   │
+│  Audit trail in fundly DB            │   │  Runs managed by LangFlow runtime   │
 └─────────────────────────────────────┘   └─────────────────────────────────────┘
          Two separate systems — must be deliberately bridged
 ```
@@ -91,7 +91,7 @@ purely a trigger/test surface.
 It appears as a native drag-and-drop block in LangFlow's sidebar but internally calls
 your LangGraph agent or any custom logic.
 
-**Example component file** (`langflow_components/agri_agent_component.py`):
+**Example component file** (`langflow_components/fundly_agent_component.py`):
 
 ```python
 from langflow.custom import Component
@@ -101,8 +101,8 @@ import httpx
 
 
 class AgriAgentComponent(Component):
-    display_name = "AgriScience Agent"
-    description = "Runs a YAML-configured AgriScience agent via the platform API."
+    display_name = "Fundly Agent"
+    description = "Runs a YAML-configured Fundly agent via the platform API."
     icon = "🌾"
 
     inputs = [
@@ -224,7 +224,7 @@ tracing UI alongside LangSmith.
 
 ---
 
-## Recommendation for AgriScience
+## Recommendation for Fundly
 
 | Phase | Recommended option | Reason |
 |---|---|---|

@@ -11,7 +11,7 @@ from agri_agent.config.settings import settings
 logging.basicConfig(level=settings.log_level.upper())
 
 app = FastAPI(
-    title="AgriScience Agent Platform",
+    title="Fundly Agent Platform",
     description=(
         "Central API for deploying, running, and auditing AI agents. "
         "Pairs with LangFlow UI at http://localhost:7860."
@@ -43,4 +43,4 @@ async def on_startup():
     setup_otel()
     instrument_fastapi(app)
     instrument_redis()
-    logging.info("AgriScience Agent API started")
+    logging.info("Fundly Agent API started")

@@ -1,7 +1,7 @@
 [project]
 name = "agri-agent"
 version = "0.1.0"
-description = "AgriScience AI Agent Platform POC"
+description = "Fundly AI Agent Platform"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

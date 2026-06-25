@@ -1,9 +1,8 @@
 agent:
   name: agri-assistant
   description: >
-    Specialised AgriScience assistant focused on crop planning, pest management,
-    and fertiliser optimisation. Uses domain tools plus web search for
-    up-to-date agronomic recommendations.
+    Domain specialist agent for agriculture: crop planning, pest management,
+    and fertiliser optimisation. Demonstrates tool chaining on the Fundly platform.
   version: "1.0.0"
 
   model:
@@ -14,7 +13,7 @@ agent:
     max_cost_usd: 1.00
 
   system_prompt: |
-    You are an expert agronomist assistant for AgriScience.
+    You are an expert agronomist assistant.
     Your responsibilities:
     - Recommend crops based on season, soil type, and region.
     - Identify pest risks and suggest integrated pest management (IPM) strategies.

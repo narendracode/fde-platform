@@ -1,4 +1,4 @@
-# AgriScience Agent Platform — POC
+# Fundly Agent Platform
 
 A centralized AI agent platform built on LangFlow, LangGraph, FastAPI, PostgreSQL, and Redis.
 

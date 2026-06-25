@@ -90,7 +90,7 @@ def _custom_component_code(cfg: AgentConfig) -> str:
             ]
 
             def run_agent(self) -> Message:
-                """Call the AgriScience platform API and return the agent response."""
+                """Call the Fundly platform API and return the agent response."""
                 try:
                     resp = httpx.post(
                         "{LANGFLOW_URL.replace('localhost:7860', 'api:8000') if 'localhost' in LANGFLOW_URL else LANGFLOW_URL.replace('7860', '8000')}/api/v1/agents/{cfg.name}/run",
@@ -219,7 +219,7 @@ def build_flow_json(cfg: AgentConfig,
                         "input_types": ["Message"],
                     },
                 },
-                "description": f"AgriScience agent: {cfg.name}",
+                "description": f"Fundly agent: {cfg.name}",
                 "base_classes": ["Message"],
                 "display_name": cfg.name,
                 "documentation": "",

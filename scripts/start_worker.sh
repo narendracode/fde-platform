@@ -3,7 +3,7 @@
 # Waits for the DB (migrations run by api container) before starting.
 set -e
 
-echo "=== AgriScience Worker startup ==="
+echo "=== Fundly Worker startup ==="
 
 echo "--- [1/2] Waiting for PostgreSQL..."
 uv run python scripts/wait_for_db.py

@@ -32,3 +32,11 @@ def get_tools_for_config(tool_configs: list) -> list[BaseTool]:
 
 def list_available_tools() -> list[str]:
     return list(_TOOL_REGISTRY.keys())
+
+
+def list_tools_with_descriptions() -> list[dict]:
+    """Return name + description for every tool in the registry."""
+    return [
+        {"name": name, "description": tool.description or ""}
+        for name, tool in _TOOL_REGISTRY.items()
+    ]

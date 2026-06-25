@@ -1,9 +1,9 @@
-# AgriScience Agent Platform — System Design
+# Fundly Agent Platform — System Design
 
 ## Overview
 
 The platform is a centralised infrastructure layer that standardises how AI agents are
-**defined, deployed, executed, observed, and audited** across AgriScience. Any team
+**defined, deployed, executed, observed, and audited** across Fundly. Any team
 can ship a new agent by committing a YAML file — without inventing their own tooling,
 choosing their own models, or bypassing compliance guardrails.
 
@@ -16,7 +16,7 @@ choosing their own models, or bypassing compliance guardrails.
                            │                  Client Layer                     │
                            │                                                  │
                            │   LangFlow UI        REST Clients     CLI        │
-                           │   :7860              (curl / SDK)     agri-agent │
+                           │   :7860              (curl / SDK)     fundly-agent│
                            └──────┬───────────────────┬────────────────┬──────┘
                                   │                   │                │
                           ────────┼───────────────────┼────────────────┼────────
@@ -225,13 +225,15 @@ CI pipelines, dashboards, mobile apps — interact with agents through this API.
 |---|---|---|---|
 | `GET` | `/health` | None | Liveness probe |
 | `GET` | `/health/db` | None | DB connectivity check |
-| `GET` | `/api/v1/agents` | API key | List registered agents from DB |
+| `GET` | `/api/v1/agents` | API key | List all agents with `is_active` status |
 | `GET` | `/api/v1/agents/configs` | API key | List YAML configs from disk |
-| `GET` | `/api/v1/agents/tools` | API key | List all available tools |
-| `POST` | `/api/v1/agents/register` | API key | Load YAML config into DB (upsert) |
+| `GET` | `/api/v1/agents/tools` | API key | List all available tools (name + description) |
+| `POST` | `/api/v1/agents/register` | API key | Load YAML config into DB (upsert, starts inactive) |
 | `GET` | `/api/v1/agents/{name}` | API key | Get agent config from DB |
-| `POST` | `/api/v1/agents/{name}/run` | API key | **Sync run** — waits for result |
-| `POST` | `/api/v1/agents/{name}/run/async` | API key | **Async run** — returns task ID immediately |
+| `PATCH` | `/api/v1/agents/{name}/activate` | API key | **Activate** — allows run requests |
+| `PATCH` | `/api/v1/agents/{name}/deactivate` | API key | **Deactivate** — blocks run requests |
+| `POST` | `/api/v1/agents/{name}/run` | API key | **Sync run** — waits for result (agent must be active) |
+| `POST` | `/api/v1/agents/{name}/run/async` | API key | **Async run** — returns task ID immediately (agent must be active) |
 | `GET` | `/api/v1/runs` | API key | List all runs (filterable by status) |
 | `GET` | `/api/v1/runs/{run_id}` | API key | Get full run detail — use for polling async |
 
@@ -259,7 +261,7 @@ name         unique slug matching the YAML filename
 description  human-readable description
 version      semver string from YAML
 config       JSONB — full AgentConfig serialised for audit / replay
-is_active    soft-delete flag
+is_active    activation flag (default false — set true from dashboard/API)
 created_at   timestamp
 updated_at   timestamp (auto-updated)
 ```
@@ -493,10 +495,16 @@ Engineer writes new agent config
   CI/CD pipeline
   ├── docker compose build / push image
   ├── docker compose up (rolling restart of api + worker)
-  └── make migrate && make seed   (registers new agent in DB)
+  └── make ci-deploy AGENT=new-agent   (migrate → seed → sync → smoke)
          │
          ▼
-  New agent available at:
+  Agent registered with is_active=false
+         │
+         ▼
+  Dashboard / Ops: PATCH /api/v1/agents/new-agent/activate
+         │
+         ▼
+  Agent live:
   POST /api/v1/agents/new-agent/run
 ```
 
@@ -521,7 +529,8 @@ Engineer writes new agent config
 | What you want to add | Where to do it |
 |---|---|
 | New LLM provider | `react_agent._build_model()` |
-| New tool | `agent/tools/` + register in `tools/__init__.py` |
+| New tool | `agent/tools/` + register in `tools/__init__.py`; Launcher recommends it automatically |
+| Agent activation | `PATCH /api/v1/agents/{name}/activate` — controlled by dashboard |
 | New API endpoint | `api/routes/` |
 | New DB table | New model in `db/models.py` + Alembic migration |
 | JWT auth | Replace `dependencies.verify_api_key()` |
