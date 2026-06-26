@@ -12,26 +12,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agri_agent.config.settings import settings
-from agri_agent.db.models import Order, PlatformSettings
+from agri_agent.db.models import Order
 from agri_agent.db.session import get_session
 
 router = APIRouter(tags=["dashboard"])
 
 _templates_dir = Path(__file__).parent.parent.parent / "templates"
 templates = Jinja2Templates(directory=str(_templates_dir))
-
-_SETTING_DEFAULTS = {
-    "ai_automation_enabled": False,
-    "active_dispatch_agent": "order-dispatch-review",
-}
-
-
-async def _get_setting(session: AsyncSession, key: str):
-    result = await session.execute(
-        select(PlatformSettings).where(PlatformSettings.key == key)
-    )
-    row = result.scalar_one_or_none()
-    return row.value if row else _SETTING_DEFAULTS.get(key)
 
 
 def _urgency_days(due: date) -> int:
@@ -62,9 +49,6 @@ async def dashboard(
     request: Request,
     session: AsyncSession = Depends(get_session),
 ):
-    ai_enabled = await _get_setting(session, "ai_automation_enabled")
-    active_agent = await _get_setting(session, "active_dispatch_agent")
-
     pending_q = await session.execute(
         select(Order)
         .where(Order.status == "pending")
@@ -82,8 +66,6 @@ async def dashboard(
         {
             "pending": [_enrich(o) for o in pending_q.scalars().all()],
             "ready": [_enrich(o) for o in ready_q.scalars().all()],
-            "ai_automation_enabled": bool(ai_enabled),
-            "active_agent": active_agent,
             "api_key": settings.api_key,
         },
     )

@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Fundly — Agent Runs</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -81,31 +82,67 @@
     .metric-highlight { font-weight: 600; color: #1a1a2e; }
 
     /* ── Expand arrow ── */
-    .expand-arrow { color: #9ca3af; font-size: 11px; transition: transform .2s; }
-    .expanded .expand-arrow { transform: rotate(90deg); }
+    .expand-arrow { color: #9ca3af; font-size: 11px; }
 
     /* ── Detail panel ── */
     .detail-row { display: none; }
     .detail-row.open { display: table-row; }
     .detail-panel { padding: 16px 20px 20px; background: #f8faff;
                     border-top: 1px solid #e0e7ff; }
-    .detail-section { margin-bottom: 16px; }
-    .detail-section:last-child { margin-bottom: 0; }
     .detail-label { font-size: 11px; font-weight: 700; text-transform: uppercase;
-                    letter-spacing: .5px; color: #6b7280; margin-bottom: 6px; }
-    .output-text { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px;
-                   padding: 12px 14px; font-size: 12px; line-height: 1.6; color: #374151;
-                   white-space: pre-wrap; max-height: 300px; overflow-y: auto; }
-    .tool-call { background: #fff; border: 1px solid #e5e7eb; border-radius: 6px;
-                 padding: 10px 12px; margin-bottom: 6px; }
-    .tool-call-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-    .tool-name { font-size: 12px; font-weight: 700; font-family: monospace; color: #1a1a2e; }
-    .tool-result { font-size: 11px; color: #555; font-family: monospace;
-                   white-space: pre-wrap; max-height: 100px; overflow-y: auto;
-                   background: #f9fafb; padding: 6px 8px; border-radius: 4px; }
-    .detail-links { display: flex; gap: 10px; margin-top: 10px; }
-    .detail-link { font-size: 12px; color: #4f46e5; text-decoration: none; font-weight: 500; }
-    .detail-link:hover { text-decoration: underline; }
+                    letter-spacing: .5px; color: #6b7280; margin-bottom: 8px; }
+
+    /* Trace pill buttons */
+    .trace-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+                 margin-bottom: 14px; }
+    .trace-pill { display: inline-flex; align-items: center; gap: 5px; padding: 5px 12px;
+                  border-radius: 6px; font-size: 12px; font-weight: 600;
+                  text-decoration: none; border: 1px solid; transition: background .15s; }
+    .trace-langsmith { background: #f5f3ff; color: #6d28d9; border-color: #c4b5fd; }
+    .trace-langsmith:hover { background: #ede9fe; }
+    .trace-otel { background: #ecfdf5; color: #065f46; border-color: #6ee7b7; }
+    .trace-otel:hover { background: #d1fae5; }
+    .trace-filter { background: #f3f4f6; color: #374151; border-color: #d1d5db; }
+    .trace-filter:hover { background: #e5e7eb; }
+
+    /* Output area */
+    .output-wrap { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px;
+                   max-height: 420px; overflow-y: auto; }
+
+    /* Plain / pre-wrap fallback */
+    .output-wrap.plain { padding: 12px 14px; font-size: 12px; line-height: 1.6;
+                         color: #374151; white-space: pre-wrap; font-family: inherit; }
+
+    /* Pretty JSON */
+    .output-wrap .json-pre { margin: 0; padding: 12px 14px; font-size: 12px;
+                              font-family: 'SF Mono', 'Fira Code', monospace;
+                              color: #1a1a2e; white-space: pre; overflow-x: auto; }
+
+    /* Markdown prose */
+    .output-wrap.md-body { padding: 14px 18px; font-size: 13px; line-height: 1.7;
+                           color: #374151; }
+    .output-wrap.md-body h1,.output-wrap.md-body h2,.output-wrap.md-body h3 {
+      font-weight: 700; margin: 14px 0 6px; color: #1a1a2e; }
+    .output-wrap.md-body h1 { font-size: 17px; }
+    .output-wrap.md-body h2 { font-size: 15px; }
+    .output-wrap.md-body h3 { font-size: 13px; }
+    .output-wrap.md-body p  { margin: 6px 0; }
+    .output-wrap.md-body ul,.output-wrap.md-body ol { margin: 6px 0 6px 20px; }
+    .output-wrap.md-body li { margin: 3px 0; }
+    .output-wrap.md-body code { background: #f3f4f6; padding: 1px 5px;
+                                border-radius: 3px; font-size: 12px; font-family: monospace; }
+    .output-wrap.md-body pre { background: #f3f4f6; border-radius: 6px; padding: 10px 12px;
+                               overflow-x: auto; margin: 8px 0; }
+    .output-wrap.md-body pre code { background: none; padding: 0; }
+    .output-wrap.md-body table { border-collapse: collapse; width: 100%; margin: 10px 0;
+                                  font-size: 12px; }
+    .output-wrap.md-body th { background: #f9fafb; font-weight: 700; text-align: left;
+                               padding: 6px 10px; border: 1px solid #e5e7eb; }
+    .output-wrap.md-body td { padding: 6px 10px; border: 1px solid #e5e7eb; }
+    .output-wrap.md-body tr:nth-child(even) td { background: #f9fafb; }
+    .output-wrap.md-body strong { font-weight: 700; color: #1a1a2e; }
+    .output-wrap.md-body blockquote { border-left: 3px solid #c7d2fe; margin: 8px 0;
+                                       padding: 4px 12px; color: #6b7280; }
 
     /* ── Empty state ── */
     .empty-state { text-align: center; padding: 48px 24px; color: #9ca3af; font-size: 14px; }
@@ -246,63 +283,33 @@
           <td colspan="9" style="padding:0;">
             <div class="detail-panel">
 
-              {% if run.output_text %}
-              <div class="detail-section">
-                <div class="detail-label">Output</div>
-                <div class="output-text">{{ run.output_text }}</div>
-              </div>
-              {% endif %}
-
-              {% if run.tool_calls %}
-              <div class="detail-section">
-                <div class="detail-label">Tool Calls ({{ run.tool_calls|length }})</div>
-                {% for tc in run.tool_calls[:10] %}
-                <div class="tool-call">
-                  <div class="tool-call-head">
-                    <span class="tool-name">{{ tc.get('tool', tc.get('name', '?')) }}</span>
-                    {% if tc.get('error') %}
-                    <span style="color:#dc2626;font-size:11px;">✗ error</span>
-                    {% else %}
-                    <span style="color:#16a34a;font-size:11px;">✓</span>
-                    {% endif %}
-                  </div>
-                  {% if tc.get('output') or tc.get('result') %}
-                  <div class="tool-result">{{ tc.get('output') or tc.get('result') }}</div>
-                  {% endif %}
-                </div>
-                {% endfor %}
-                {% if run.tool_calls|length > 10 %}
-                <div style="font-size:11px;color:#9ca3af;margin-top:4px;">
-                  +{{ run.tool_calls|length - 10 }} more tool calls
-                </div>
-                {% endif %}
-              </div>
-              {% endif %}
-
-              {% if not run.output_text and not run.tool_calls %}
-              <div style="color:#9ca3af;font-size:13px;">No output yet — run may still be in progress.</div>
-              {% endif %}
-
-              <div class="detail-links">
-                <a class="detail-link" href="/runs?agent_name={{ run.agent_name }}">
-                  Filter by this agent →
+              <!-- Trace links + filter — always at the top -->
+              <div class="trace-bar">
+                <a class="trace-pill trace-filter" href="/runs?agent_name={{ run.agent_name }}">
+                  Filter by agent →
                 </a>
                 {% if run.langsmith_trace_url %}
-                <a class="detail-link" href="{{ run.langsmith_trace_url }}" target="_blank">
-                  LangSmith trace ↗
+                <a class="trace-pill trace-langsmith" href="{{ run.langsmith_trace_url }}" target="_blank">
+                  📊 LangSmith ↗
                 </a>
                 {% endif %}
                 {% if run.otel_trace_url %}
-                <a class="detail-link" href="{{ run.otel_trace_url }}" target="_blank">
-                  OTEL trace ↗
+                <a class="trace-pill trace-otel" href="{{ run.otel_trace_url }}" target="_blank">
+                  🔍 OTEL trace ↗
                 </a>
                 {% elif run.otel_trace_id %}
-                <a class="detail-link"
+                <a class="trace-pill trace-otel"
                    href="http://localhost:16686/trace/{{ run.otel_trace_id }}" target="_blank">
-                  OTEL trace ↗
+                  🔍 OTEL trace ↗
                 </a>
                 {% endif %}
               </div>
+
+              <!-- Output — rendered client-side as JSON or Markdown -->
+              <div class="detail-label">Output</div>
+              <div class="output-wrap"
+                   id="output-{{ run.id }}"
+                   data-raw='{{ run.output_text | tojson }}'></div>
 
             </div>
           </td>
@@ -358,12 +365,55 @@
     el.textContent = timeAgo(el.getAttribute('data-ts'));
   });
 
+  // ── Output rendering (JSON or Markdown) ───────────────────────────────────
+  const rendered = new Set();
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function renderOutput(id) {
+    if (rendered.has(id)) return;
+    rendered.add(id);
+
+    const container = document.getElementById(`output-${id}`);
+    if (!container) return;
+
+    // data-raw holds a JSON-encoded string (Jinja2 tojson filter)
+    let raw;
+    try { raw = JSON.parse(container.dataset.raw); } catch { raw = null; }
+
+    if (!raw) {
+      container.classList.add('plain');
+      container.textContent = 'No output yet — run may still be in progress.';
+      return;
+    }
+
+    // Try to parse as JSON
+    let parsed;
+    try { parsed = JSON.parse(raw); } catch { /* not JSON */ }
+
+    if (parsed !== undefined) {
+      const pre = document.createElement('pre');
+      pre.className = 'json-pre';
+      pre.textContent = JSON.stringify(parsed, null, 2);
+      container.appendChild(pre);
+    } else {
+      // Render as Markdown
+      container.classList.add('md-body');
+      container.innerHTML = marked.parse(raw);
+    }
+  }
+
   // ── Toggle detail row ──────────────────────────────────────────────────────
   function toggleDetail(id) {
     const row    = document.getElementById(`row-${id}`);
     const detail = document.getElementById(`detail-${id}`);
     const open   = detail.classList.toggle('open');
     row.classList.toggle('expanded', open);
+    const arrow = row.querySelector('.expand-arrow');
+    if (arrow) arrow.textContent = open ? '▼' : '▶';
+    if (open) renderOutput(id);
   }
 
   // ── Filter navigation ──────────────────────────────────────────────────────

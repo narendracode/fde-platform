@@ -18,44 +18,35 @@
     header .subtitle { font-size: 12px; color: #8899bb; margin-top: 2px; }
     .main { max-width: 1280px; margin: 0 auto; padding: 24px 28px; }
 
-    /* ── Control bar ── */
-    .control-bar { background: #fff; border-radius: 10px; padding: 16px 20px;
-                   margin-bottom: 20px; display: flex; align-items: center;
-                   gap: 24px; box-shadow: 0 1px 4px rgba(0,0,0,.08); flex-wrap: wrap; }
-    .control-bar label { font-weight: 600; font-size: 13px; color: #555; }
-    .toggle-wrap { display: flex; align-items: center; gap: 10px; }
-    .toggle { position: relative; width: 44px; height: 24px; }
-    .toggle input { opacity: 0; width: 0; height: 0; }
-    .slider { position: absolute; inset: 0; background: #ccc; border-radius: 24px;
-              cursor: pointer; transition: .2s; }
-    .slider:before { content: ""; position: absolute; width: 18px; height: 18px;
-                     left: 3px; top: 3px; background: white; border-radius: 50%;
-                     transition: .2s; }
-    input:checked + .slider { background: #4f46e5; }
-    input:checked + .slider:before { transform: translateX(20px); }
-    .mode-select { padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px;
-                   font-size: 13px; background: #fff; cursor: pointer; }
-    .run-btn { padding: 8px 18px; background: #4f46e5; color: white; border: none;
-               border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer;
-               transition: background .15s; display: none; }
-    .run-btn:hover { background: #4338ca; }
-    .run-btn.visible { display: inline-block; }
-    .run-btn:disabled { background: #999; cursor: not-allowed; }
-    .badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
-    .badge-info { background: #e0e7ff; color: #3730a3; }
+    /* ── Tab bar ── */
+    .tab-bar { display: flex; align-items: center; justify-content: space-between;
+               margin-bottom: 0; }
+    .tabs { display: flex; gap: 4px; }
+    .tab { display: flex; align-items: center; gap: 7px; padding: 9px 18px;
+           font-size: 13px; font-weight: 500; color: #6b7280; cursor: pointer;
+           border: 1px solid transparent; border-bottom: none;
+           border-radius: 8px 8px 0 0; background: #e5e7eb;
+           transition: background .15s, color .15s; user-select: none; }
+    .tab:hover { background: #d1d5db; color: #1a1a2e; }
+    .tab.active { background: #fff; color: #1a1a2e; font-weight: 600;
+                  border-color: #e5e7eb; position: relative; top: 1px;
+                  box-shadow: 0 -1px 3px rgba(0,0,0,.05); }
+    .tab-count { font-size: 11px; font-weight: 700; padding: 1px 7px;
+                 border-radius: 10px; line-height: 1.6; }
+    .tab-count-pending  { background: #fef3c7; color: #92400e; }
+    .tab-count-ready    { background: #dcfce7; color: #14532d; }
+    .tab-count-zero     { background: #f3f4f6; color: #9ca3af; }
 
-    /* ── Sections ── */
-    .section { background: #fff; border-radius: 10px; padding: 0;
-               margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
-    .section-header { padding: 14px 20px; border-bottom: 1px solid #f0f0f0;
-                      display: flex; align-items: center; justify-content: space-between; }
-    .section-title { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
-    .count { font-size: 12px; color: #888; font-weight: 400; }
+    /* ── Panel (card that sits below the tabs) ── */
+    .panel { background: #fff; border-radius: 0 10px 10px 10px; padding: 0;
+             box-shadow: 0 1px 4px rgba(0,0,0,.08); border: 1px solid #e5e7eb; }
+    .panel-header { padding: 14px 20px; border-bottom: 1px solid #f0f0f0;
+                    display: flex; align-items: center; justify-content: space-between; }
+    .panel-title { font-size: 15px; font-weight: 600; }
 
     /* ── Tables ── */
     .table-scroll { overflow-x: auto; border-radius: 0 0 10px 10px; }
     table { width: 100%; border-collapse: collapse; min-width: 700px; }
-    .table-review { min-width: 900px; }
     th { text-align: left; padding: 10px 14px; font-size: 11px; font-weight: 700;
          text-transform: uppercase; letter-spacing: .5px; color: #888;
          background: #fafafa; border-bottom: 1px solid #eee; white-space: nowrap; }
@@ -70,9 +61,6 @@
     .mode-air   { background: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight:600; }
     .mode-train { background: #fef9c3; color: #854d0e; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight:600; }
     .mode-road  { background: #dcfce7; color: #14532d; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight:600; }
-    .conf-high   { color: #16a34a; font-weight: 700; }
-    .conf-medium { color: #d97706; font-weight: 600; }
-    .conf-low    { color: #dc2626; font-weight: 600; }
     .decided-ai   { color: #6d28d9; font-size: 11px; font-weight:600; }
     .decided-human{ color: #0369a1; font-size: 11px; font-weight:600; }
 
@@ -82,40 +70,13 @@
     .btn-dispatch { padding: 5px 12px; background: #1a1a2e; color: white; border: none;
                     border-radius: 5px; font-size: 12px; cursor: pointer; transition: background .15s; }
     .btn-dispatch:hover { background: #2d2d4e; }
-    .btn-approve { padding: 6px 14px; background: #16a34a; color: white; border: none;
-                   border-radius: 5px; font-size: 12px; font-weight: 600; cursor: pointer;
-                   white-space: nowrap; transition: background .15s; }
-    .btn-approve:hover { background: #15803d; }
-    .btn-reject  { padding: 6px 12px; background: #fff; color: #dc2626; border: 1px solid #dc2626;
-                   border-radius: 5px; font-size: 12px; font-weight: 600; cursor: pointer;
-                   white-space: nowrap; transition: all .15s; }
-    .btn-reject:hover { background: #dc2626; color: white; }
-    /* Review action cell */
-    .review-action { display: flex; flex-direction: column; gap: 6px; min-width: 200px; }
-    .review-action-row { display: flex; gap: 6px; align-items: center; }
-    .override-label { font-size: 11px; color: #888; white-space: nowrap; }
 
-    /* ── Status indicator ── */
-    .status-dot { display: inline-block; width: 8px; height: 8px;
-                  border-radius: 50%; margin-right: 5px; }
-    .dot-pending         { background: #f59e0b; }
-    .dot-pending_review  { background: #6d28d9; }
-    .dot-ready_to_dispatch { background: #16a34a; }
-    .dot-dispatched      { background: #6b7280; }
-
-    /* ── Toast / feedback ── */
+    /* ── Toast ── */
     #toast { position: fixed; bottom: 24px; right: 24px; background: #1a1a2e; color: white;
              padding: 10px 18px; border-radius: 8px; font-size: 13px; display: none;
              box-shadow: 0 4px 12px rgba(0,0,0,.2); z-index: 999; }
 
-    /* ── Agent run status banner ── */
-    #agent-status { display: none; padding: 12px 20px; background: #ede9fe; border-left: 4px solid #7c3aed;
-                    border-radius: 0 8px 8px 0; margin-bottom: 16px; font-size: 13px; color: #4c1d95; }
-
-    /* ── Reasoning tooltip ── */
-    .reasoning-text { font-size: 12px; color: #555; max-width: 300px;
-                      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .empty-state { padding: 32px; text-align: center; color: #aaa; font-size: 13px; }
+    .empty-state { padding: 40px; text-align: center; color: #aaa; font-size: 13px; }
   </style>
 </head>
 <body>
@@ -153,59 +114,28 @@
 
 <div class="main">
 
-  <!-- ── Control bar ───────────────────────────────────────────── -->
-  <div class="control-bar">
-    <div class="toggle-wrap">
-      <label>AI Automation</label>
-      <label class="toggle">
-        <input type="checkbox" id="ai-toggle"
-               {% if ai_automation_enabled %}checked{% endif %}
-               onchange="toggleAI(this.checked)">
-        <span class="slider"></span>
-      </label>
-      <span id="ai-status-label" style="font-size:12px;color:#888;">
-        {% if ai_automation_enabled %}ON{% else %}OFF{% endif %}
-      </span>
-    </div>
-
-    <div class="toggle-wrap" id="mode-wrap"
-         style="{% if not ai_automation_enabled %}display:none{% endif %}">
-      <label>Mode</label>
-      <select class="mode-select" id="agent-mode-select" onchange="setAgentMode(this.value)">
-        <option value="order-dispatch-review"
-          {% if active_agent == 'order-dispatch-review' %}selected{% endif %}>
-          AI + Human Review
-        </option>
-        <option value="order-dispatch-auto"
-          {% if active_agent == 'order-dispatch-auto' %}selected{% endif %}>
-          Full Automation
-        </option>
-      </select>
-    </div>
-
-    <button class="run-btn {% if ai_automation_enabled %}visible{% endif %}"
-            id="run-ai-btn" onclick="runAIAgent()">
-      ▶ Run AI Agent
-    </button>
-
-    <button style="padding:6px 14px;background:#f3f4f6;border:1px solid #ddd;border-radius:6px;
-                   font-size:12px;cursor:pointer;margin-left:auto;"
-            onclick="location.reload()">↺ Refresh</button>
-  </div>
-
-  <!-- ── Agent run status ───────────────────────────────────────── -->
-  <div id="agent-status">
-    <span id="agent-status-text">Agent is running…</span>
-  </div>
-
-  <!-- ── Pending Orders ──────────────────────────────────────────── -->
-  <div class="section">
-    <div class="section-header">
-      <div class="section-title">
-        📦 Pending Orders
-        <span class="count">({{ pending|length }} orders)</span>
+  <!-- ── Tab bar ── -->
+  <div class="tab-bar">
+    <div class="tabs">
+      <div class="tab active" id="tab-pending" onclick="switchTab('pending')">
+        📦 Pending
+        <span class="tab-count {{ 'tab-count-pending' if pending else 'tab-count-zero' }}">
+          {{ pending|length }}
+        </span>
+      </div>
+      <div class="tab" id="tab-ready" onclick="switchTab('ready')">
+        ✅ Ready to Dispatch
+        <span class="tab-count {{ 'tab-count-ready' if ready else 'tab-count-zero' }}">
+          {{ ready|length }}
+        </span>
       </div>
     </div>
+    <button style="padding:5px 12px;background:#f3f4f6;border:1px solid #ddd;border-radius:6px;
+                   font-size:12px;cursor:pointer;margin-bottom:1px;" onclick="location.reload()">↺ Refresh</button>
+  </div>
+
+  <!-- ── Pending panel ── -->
+  <div class="panel" id="panel-pending">
     {% if pending %}
     <div class="table-scroll">
     <table>
@@ -254,15 +184,9 @@
     {% endif %}
   </div>
 
-  <!-- ── Ready to Dispatch ───────────────────────────────────────── -->
-  {% if ready %}
-  <div class="section">
-    <div class="section-header">
-      <div class="section-title">
-        ✅ Ready to Dispatch
-        <span class="count">({{ ready|length }} orders)</span>
-      </div>
-    </div>
+  <!-- ── Ready to Dispatch panel ── -->
+  <div class="panel" id="panel-ready" style="display:none;">
+    {% if ready %}
     <div class="table-scroll">
     <table>
       <thead>
@@ -288,8 +212,10 @@
       </tbody>
     </table>
     </div>
+    {% else %}
+    <div class="empty-state">No orders ready to dispatch yet.</div>
+    {% endif %}
   </div>
-  {% endif %}
 
 </div><!-- /main -->
 
@@ -307,6 +233,13 @@
     setTimeout(() => el.style.display = 'none', 3000);
   }
 
+  function switchTab(name) {
+    ['pending', 'ready'].forEach(t => {
+      document.getElementById('tab-' + t).classList.toggle('active', t === name);
+      document.getElementById('panel-' + t).style.display = t === name ? '' : 'none';
+    });
+  }
+
   async function dispatchOrder(id, mode) {
     if (!mode) { toast('Please select a shipment mode', false); return; }
     const r = await fetch(`/api/v1/orders/${id}/dispatch`, {
@@ -317,7 +250,6 @@
     else { const e = await r.json(); toast(e.detail || 'Error', false); }
   }
 
-  // ── Approvals badge — poll counts and show red dot if pending actions ───────
   async function refreshApprovalsBadge() {
     try {
       const r = await fetch('/api/v1/actions/counts', { headers });
@@ -334,78 +266,6 @@
   }
   refreshApprovalsBadge();
   setInterval(refreshApprovalsBadge, 10000);
-
-  async function toggleAI(enabled) {
-    await fetch('/api/v1/settings/ai_automation_enabled', {
-      method: 'PATCH', headers,
-      body: JSON.stringify({ value: enabled })
-    });
-    document.getElementById('ai-status-label').textContent = enabled ? 'ON' : 'OFF';
-    document.getElementById('mode-wrap').style.display = enabled ? 'flex' : 'none';
-    const btn = document.getElementById('run-ai-btn');
-    if (enabled) btn.classList.add('visible'); else btn.classList.remove('visible');
-  }
-
-  async function setAgentMode(agentName) {
-    await fetch('/api/v1/settings/active_dispatch_agent', {
-      method: 'PATCH', headers,
-      body: JSON.stringify({ value: agentName })
-    });
-    toast(`Mode set: ${agentName}`);
-  }
-
-  async function runAIAgent() {
-    const btn = document.getElementById('run-ai-btn');
-    btn.disabled = true;
-    btn.textContent = '⏳ Running…';
-
-    const statusEl = document.getElementById('agent-status');
-    const statusText = document.getElementById('agent-status-text');
-    statusEl.style.display = 'block';
-    statusText.textContent = 'Agent is running — processing pending orders…';
-
-    // Get the active agent name
-    const settingsResp = await fetch('/api/v1/settings/active_dispatch_agent', { headers });
-    const settingsData = await settingsResp.json();
-    const agentName = settingsData.value || 'order-dispatch-review';
-
-    // Fire async run
-    const runResp = await fetch(`/api/v1/agents/${agentName}/run/async`, {
-      method: 'POST', headers,
-      body: JSON.stringify({ message: 'Process all pending orders and assign the appropriate shipment mode for each.' })
-    });
-
-    if (!runResp.ok) {
-      const e = await runResp.json();
-      toast(e.detail || 'Agent run failed', false);
-      btn.disabled = false; btn.textContent = '▶ Run AI Agent';
-      statusEl.style.display = 'none';
-      return;
-    }
-
-    const { run_id } = await runResp.json();
-    statusText.textContent = `Agent running (run ${run_id.slice(0,8)}…) — polling for completion…`;
-
-    // Poll until done
-    const poll = setInterval(async () => {
-      const pollResp = await fetch(`/api/v1/runs/${run_id}`, { headers });
-      const run = await pollResp.json();
-      if (run.status === 'completed') {
-        clearInterval(poll);
-        statusText.textContent = `Agent completed. Refreshing orders…`;
-        toast('AI agent finished — orders updated');
-        setTimeout(() => location.reload(), 1200);
-      } else if (run.status === 'failed') {
-        clearInterval(poll);
-        statusText.textContent = `Agent failed: ${run.error || 'Unknown error'}`;
-        statusEl.style.background = '#fee2e2';
-        statusEl.style.borderColor = '#dc2626';
-        statusEl.style.color = '#991b1b';
-        btn.disabled = false; btn.textContent = '▶ Run AI Agent';
-        toast('Agent run failed', false);
-      }
-    }, 2500);
-  }
 </script>
 </body>
 </html>
