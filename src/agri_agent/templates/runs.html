@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fundly — Agent Runs</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+           background: #f0f2f5; color: #1a1a2e; font-size: 14px; }
+
+    /* ── Header ── */
+    header { background: #1a1a2e; color: #fff; padding: 0 28px;
+             display: flex; align-items: stretch; justify-content: space-between;
+             height: 56px; }
+    .header-brand { display: flex; align-items: center; gap: 10px; }
+    .header-brand h1 { font-size: 17px; font-weight: 700; letter-spacing: .2px; }
+    .header-brand .divider { width: 1px; height: 20px; background: #334; margin: 0 4px; }
+    .header-brand .subtitle { font-size: 12px; color: #6677aa; }
+    nav { display: flex; align-items: stretch; }
+    nav a { display: flex; align-items: center; gap: 5px; padding: 0 16px;
+            color: #8899bb; text-decoration: none; font-size: 13px; font-weight: 500;
+            border-bottom: 3px solid transparent; transition: color .15s, border-color .15s; }
+    nav a:hover { color: #fff; }
+    nav a.active { color: #a5b4fc; border-bottom-color: #4f46e5; }
+    .inbox-badge { background: #ef4444; color: #fff; border-radius: 10px;
+                   font-size: 10px; font-weight: 700; padding: 1px 5px; display: none; }
+
+    /* ── Layout ── */
+    .main { max-width: 1280px; margin: 0 auto; padding: 28px 24px; }
+
+    /* ── Filter bar ── */
+    .filter-bar { background: #fff; border-radius: 10px; padding: 14px 20px;
+                  margin-bottom: 20px; display: flex; align-items: center; gap: 16px;
+                  box-shadow: 0 1px 4px rgba(0,0,0,.08); flex-wrap: wrap; }
+    .filter-bar label { font-size: 12px; font-weight: 600; color: #555; }
+    .filter-select { padding: 7px 10px; border: 1px solid #e5e7eb; border-radius: 7px;
+                     font-size: 13px; background: #fff; cursor: pointer; color: #1a1a2e; }
+    .filter-select:focus { outline: 2px solid #4f46e5; border-color: transparent; }
+    .filter-bar .spacer { margin-left: auto; }
+    .btn-refresh { padding: 7px 14px; background: #f3f4f6; border: 1px solid #e5e7eb;
+                   border-radius: 7px; font-size: 12px; font-weight: 600; cursor: pointer;
+                   color: #374151; }
+    .btn-refresh:hover { background: #e5e7eb; }
+    .total-badge { background: #e0e7ff; color: #3730a3; font-size: 12px;
+                   font-weight: 700; padding: 3px 10px; border-radius: 20px; }
+
+    /* ── Table ── */
+    .table-wrap { background: #fff; border-radius: 12px;
+                  box-shadow: 0 1px 4px rgba(0,0,0,.08); overflow: hidden; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; padding: 11px 16px; font-size: 11px; font-weight: 700;
+         text-transform: uppercase; letter-spacing: .5px; color: #9ca3af;
+         background: #fafafa; border-bottom: 1px solid #f0f0f0; white-space: nowrap; }
+    td { padding: 12px 16px; border-bottom: 1px solid #f5f5f5; vertical-align: middle; }
+    .run-row { cursor: pointer; transition: background .1s; }
+    .run-row:hover td { background: #f9fafb; }
+    .run-row.expanded td { background: #f5f7ff; }
+
+    /* ── Status pills ── */
+    .status-pill { display: inline-block; padding: 3px 9px; border-radius: 20px;
+                   font-size: 11px; font-weight: 700; }
+    .s-pending   { background: #fef9c3; color: #854d0e; }
+    .s-running   { background: #e0e7ff; color: #3730a3; }
+    .s-completed { background: #dcfce7; color: #14532d; }
+    .s-failed    { background: #fee2e2; color: #991b1b; }
+    .s-blocked   { background: #f3e8ff; color: #6b21a8; }
+
+    /* ── Agent chip ── */
+    .agent-chip { display: inline-block; background: #f0f4ff; color: #3730a3;
+                  padding: 3px 9px; border-radius: 5px; font-size: 11px; font-weight: 600;
+                  font-family: monospace; }
+
+    /* ── Input summary tags ── */
+    .input-tags { display: flex; flex-wrap: wrap; gap: 4px; max-width: 240px; }
+    .input-tag { background: #f3f4f6; color: #374151; padding: 2px 7px;
+                 border-radius: 4px; font-size: 11px; }
+
+    /* ── Metrics ── */
+    .metric { font-size: 12px; color: #555; }
+    .metric-highlight { font-weight: 600; color: #1a1a2e; }
+
+    /* ── Expand arrow ── */
+    .expand-arrow { color: #9ca3af; font-size: 11px; transition: transform .2s; }
+    .expanded .expand-arrow { transform: rotate(90deg); }
+
+    /* ── Detail panel ── */
+    .detail-row { display: none; }
+    .detail-row.open { display: table-row; }
+    .detail-panel { padding: 16px 20px 20px; background: #f8faff;
+                    border-top: 1px solid #e0e7ff; }
+    .detail-section { margin-bottom: 16px; }
+    .detail-section:last-child { margin-bottom: 0; }
+    .detail-label { font-size: 11px; font-weight: 700; text-transform: uppercase;
+                    letter-spacing: .5px; color: #6b7280; margin-bottom: 6px; }
+    .output-text { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px;
+                   padding: 12px 14px; font-size: 12px; line-height: 1.6; color: #374151;
+                   white-space: pre-wrap; max-height: 300px; overflow-y: auto; }
+    .tool-call { background: #fff; border: 1px solid #e5e7eb; border-radius: 6px;
+                 padding: 10px 12px; margin-bottom: 6px; }
+    .tool-call-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .tool-name { font-size: 12px; font-weight: 700; font-family: monospace; color: #1a1a2e; }
+    .tool-result { font-size: 11px; color: #555; font-family: monospace;
+                   white-space: pre-wrap; max-height: 100px; overflow-y: auto;
+                   background: #f9fafb; padding: 6px 8px; border-radius: 4px; }
+    .detail-links { display: flex; gap: 10px; margin-top: 10px; }
+    .detail-link { font-size: 12px; color: #4f46e5; text-decoration: none; font-weight: 500; }
+    .detail-link:hover { text-decoration: underline; }
+
+    /* ── Empty state ── */
+    .empty-state { text-align: center; padding: 48px 24px; color: #9ca3af; font-size: 14px; }
+    .empty-icon  { font-size: 36px; margin-bottom: 10px; }
+
+    /* ── Spinner ── */
+    .spinner { width: 12px; height: 12px; border: 2px solid #c7d2fe;
+               border-top-color: #4f46e5; border-radius: 50%;
+               animation: spin .7s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Toast ── */
+    #toast { position: fixed; bottom: 24px; right: 24px; padding: 10px 18px;
+             background: #1a1a2e; color: white; border-radius: 8px; font-size: 13px;
+             display: none; z-index: 2000; box-shadow: 0 4px 14px rgba(0,0,0,.2); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-brand">
+    <h1>Fundly</h1>
+    <div class="divider"></div>
+    <span class="subtitle">Agent Platform</span>
+  </div>
+  <nav>
+    <a href="/dashboard">📦 Orders</a>
+    <a href="/agents">🤖 Agents</a>
+    <a href="/runs" class="active">📋 Runs</a>
+    <a href="/approvals">
+      🔔 Action Inbox
+      <span class="inbox-badge" id="approvals-badge"></span>
+    </a>
+    <a href="/docs" target="_blank" style="color:#6677aa;">API</a>
+  </nav>
+</header>
+
+<div class="main">
+
+  <!-- ── Filter bar ── -->
+  <div class="filter-bar">
+    <label>Agent</label>
+    <select class="filter-select" id="filter-agent" onchange="applyFilters()">
+      <option value="">All Agents</option>
+      {% for name in agent_names %}
+      <option value="{{ name }}" {% if selected_agent == name %}selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+
+    <label>Status</label>
+    <select class="filter-select" id="filter-status" onchange="applyFilters()">
+      <option value="">All Statuses</option>
+      <option value="pending"   {% if selected_status == 'pending'   %}selected{% endif %}>Pending</option>
+      <option value="running"   {% if selected_status == 'running'   %}selected{% endif %}>Running</option>
+      <option value="completed" {% if selected_status == 'completed' %}selected{% endif %}>Completed</option>
+      <option value="failed"    {% if selected_status == 'failed'    %}selected{% endif %}>Failed</option>
+      <option value="blocked"   {% if selected_status == 'blocked'   %}selected{% endif %}>Blocked</option>
+    </select>
+
+    <div class="spacer"></div>
+    <span class="total-badge" id="total-badge">{{ runs|length }} runs</span>
+    <button class="btn-refresh" onclick="location.reload()">↺ Refresh</button>
+  </div>
+
+  <!-- ── Runs table ── -->
+  {% if runs %}
+  <div class="table-wrap">
+    <table id="runs-table">
+      <thead>
+        <tr>
+          <th style="width:24px;"></th>
+          <th>Run ID</th>
+          <th>Agent</th>
+          <th>Status</th>
+          <th>Inputs</th>
+          <th>Tokens</th>
+          <th>Cost</th>
+          <th>Duration</th>
+          <th>Timestamps</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for run in runs %}
+        <tr class="run-row" id="row-{{ run.id }}" onclick="toggleDetail('{{ run.id }}')">
+          <td><span class="expand-arrow">▶</span></td>
+          <td>
+            <code style="font-size:11px;color:#6b7280;">{{ run.id[:8] }}…</code>
+          </td>
+          <td><span class="agent-chip">{{ run.agent_name }}</span></td>
+          <td>
+            <span class="status-pill s-{{ run.status }}" id="status-{{ run.id }}">
+              {% if run.status == 'running' or run.status == 'pending' %}
+              <span class="spinner" style="margin-right:4px;"></span>
+              {% endif %}
+              {{ run.status }}
+            </span>
+          </td>
+          <td>
+            <div class="input-tags">
+              {% for k, v in run.input_summary.items() %}
+              <span class="input-tag">{{ k }}={{ v }}</span>
+              {% endfor %}
+              {% if not run.input_summary %}
+              <span style="color:#ccc;font-size:11px;">—</span>
+              {% endif %}
+            </div>
+          </td>
+          <td class="metric">
+            <span class="metric-highlight">{{ run.input_tokens + run.output_tokens }}</span>
+            <span style="font-size:10px;color:#aaa;"> ({{ run.input_tokens }}↑ {{ run.output_tokens }}↓)</span>
+          </td>
+          <td class="metric">
+            {% if run.cost_usd > 0 %}
+            ${{ "%.4f"|format(run.cost_usd) }}
+            {% else %}—{% endif %}
+          </td>
+          <td class="metric" id="dur-{{ run.id }}">
+            {% if run.elapsed %}{{ run.elapsed }}s{% else %}—{% endif %}
+          </td>
+          <td class="metric">
+            <div style="display:flex;flex-direction:column;gap:3px;">
+              <div>
+                <span style="font-size:10px;color:#9ca3af;font-weight:600;width:46px;display:inline-block;">Created</span>
+                <span class="ts-rel" data-ts="{{ run.created_at }}" title="{{ run.created_at }}">—</span>
+              </div>
+              <div>
+                <span style="font-size:10px;color:#9ca3af;font-weight:600;width:46px;display:inline-block;">Started</span>
+                {% if run.started_at %}
+                <span class="ts-rel" data-ts="{{ run.started_at }}" title="{{ run.started_at }}">—</span>
+                {% else %}
+                <span style="color:#d1d5db;">—</span>
+                {% endif %}
+              </div>
+            </div>
+          </td>
+        </tr>
+        <tr class="detail-row" id="detail-{{ run.id }}">
+          <td colspan="9" style="padding:0;">
+            <div class="detail-panel">
+
+              {% if run.output_text %}
+              <div class="detail-section">
+                <div class="detail-label">Output</div>
+                <div class="output-text">{{ run.output_text }}</div>
+              </div>
+              {% endif %}
+
+              {% if run.tool_calls %}
+              <div class="detail-section">
+                <div class="detail-label">Tool Calls ({{ run.tool_calls|length }})</div>
+                {% for tc in run.tool_calls[:10] %}
+                <div class="tool-call">
+                  <div class="tool-call-head">
+                    <span class="tool-name">{{ tc.get('tool', tc.get('name', '?')) }}</span>
+                    {% if tc.get('error') %}
+                    <span style="color:#dc2626;font-size:11px;">✗ error</span>
+                    {% else %}
+                    <span style="color:#16a34a;font-size:11px;">✓</span>
+                    {% endif %}
+                  </div>
+                  {% if tc.get('output') or tc.get('result') %}
+                  <div class="tool-result">{{ tc.get('output') or tc.get('result') }}</div>
+                  {% endif %}
+                </div>
+                {% endfor %}
+                {% if run.tool_calls|length > 10 %}
+                <div style="font-size:11px;color:#9ca3af;margin-top:4px;">
+                  +{{ run.tool_calls|length - 10 }} more tool calls
+                </div>
+                {% endif %}
+              </div>
+              {% endif %}
+
+              {% if not run.output_text and not run.tool_calls %}
+              <div style="color:#9ca3af;font-size:13px;">No output yet — run may still be in progress.</div>
+              {% endif %}
+
+              <div class="detail-links">
+                <a class="detail-link" href="/runs?agent_name={{ run.agent_name }}">
+                  Filter by this agent →
+                </a>
+                {% if run.langsmith_trace_url %}
+                <a class="detail-link" href="{{ run.langsmith_trace_url }}" target="_blank">
+                  LangSmith trace ↗
+                </a>
+                {% endif %}
+                {% if run.otel_trace_url %}
+                <a class="detail-link" href="{{ run.otel_trace_url }}" target="_blank">
+                  OTEL trace ↗
+                </a>
+                {% elif run.otel_trace_id %}
+                <a class="detail-link"
+                   href="http://localhost:16686/trace/{{ run.otel_trace_id }}" target="_blank">
+                  OTEL trace ↗
+                </a>
+                {% endif %}
+              </div>
+
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="table-wrap">
+    <div class="empty-state">
+      <div class="empty-icon">📋</div>
+      No runs found{% if selected_agent %} for <strong>{{ selected_agent }}</strong>{% endif %}{% if selected_status %} with status <strong>{{ selected_status }}</strong>{% endif %}.
+      <br><br>
+      <a href="/agents" style="color:#4f46e5;font-weight:600;text-decoration:none;">Run an agent →</a>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+  const API_KEY = "{{ api_key }}";
+  const headers = { "X-API-Key": API_KEY };
+
+  // ── Approvals badge ────────────────────────────────────────────────────────
+  async function refreshBadge() {
+    try {
+      const r = await fetch('/api/v1/actions/counts', { headers: { ...headers, "Content-Type": "application/json" } });
+      if (!r.ok) return;
+      const d = await r.json();
+      const el = document.getElementById('approvals-badge');
+      if (d.total > 0) { el.textContent = d.total; el.style.display = 'inline-block'; }
+      else { el.style.display = 'none'; }
+    } catch (_) {}
+  }
+  refreshBadge();
+  setInterval(refreshBadge, 10000);
+
+  // ── Relative timestamps ────────────────────────────────────────────────────
+  function timeAgo(isoString) {
+    if (!isoString) return '—';
+    const diff = (Date.now() - new Date(isoString)) / 1000;
+    if (diff < 60) return `${Math.floor(diff)}s ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return new Date(isoString).toLocaleDateString();
+  }
+
+  document.querySelectorAll('.ts-rel[data-ts]').forEach(el => {
+    el.textContent = timeAgo(el.getAttribute('data-ts'));
+  });
+
+  // ── Toggle detail row ──────────────────────────────────────────────────────
+  function toggleDetail(id) {
+    const row    = document.getElementById(`row-${id}`);
+    const detail = document.getElementById(`detail-${id}`);
+    const open   = detail.classList.toggle('open');
+    row.classList.toggle('expanded', open);
+  }
+
+  // ── Filter navigation ──────────────────────────────────────────────────────
+  function applyFilters() {
+    const agent  = document.getElementById('filter-agent').value;
+    const status = document.getElementById('filter-status').value;
+    const params = new URLSearchParams();
+    if (agent)  params.set('agent_name', agent);
+    if (status) params.set('status', status);
+    window.location.href = '/runs' + (params.toString() ? '?' + params.toString() : '');
+  }
+
+  // ── Auto-poll running/pending rows ─────────────────────────────────────────
+  const liveRows = [...document.querySelectorAll('.s-running, .s-pending')]
+    .map(el => el.closest('tr')?.id?.replace('row-', ''))
+    .filter(Boolean);
+
+  if (liveRows.length > 0) {
+    const pollLive = setInterval(async () => {
+      let anyStillLive = false;
+      for (const runId of liveRows) {
+        try {
+          const r = await fetch(`/api/v1/runs/${runId}`, { headers });
+          if (!r.ok) continue;
+          const run = await r.json();
+          const pill = document.getElementById(`status-${runId}`);
+          if (pill) {
+            const cls = {pending:'s-pending',running:'s-running',completed:'s-completed',
+                         failed:'s-failed',blocked:'s-blocked'};
+            pill.className = `status-pill ${cls[run.status] || ''}`;
+            pill.innerHTML = (run.status === 'running' || run.status === 'pending')
+              ? `<span class="spinner" style="margin-right:4px;"></span>${run.status}`
+              : run.status;
+            if (run.elapsed_seconds) {
+              const dur = document.getElementById(`dur-${runId}`);
+              if (dur) dur.textContent = `${run.elapsed_seconds.toFixed(1)}s`;
+            }
+          }
+          if (run.status === 'running' || run.status === 'pending') anyStillLive = true;
+        } catch (_) {}
+      }
+      if (!anyStillLive) clearInterval(pollLive);
+    }, 5000);
+  }
+</script>
+</body>
+</html>

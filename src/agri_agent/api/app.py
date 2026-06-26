@@ -5,7 +5,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from agri_agent.api.routes import actions, agents, approvals, dashboard, health, orders, outreach, runs
+from agri_agent.api.routes import actions, agents, approvals, dashboard, health, orders, outreach, pages, runs
 from agri_agent.api.routes import settings as settings_router
 from agri_agent.config.settings import settings
 
@@ -33,6 +33,7 @@ app.include_router(orders.router)
 app.include_router(settings_router.router)
 app.include_router(actions.router)
 app.include_router(outreach.router)
+app.include_router(pages.router)
 app.include_router(dashboard.router)
 app.include_router(approvals.router)
 

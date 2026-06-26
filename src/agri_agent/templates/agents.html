@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fundly — Agent Registry</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+           background: #f0f2f5; color: #1a1a2e; font-size: 14px; }
+
+    /* ── Header ── */
+    header { background: #1a1a2e; color: #fff; padding: 0 28px;
+             display: flex; align-items: stretch; justify-content: space-between;
+             height: 56px; }
+    .header-brand { display: flex; align-items: center; gap: 10px; }
+    .header-brand h1 { font-size: 17px; font-weight: 700; letter-spacing: .2px; }
+    .header-brand .divider { width: 1px; height: 20px; background: #334; margin: 0 4px; }
+    .header-brand .subtitle { font-size: 12px; color: #6677aa; }
+    nav { display: flex; align-items: stretch; }
+    nav a { display: flex; align-items: center; gap: 5px; padding: 0 16px;
+            color: #8899bb; text-decoration: none; font-size: 13px; font-weight: 500;
+            border-bottom: 3px solid transparent; transition: color .15s, border-color .15s; }
+    nav a:hover { color: #fff; }
+    nav a.active { color: #a5b4fc; border-bottom-color: #4f46e5; }
+    .inbox-badge { background: #ef4444; color: #fff; border-radius: 10px;
+                   font-size: 10px; font-weight: 700; padding: 1px 5px; display: none; }
+
+    /* ── Layout ── */
+    .main { max-width: 1200px; margin: 0 auto; padding: 28px 24px; }
+
+    /* ── Page title bar ── */
+    .page-title { display: flex; align-items: center; justify-content: space-between;
+                  margin-bottom: 24px; }
+    .page-title h2 { font-size: 20px; font-weight: 700; }
+    .summary-badges { display: flex; gap: 10px; }
+    .summary-badge { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+    .sb-total  { background: #e0e7ff; color: #3730a3; }
+    .sb-active { background: #dcfce7; color: #14532d; }
+
+    /* ── Agent card grid ── */
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(480px, 1fr)); gap: 18px; }
+
+    .agent-card { background: #fff; border-radius: 12px;
+                  box-shadow: 0 1px 4px rgba(0,0,0,.08);
+                  border-left: 5px solid #e5e7eb;
+                  display: flex; flex-direction: column;
+                  transition: box-shadow .15s; overflow: hidden; }
+    .agent-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.12); }
+    .agent-card.active  { border-left-color: #22c55e; }
+    .agent-card.inactive { border-left-color: #d1d5db; }
+
+    .card-head { padding: 16px 20px 12px; display: flex; align-items: flex-start;
+                 justify-content: space-between; gap: 12px; }
+    .card-name { font-size: 15px; font-weight: 700; font-family: 'SF Mono', monospace;
+                 letter-spacing: -.2px; color: #1a1a2e; }
+    .card-meta { display: flex; align-items: center; gap: 8px; margin-top: 3px; }
+    .version-badge { background: #f3f4f6; color: #6b7280; font-size: 10px;
+                     font-weight: 600; padding: 2px 7px; border-radius: 4px;
+                     font-family: monospace; }
+    .status-pill { display: inline-flex; align-items: center; gap: 4px;
+                   padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+    .pill-active   { background: #dcfce7; color: #14532d; }
+    .pill-inactive { background: #f3f4f6; color: #9ca3af; }
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; }
+    .dot-active   { background: #22c55e; }
+    .dot-inactive { background: #9ca3af; }
+
+    .card-desc { padding: 0 20px 14px; font-size: 13px; color: #555; line-height: 1.5;
+                 display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+                 overflow: hidden; }
+
+    .card-body { padding: 0 20px 16px; flex: 1; display: flex; flex-direction: column; gap: 10px; }
+
+    .card-row { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; }
+    .card-row-label { color: #9ca3af; font-weight: 600; width: 54px; flex-shrink: 0; padding-top: 1px; }
+    .tag-list { display: flex; flex-wrap: wrap; gap: 4px; }
+    .tag { background: #f0f4ff; color: #3730a3; padding: 2px 8px; border-radius: 4px;
+           font-size: 11px; font-weight: 500; }
+    .tag-flag { background: #fef9c3; color: #854d0e; }
+    .tag-more { background: #f3f4f6; color: #9ca3af; }
+
+    .card-divider { height: 1px; background: #f3f4f6; margin: 0 20px; }
+
+    .card-footer { padding: 14px 20px; display: flex; align-items: center; gap: 8px; }
+    .btn { padding: 7px 14px; border-radius: 7px; font-size: 12px; font-weight: 600;
+           border: none; cursor: pointer; transition: background .15s, color .15s;
+           display: inline-flex; align-items: center; gap: 5px; }
+    .btn-deactivate { background: #fee2e2; color: #991b1b; }
+    .btn-deactivate:hover { background: #fca5a5; }
+    .btn-activate   { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+    .btn-activate:hover { background: #dcfce7; }
+    .btn-runs { background: #f3f4f6; color: #374151; }
+    .btn-runs:hover { background: #e5e7eb; }
+    .btn-run  { background: #4f46e5; color: #fff; margin-left: auto; }
+    .btn-run:hover { background: #4338ca; }
+    .btn-run:disabled { background: #c7d2fe; cursor: not-allowed; }
+    .btn-run.no-yaml { background: #e5e7eb; color: #9ca3af; cursor: not-allowed; }
+
+    /* ── Run Modal ── */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45);
+                     display: none; align-items: center; justify-content: center;
+                     z-index: 1000; padding: 20px; }
+    .modal-overlay.open { display: flex; }
+    .modal { background: #fff; border-radius: 14px; width: 100%; max-width: 520px;
+             box-shadow: 0 20px 60px rgba(0,0,0,.25); display: flex; flex-direction: column;
+             max-height: 90vh; }
+    .modal-head { padding: 20px 24px 16px; border-bottom: 1px solid #f0f0f0;
+                  display: flex; align-items: center; justify-content: space-between; }
+    .modal-head h3 { font-size: 16px; font-weight: 700; }
+    .modal-close { background: none; border: none; cursor: pointer; font-size: 20px;
+                   color: #9ca3af; line-height: 1; padding: 0; }
+    .modal-close:hover { color: #374151; }
+    .modal-body { padding: 20px 24px; overflow-y: auto; flex: 1; }
+    .modal-footer { padding: 16px 24px; border-top: 1px solid #f0f0f0;
+                    display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: flex; align-items: center; gap: 6px; font-size: 12px;
+                        font-weight: 600; color: #374151; margin-bottom: 5px;
+                        text-transform: uppercase; letter-spacing: .4px; }
+    .form-group label .req  { color: #ef4444; }
+    .form-group label .opt  { color: #9ca3af; font-size: 10px; text-transform: none;
+                              font-weight: 400; letter-spacing: 0; }
+    .form-group label .type { font-family: monospace; font-size: 10px; color: #9ca3af;
+                              background: #f3f4f6; padding: 1px 5px; border-radius: 3px;
+                              font-weight: 400; text-transform: none; letter-spacing: 0; }
+    .form-input { width: 100%; padding: 9px 12px; border: 1px solid #e5e7eb;
+                  border-radius: 8px; font-size: 13px; color: #1a1a2e;
+                  transition: border-color .15s; }
+    .form-input:focus { outline: none; border-color: #4f46e5;
+                        box-shadow: 0 0 0 3px rgba(79,70,229,.08); }
+    .form-hint { font-size: 11px; color: #9ca3af; margin-top: 4px; }
+    .form-check { display: flex; align-items: center; gap: 8px; }
+    .form-check input { width: 16px; height: 16px; cursor: pointer; }
+
+    /* Success / error panels inside modal */
+    .modal-success { text-align: center; padding: 24px 16px; }
+    .modal-success .success-icon { font-size: 40px; margin-bottom: 12px; }
+    .modal-success h4 { font-size: 15px; font-weight: 700; color: #15803d; margin-bottom: 6px; }
+    .modal-success .run-id-box { background: #f0f9f4; border: 1px solid #bbf7d0;
+                                  border-radius: 8px; padding: 10px 14px; margin: 12px 0;
+                                  font-family: monospace; font-size: 12px; color: #374151; }
+    .modal-error { background: #fff0f0; border: 1px solid #fca5a5; border-radius: 8px;
+                   padding: 10px 14px; margin-bottom: 12px; font-size: 12px; color: #991b1b; }
+
+    .btn-modal-cancel { background: #f3f4f6; color: #374151; }
+    .btn-modal-cancel:hover { background: #e5e7eb; }
+    .btn-modal-run { background: #4f46e5; color: #fff; }
+    .btn-modal-run:hover { background: #4338ca; }
+    .btn-modal-run:disabled { background: #c7d2fe; cursor: not-allowed; }
+
+    /* ── Toast ── */
+    #toast { position: fixed; bottom: 24px; right: 24px; padding: 10px 18px;
+             background: #1a1a2e; color: white; border-radius: 8px; font-size: 13px;
+             display: none; z-index: 2000; box-shadow: 0 4px 14px rgba(0,0,0,.2); }
+    #toast.error { background: #dc2626; }
+    #toast.ok    { background: #15803d; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-brand">
+    <h1>Fundly</h1>
+    <div class="divider"></div>
+    <span class="subtitle">Agent Platform</span>
+  </div>
+  <nav>
+    <a href="/dashboard">📦 Orders</a>
+    <a href="/agents" class="active">🤖 Agents</a>
+    <a href="/runs">📋 Runs</a>
+    <a href="/approvals">
+      🔔 Action Inbox
+      <span class="inbox-badge" id="approvals-badge"></span>
+    </a>
+    <a href="/docs" target="_blank" style="color:#6677aa;">API</a>
+  </nav>
+</header>
+
+<div class="main">
+
+  <div class="page-title">
+    <h2>Agent Registry</h2>
+    <div class="summary-badges">
+      <span class="summary-badge sb-total">{{ agents|length }} agents</span>
+      <span class="summary-badge sb-active">{{ agents|selectattr('is_active')|list|length }} active</span>
+    </div>
+  </div>
+
+  <div class="grid">
+    {% for a in agents %}
+    <div class="agent-card {{ 'active' if a.is_active else 'inactive' }}" id="card-{{ a.name }}">
+
+      <div class="card-head">
+        <div>
+          <div class="card-name">{{ a.name }}</div>
+          <div class="card-meta">
+            <span class="version-badge">v{{ a.version }}</span>
+            <span class="status-pill {{ 'pill-active' if a.is_active else 'pill-inactive' }}"
+                  id="pill-{{ a.name }}">
+              <span class="status-dot {{ 'dot-active' if a.is_active else 'dot-inactive' }}"
+                    id="dot-{{ a.name }}"></span>
+              <span id="pill-label-{{ a.name }}">{{ 'Active' if a.is_active else 'Inactive' }}</span>
+            </span>
+          </div>
+        </div>
+        {% if not a.has_yaml %}
+        <span style="font-size:10px;background:#fef3c7;color:#92400e;padding:2px 8px;
+                     border-radius:4px;font-weight:600;">Config missing</span>
+        {% endif %}
+      </div>
+
+      <div class="card-desc">{{ a.description }}</div>
+
+      <div class="card-body">
+        <div class="card-row">
+          <span class="card-row-label">Tools</span>
+          <div class="tag-list">
+            {% for t in a.tools[:4] %}
+            <span class="tag">{{ t }}</span>
+            {% endfor %}
+            {% if a.tools|length > 4 %}
+            <span class="tag tag-more">+{{ a.tools|length - 4 }}</span>
+            {% endif %}
+            {% if not a.tools %}
+            <span style="color:#aaa;font-size:12px;">none</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="card-row">
+          <span class="card-row-label">Model</span>
+          <span style="font-size:12px;color:#374151;font-family:monospace;">{{ a.model_name }}</span>
+          <span style="font-size:11px;color:#9ca3af;margin-left:6px;">· max ${{ "%.2f"|format(a.max_cost_usd) }}</span>
+        </div>
+
+        {% if a.feature_flags %}
+        <div class="card-row">
+          <span class="card-row-label">Flags</span>
+          <div class="tag-list">
+            {% for k, v in a.feature_flags.items() %}
+            <span class="tag tag-flag">{{ k }}: {{ v }}</span>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        {% if a.inputs %}
+        <div class="card-row">
+          <span class="card-row-label">Inputs</span>
+          <span style="font-size:12px;color:#555;">
+            {% for inp in a.inputs %}
+            <span style="color:{{ '#374151' if inp.required else '#9ca3af' }};">{{ inp.name }}</span>{% if not loop.last %}, {% endif %}
+            {% endfor %}
+          </span>
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="card-divider"></div>
+
+      <div class="card-footer">
+        {% if a.is_active %}
+        <button class="btn btn-deactivate" onclick="toggleActive('{{ a.name }}', false)">
+          ⏸ Deactivate
+        </button>
+        {% else %}
+        <button class="btn btn-activate" onclick="toggleActive('{{ a.name }}', true)">
+          ▶ Activate
+        </button>
+        {% endif %}
+
+        <a href="/runs?agent_name={{ a.name }}" class="btn btn-runs" style="text-decoration:none;">
+          📋 Runs
+        </a>
+
+        {% if a.has_yaml %}
+        <button class="btn btn-run" onclick="openRunModal('{{ a.name }}')"
+                {% if not a.is_active %}title="Activate agent first"{% endif %}>
+          ▶ Run
+        </button>
+        {% else %}
+        <button class="btn btn-run no-yaml" disabled title="No YAML config found">
+          ▶ Run
+        </button>
+        {% endif %}
+      </div>
+
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- ── Run Modal ── -->
+<div class="modal-overlay" id="run-modal" onclick="closeModalOnOverlay(event)">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="modal-title">Run Agent</h3>
+      <button class="modal-close" onclick="closeRunModal()">×</button>
+    </div>
+    <div class="modal-body" id="modal-body">
+      <!-- Populated by JS -->
+    </div>
+    <div class="modal-footer" id="modal-footer">
+      <button class="btn btn-modal-cancel" onclick="closeRunModal()">Cancel</button>
+      <button class="btn btn-modal-run" id="modal-run-btn">▶ Run Agent</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+  const API_KEY = "{{ api_key }}";
+  const headers = { "Content-Type": "application/json", "X-API-Key": API_KEY };
+  const AGENTS = {{ agents | tojson }};
+
+  let currentAgent = null;
+
+  // ── Approvals badge ────────────────────────────────────────────────────────
+  async function refreshBadge() {
+    try {
+      const r = await fetch('/api/v1/actions/counts', { headers });
+      if (!r.ok) return;
+      const d = await r.json();
+      const el = document.getElementById('approvals-badge');
+      if (d.total > 0) { el.textContent = d.total; el.style.display = 'inline-block'; }
+      else { el.style.display = 'none'; }
+    } catch (_) {}
+  }
+  refreshBadge();
+  setInterval(refreshBadge, 10000);
+
+  // ── Toggle active/inactive ─────────────────────────────────────────────────
+  async function toggleActive(name, activate) {
+    const endpoint = activate ? 'activate' : 'deactivate';
+    const r = await fetch(`/api/v1/agents/${name}/${endpoint}`, { method: 'PATCH', headers });
+    if (!r.ok) { toast('Failed to update agent', 'error'); return; }
+
+    // Update card UI without reload
+    const card = document.getElementById(`card-${name}`);
+    const pill = document.getElementById(`pill-${name}`);
+    const dot  = document.getElementById(`dot-${name}`);
+    const pillLabel = document.getElementById(`pill-label-${name}`);
+    const footer = card.querySelector('.card-footer');
+
+    if (activate) {
+      card.className = 'agent-card active';
+      pill.className = 'status-pill pill-active';
+      dot.className  = 'status-dot dot-active';
+      pillLabel.textContent = 'Active';
+      footer.querySelector('.btn-activate').outerHTML =
+        `<button class="btn btn-deactivate" onclick="toggleActive('${name}', false)">⏸ Deactivate</button>`;
+      toast(`${name} activated`, 'ok');
+    } else {
+      card.className = 'agent-card inactive';
+      pill.className = 'status-pill pill-inactive';
+      dot.className  = 'status-dot dot-inactive';
+      pillLabel.textContent = 'Inactive';
+      footer.querySelector('.btn-deactivate').outerHTML =
+        `<button class="btn btn-activate" onclick="toggleActive('${name}', true)">▶ Activate</button>`;
+      toast(`${name} deactivated`);
+    }
+
+    // Update AGENTS array
+    const ag = AGENTS.find(a => a.name === name);
+    if (ag) ag.is_active = activate;
+  }
+
+  // ── Run modal ──────────────────────────────────────────────────────────────
+  function openRunModal(name) {
+    currentAgent = AGENTS.find(a => a.name === name);
+    if (!currentAgent) return;
+
+    document.getElementById('modal-title').textContent = `Run  ${name}`;
+    document.getElementById('modal-footer').style.display = 'flex';
+    document.getElementById('modal-run-btn').disabled = false;
+    document.getElementById('modal-run-btn').textContent = '▶ Run Agent';
+    document.getElementById('modal-run-btn').onclick = () => submitRun(name);
+
+    renderModalForm(currentAgent);
+    document.getElementById('run-modal').classList.add('open');
+  }
+
+  function renderModalForm(agent) {
+    const body = document.getElementById('modal-body');
+
+    if (!agent.inputs || agent.inputs.length === 0) {
+      body.innerHTML = `<p style="color:#555;font-size:13px;">This agent has no configurable inputs.</p>`;
+      return;
+    }
+
+    body.innerHTML = agent.inputs.map(inp => {
+      const req = inp.required
+        ? `<span class="req">*</span>`
+        : `<span class="opt">optional</span>`;
+      const typeTag = `<span class="type">${inp.type}</span>`;
+      const hint = inp.description ? `<div class="form-hint">${inp.description}</div>` : '';
+      const placeholder = inp.default !== null && inp.default !== undefined
+        ? `Default: ${inp.default}` : '';
+
+      let inputEl;
+      if (inp.type === 'boolean') {
+        const checked = inp.default ? 'checked' : '';
+        inputEl = `<div class="form-check">
+          <input type="checkbox" id="inp-${inp.name}" class="form-input" style="width:16px;" ${checked}>
+          <label for="inp-${inp.name}" style="text-transform:none;letter-spacing:0;font-size:13px;">Enable</label>
+        </div>`;
+      } else if (inp.type === 'integer' || inp.type === 'number') {
+        const step = inp.type === 'integer' ? '1' : '0.01';
+        const val = inp.default !== null && inp.default !== undefined ? inp.default : '';
+        inputEl = `<input type="number" id="inp-${inp.name}" class="form-input"
+                     placeholder="${placeholder}" value="${val}" step="${step}">`;
+      } else {
+        const val = inp.default !== null && inp.default !== undefined ? inp.default : '';
+        inputEl = `<input type="text" id="inp-${inp.name}" class="form-input"
+                     placeholder="${placeholder}" value="${val}">`;
+      }
+
+      return `<div class="form-group">
+        <label>${inp.name} ${req} ${typeTag}</label>
+        ${inputEl}
+        ${hint}
+      </div>`;
+    }).join('');
+  }
+
+  async function submitRun(name) {
+    const agent = AGENTS.find(a => a.name === name);
+    if (!agent) return;
+
+    // Collect input values
+    const extra_context = {};
+    let valid = true;
+    for (const inp of agent.inputs) {
+      const el = document.getElementById(`inp-${inp.name}`);
+      if (!el) continue;
+      let val;
+      if (inp.type === 'boolean') {
+        val = el.checked;
+      } else {
+        val = el.value.trim();
+        if (val === '') {
+          if (inp.required) {
+            el.style.borderColor = '#ef4444';
+            el.style.boxShadow = '0 0 0 3px rgba(239,68,68,.08)';
+            valid = false;
+            continue;
+          }
+          // optional + empty → skip (let server apply default)
+          continue;
+        }
+        el.style.borderColor = '';
+        el.style.boxShadow = '';
+      }
+      extra_context[inp.name] = inp.type === 'integer' ? parseInt(val)
+                              : inp.type === 'number'  ? parseFloat(val) : val;
+    }
+    if (!valid) return;
+
+    const btn = document.getElementById('modal-run-btn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Queuing…';
+
+    try {
+      const r = await fetch(`/api/v1/agents/${name}/run/async`, {
+        method: 'POST', headers,
+        body: JSON.stringify({ message: `Run ${name}`, extra_context })
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        showModalError(d.detail || 'Run failed');
+        btn.disabled = false;
+        btn.textContent = '▶ Run Agent';
+        return;
+      }
+      showModalSuccess(name, d.run_id);
+    } catch (err) {
+      showModalError('Network error: ' + err.message);
+      btn.disabled = false;
+      btn.textContent = '▶ Run Agent';
+    }
+  }
+
+  function showModalSuccess(agentName, runId) {
+    document.getElementById('modal-body').innerHTML = `
+      <div class="modal-success">
+        <div class="success-icon">✅</div>
+        <h4>Run queued successfully</h4>
+        <p style="font-size:13px;color:#555;margin-bottom:8px;">${agentName} is running in the background.</p>
+        <div class="run-id-box">Run ID: ${runId}</div>
+        <a href="/runs" style="font-size:13px;color:#4f46e5;font-weight:600;text-decoration:none;">
+          View in Runs →
+        </a>
+      </div>`;
+    document.getElementById('modal-footer').innerHTML =
+      `<button class="btn btn-modal-cancel" onclick="closeRunModal()">Close</button>`;
+  }
+
+  function showModalError(msg) {
+    const existing = document.getElementById('modal-body').querySelector('.modal-error');
+    if (existing) existing.remove();
+    const body = document.getElementById('modal-body');
+    body.insertAdjacentHTML('afterbegin', `<div class="modal-error">⚠ ${msg}</div>`);
+  }
+
+  function closeRunModal() {
+    document.getElementById('run-modal').classList.remove('open');
+    currentAgent = null;
+  }
+
+  function closeModalOnOverlay(e) {
+    if (e.target === document.getElementById('run-modal')) closeRunModal();
+  }
+
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeRunModal(); });
+
+  // ── Toast ──────────────────────────────────────────────────────────────────
+  function toast(msg, type = '') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = type;
+    el.style.display = 'block';
+    setTimeout(() => el.style.display = 'none', 3000);
+  }
+</script>
+</body>
+</html>
