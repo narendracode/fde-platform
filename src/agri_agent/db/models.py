@@ -132,7 +132,7 @@ class AgentAction(Base):
     approval_action: Mapped[dict] = mapped_column(JSONB, nullable=False)
     rejection_action: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
-    # Lifecycle: pending_review | approved | rejected | approval_failed | expired
+    # Lifecycle: pending_review | approved | rejected | approval_failed | expired | stale | drifted
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="pending_review", index=True)
     decided_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -140,6 +140,16 @@ class AgentAction(Base):
     override_body: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     approval_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Staleness: agent captures resource state at propose time; platform auto-marks stale at inbox load
+    expected_state: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    stale_after_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    stale_marked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Drift detection: platform re-checks resource state at approval time
+    drift_detected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    drift_details: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    drift_override: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

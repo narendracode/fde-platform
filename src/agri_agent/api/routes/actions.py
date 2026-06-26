@@ -21,13 +21,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agri_agent.api.dependencies import verify_api_key
 from agri_agent.config.settings import settings
-from agri_agent.db.models import AgentAction
+from agri_agent.db.models import Agent, AgentAction
 from agri_agent.db.session import get_session
 
 router = APIRouter(prefix="/api/v1/actions", tags=["actions"])
 
-_VALID_STATUSES = {"pending_review", "approved", "rejected", "approval_failed", "expired"}
+_VALID_STATUSES = {"pending_review", "approved", "rejected", "approval_failed", "expired", "stale", "drifted", "dismissed"}
 _VALID_CONFIDENCE = {"high", "medium", "low"}
+_HISTORY_STATUSES = {"approved", "rejected", "approval_failed", "expired", "stale", "drifted", "dismissed"}
 
 
 # ── Request / Response schemas ─────────────────────────────────────────────────
@@ -44,17 +45,25 @@ class CreateActionRequest(BaseModel):
     approval_action: dict[str, Any]
     rejection_action: dict[str, Any] | None = None
     expires_at: str | None = None          # ISO datetime string
+    expected_state: dict[str, Any] | None = None  # resource state snapshot for drift detection
 
 
 class ApproveRequest(BaseModel):
-    override_body: dict[str, Any] | None = None   # merged on top of approval_action.body
     note: str | None = None
-    decided_by: str = "human"
+    override_drift: bool = False   # skip drift check; used when analyst chooses "Approve Anyway"
 
 
 class RejectRequest(BaseModel):
     note: str | None = None
-    decided_by: str = "human"
+
+
+class DismissRequest(BaseModel):
+    note: str | None = None
+
+
+class MarkDriftedRequest(BaseModel):
+    drift_details: dict[str, Any]
+    note: str | None = None
 
 
 # ── Serialiser ────────────────────────────────────────────────────────────────
@@ -78,9 +87,112 @@ def _action_out(a: AgentAction) -> dict[str, Any]:
         "override_body": a.override_body,
         "approval_error": a.approval_error,
         "expires_at": a.expires_at.isoformat() if a.expires_at else None,
+        "expected_state": a.expected_state,
+        "stale_after_seconds": a.stale_after_seconds,
+        "stale_marked_at": a.stale_marked_at.isoformat() if a.stale_marked_at else None,
+        "drift_detected_at": a.drift_detected_at.isoformat() if a.drift_detected_at else None,
+        "drift_details": a.drift_details,
+        "drift_override": a.drift_override,
         "created_at": a.created_at.isoformat(),
         "updated_at": a.updated_at.isoformat(),
     }
+
+
+# ── Staleness utilities ───────────────────────────────────────────────────────
+
+def _parse_duration_seconds(s: str | None) -> int | None:
+    """Parse a duration string like '4h', '2d', '30m' to seconds."""
+    if not s:
+        return None
+    s = s.strip().lower()
+    if s.endswith("d"):
+        return int(s[:-1]) * 86400
+    if s.endswith("h"):
+        return int(s[:-1]) * 3600
+    if s.endswith("m"):
+        return int(s[:-1]) * 60
+    if s.endswith("s"):
+        return int(s[:-1])
+    return int(s)
+
+
+async def auto_mark_stale_actions(session: AsyncSession) -> int:
+    """Auto-mark overdue pending_review actions as stale.
+
+    Called at inbox load so the inbox never shows actions the analyst can no
+    longer act on.  Returns the count of newly staled actions.
+    """
+    now = datetime.now(UTC)
+    rows = await session.execute(
+        select(AgentAction).where(
+            AgentAction.status == "pending_review",
+            AgentAction.stale_after_seconds.isnot(None),
+        )
+    )
+    staled = 0
+    for action in rows.scalars().all():
+        age_seconds = (now - action.created_at.replace(tzinfo=UTC)).total_seconds()
+        if age_seconds > action.stale_after_seconds:
+            action.status = "stale"
+            action.stale_marked_at = now
+            staled += 1
+    if staled:
+        await session.commit()
+    return staled
+
+
+# ── Drift detection ───────────────────────────────────────────────────────────
+
+async def _check_drift(action: AgentAction, session: AsyncSession) -> dict | None:
+    """Compare current resource state against the expected_state snapshot.
+
+    Returns a dict of {field: {"expected": val, "actual": val}} for changed
+    fields, or None if no drift (or if drift checking is not configured).
+    """
+    expected = action.expected_state
+    if not expected:
+        return None
+
+    resource_id = expected.get("resource_id")
+    if not resource_id:
+        return None
+
+    # Load agent config to get track_resource_state.check_url
+    row = await session.execute(select(Agent).where(Agent.name == action.agent_name))
+    agent = row.scalar_one_or_none()
+    if not agent:
+        return None
+
+    flags = agent.config.get("feature_flags", {})
+    track = flags.get("track_resource_state")
+    if not track:
+        return None
+
+    check_url: str = track.get("check_url", "")
+    fields: list[str] = track.get("fields", [])
+    if not check_url or not fields:
+        return None
+
+    full_url = settings.api_base_url.rstrip("/") + check_url.replace("{resource_id}", str(resource_id))
+    headers = {"X-API-Key": settings.api_key, "Content-Type": "application/json"}
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(full_url, headers=headers)
+            if resp.status_code != 200:
+                return None  # can't verify — don't block the approval
+            current = resp.json()
+    except Exception:
+        return None  # network error — don't block the approval
+
+    drift: dict = {}
+    for field in fields:
+        expected_val = expected.get(field)
+        current_val = current.get(field)
+        if str(expected_val) != str(current_val):
+            drift[field] = {"expected": expected_val, "actual": current_val}
+
+    return drift if drift else None
 
 
 # ── Approval execution engine ─────────────────────────────────────────────────
@@ -91,7 +203,6 @@ def _build_url(approval_action: dict) -> str:
     url_params: dict = approval_action.get("url_params", {})
     for key, val in url_params.items():
         url = url.replace(f"{{{key}}}", str(val))
-    # If any {placeholder} remains it means a param was not supplied
     remaining = re.findall(r"\{(\w+)\}", url)
     if remaining:
         raise ValueError(f"Unresolved URL params: {remaining}")
@@ -160,6 +271,14 @@ async def create_action(
         except ValueError:
             raise HTTPException(400, detail="agent_run_id must be a valid UUID")
 
+    # Look up stale_after from the agent's YAML config
+    stale_after_seconds = None
+    row = await session.execute(select(Agent).where(Agent.name == req.agent_name))
+    agent = row.scalar_one_or_none()
+    if agent:
+        flags = agent.config.get("feature_flags", {})
+        stale_after_seconds = _parse_duration_seconds(flags.get("stale_after"))
+
     action = AgentAction(
         agent_name=req.agent_name,
         agent_run_id=run_id,
@@ -172,6 +291,8 @@ async def create_action(
         approval_action=req.approval_action,
         rejection_action=req.rejection_action,
         expires_at=expires_at,
+        expected_state=req.expected_state,
+        stale_after_seconds=stale_after_seconds,
     )
     session.add(action)
     await session.commit()
@@ -203,19 +324,30 @@ async def list_actions(
     action_status: str | None = Query(None, alias="status"),
     agent_name: str | None = Query(None),
     confidence: str | None = Query(None),
+    include_history: bool = Query(False),
     session: AsyncSession = Depends(get_session),
     _: str = Depends(verify_api_key),
 ):
-    """List agent actions with optional filters."""
+    """List agent actions with optional filters.
+
+    By default returns only active (pending_review) actions, auto-marking stale
+    ones before returning so the caller always sees a fresh inbox.
+    Pass include_history=true to include terminated statuses.
+    """
+    auto_staled = await auto_mark_stale_actions(session)
+
     q = select(AgentAction).order_by(AgentAction.created_at.desc())
     if action_status:
         q = q.where(AgentAction.status == action_status)
+    elif not include_history:
+        q = q.where(AgentAction.status == "pending_review")
     if agent_name:
         q = q.where(AgentAction.agent_name == agent_name)
     if confidence:
         q = q.where(AgentAction.confidence == confidence)
     rows = await session.execute(q)
-    return [_action_out(a) for a in rows.scalars().all()]
+    actions = [_action_out(a) for a in rows.scalars().all()]
+    return {"actions": actions, "auto_staled_count": auto_staled}
 
 
 @router.get("/{action_id}")
@@ -237,18 +369,46 @@ async def approve_action(
 ):
     """Approve an action: execute its approval_action HTTP call, then mark approved.
 
-    The platform resolves url_params, merges override_body, and makes the call
-    server-side.  The domain API (e.g. PATCH /orders/{id}/dispatch) does not
-    know it's being called via an approval — it's the same endpoint the human
-    or agent would call directly.
+    If the action has an expected_state snapshot and the agent is configured with
+    track_resource_state, the platform compares current resource state before
+    executing.  If drift is detected and override_drift is False, returns HTTP 409
+    with drift details so the UI can present the three-choice drift panel.
+    Set override_drift=true to proceed anyway (recorded with drift_override=true).
     """
     action = await _get_or_404(session, action_id)
     if action.status != "pending_review":
         raise HTTPException(409, detail=f"Action is '{action.status}' — only pending_review can be approved")
 
-    success, error = await _execute_approval_action(action.approval_action, req.override_body)
-
     now = datetime.now(UTC)
+
+    # Drift check
+    if action.expected_state and not req.override_drift:
+        drift = await _check_drift(action, session)
+        if drift:
+            action.drift_detected_at = now
+            action.drift_details = drift
+            action.updated_at = now
+            await session.commit()
+            raise HTTPException(
+                409,
+                detail={
+                    "conflict": "state_drift",
+                    "drift_details": drift,
+                    "action_id": action_id,
+                    "message": "Resource state has changed since this action was proposed.",
+                },
+            )
+
+    # If overriding drift, record it
+    if req.override_drift and action.expected_state:
+        drift = await _check_drift(action, session)
+        if drift:
+            action.drift_detected_at = now
+            action.drift_details = drift
+            action.drift_override = True
+
+    success, error = await _execute_approval_action(action.approval_action, None)
+
     if success:
         action.status = "approved"
         action.approval_error = None
@@ -256,10 +416,9 @@ async def approve_action(
         action.status = "approval_failed"
         action.approval_error = error
 
-    action.decided_by = req.decided_by
+    action.decided_by = "human"
     action.decided_at = now
     action.decision_note = req.note
-    action.override_body = req.override_body
     action.updated_at = now
 
     await session.commit()
@@ -277,6 +436,32 @@ async def approve_action(
     return _action_out(action)
 
 
+@router.post("/{action_id}/mark-drifted")
+async def mark_drifted(
+    action_id: str,
+    req: MarkDriftedRequest,
+    session: AsyncSession = Depends(get_session),
+    _: str = Depends(verify_api_key),
+):
+    """Mark an action as drifted — resource state changed, action should not proceed."""
+    action = await _get_or_404(session, action_id)
+    if action.status != "pending_review":
+        raise HTTPException(409, detail=f"Action is '{action.status}' — only pending_review can be marked drifted")
+
+    now = datetime.now(UTC)
+    action.status = "drifted"
+    action.drift_detected_at = now
+    action.drift_details = req.drift_details
+    action.decided_by = "human"
+    action.decided_at = now
+    action.decision_note = req.note
+    action.updated_at = now
+
+    await session.commit()
+    await session.refresh(action)
+    return _action_out(action)
+
+
 @router.post("/{action_id}/reject")
 async def reject_action(
     action_id: str,
@@ -289,13 +474,41 @@ async def reject_action(
     if action.status != "pending_review":
         raise HTTPException(409, detail=f"Action is '{action.status}' — only pending_review can be rejected")
 
-    # Fire rejection_action if defined (best-effort, don't fail on error)
     if action.rejection_action:
         await _execute_approval_action(action.rejection_action, None)
 
     now = datetime.now(UTC)
     action.status = "rejected"
-    action.decided_by = req.decided_by
+    action.decided_by = "human"
+    action.decided_at = now
+    action.decision_note = req.note
+    action.updated_at = now
+
+    await session.commit()
+    await session.refresh(action)
+    return _action_out(action)
+
+
+@router.post("/{action_id}/dismiss")
+async def dismiss_action(
+    action_id: str,
+    req: DismissRequest,
+    session: AsyncSession = Depends(get_session),
+    _: str = Depends(verify_api_key),
+):
+    """Dismiss an action — analyst could not decide at this moment.
+
+    Unlike reject (a deliberate No), dismiss signals "I've seen this but cannot
+    act on it right now."  No rejection_action is called.  The action moves to
+    History with status 'dismissed' and can be re-proposed by the agent.
+    """
+    action = await _get_or_404(session, action_id)
+    if action.status != "pending_review":
+        raise HTTPException(409, detail=f"Action is '{action.status}' — only pending_review can be dismissed")
+
+    now = datetime.now(UTC)
+    action.status = "dismissed"
+    action.decided_by = "human"
     action.decided_at = now
     action.decision_note = req.note
     action.updated_at = now
@@ -316,7 +529,7 @@ async def retry_action(
     if action.status != "approval_failed":
         raise HTTPException(409, detail=f"Action is '{action.status}' — only approval_failed can be retried")
 
-    success, error = await _execute_approval_action(action.approval_action, action.override_body)
+    success, error = await _execute_approval_action(action.approval_action, None)
 
     now = datetime.now(UTC)
     action.status = "approved" if success else "approval_failed"

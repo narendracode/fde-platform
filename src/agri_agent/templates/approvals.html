@@ -9,18 +9,41 @@
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
            background: #f0f2f5; color: #1a1a2e; font-size: 14px; }
 
-    header { background: #1a1a2e; color: #fff; padding: 14px 28px;
-             display: flex; align-items: center; justify-content: space-between; }
-    header h1 { font-size: 18px; font-weight: 600; }
-    header nav a { color: #a5b4fc; font-size: 13px; text-decoration: none; margin-left: 20px; }
-    header nav a:hover { color: #fff; }
+    header { background: #1a1a2e; color: #fff; padding: 0 28px; height: 56px;
+             display: flex; align-items: stretch; justify-content: space-between; }
+    .header-brand { display: flex; align-items: center; gap: 10px; }
+    header h1 { font-size: 17px; font-weight: 700; }
+    nav { display: flex; align-items: stretch; }
+    nav a { display: flex; align-items: center; padding: 0 16px; color: #8899bb;
+            text-decoration: none; font-size: 13px; font-weight: 500;
+            border-bottom: 3px solid transparent; }
+    nav a:hover { color: #fff; }
+    nav a.active { color: #a5b4fc; border-bottom-color: #4f46e5; }
 
-    .main { max-width: 900px; margin: 0 auto; padding: 24px 20px; }
+    .main { max-width: 940px; margin: 0 auto; padding: 24px 20px; }
+
+    /* ── Stale notice banner ── */
+    .stale-notice { display: flex; align-items: center; gap: 10px; background: #fffbeb;
+                    border: 1px solid #fde68a; border-radius: 8px; padding: 10px 14px;
+                    margin-bottom: 16px; font-size: 13px; color: #78350f; }
+    .stale-notice button { margin-left: auto; background: none; border: none; cursor: pointer;
+                           color: #a16207; font-size: 16px; line-height: 1; padding: 0 4px; }
+
+    /* ── View tabs ── */
+    .view-tab { padding: 8px 16px; font-size: 13px; font-weight: 500; color: #6b7280;
+                cursor: pointer; border: 1px solid transparent; border-bottom: none;
+                border-radius: 8px 8px 0 0; background: #e5e7eb; display: inline-block;
+                text-decoration: none; transition: background .15s, color .15s; }
+    .view-tab:hover { background: #d1d5db; color: #1a1a2e; }
+    .view-tab.active { background: #fff; color: #1a1a2e; font-weight: 600;
+                       border-color: #e5e7eb; position: relative; top: 1px;
+                       box-shadow: 0 -1px 3px rgba(0,0,0,.05); }
 
     /* ── Filter bar ── */
-    .filter-bar { background: #fff; border-radius: 10px; padding: 14px 18px;
+    .filter-bar { background: #fff; border-radius: 0 10px 10px 10px; padding: 12px 18px;
                   margin-bottom: 20px; display: flex; align-items: center; gap: 14px;
-                  box-shadow: 0 1px 4px rgba(0,0,0,.07); flex-wrap: wrap; }
+                  box-shadow: 0 1px 4px rgba(0,0,0,.07); flex-wrap: wrap;
+                  border: 1px solid #e5e7eb; }
     .filter-bar label { font-size: 12px; font-weight: 600; color: #666; }
     .filter-bar select { padding: 5px 10px; border: 1px solid #ddd; border-radius: 6px;
                          font-size: 13px; background: #fff; cursor: pointer; }
@@ -37,6 +60,14 @@
     .card.conf-medium { border-left-color: #d97706; }
     .card.conf-low    { border-left-color: #dc2626; }
 
+    /* history status colors */
+    .card.status-approved   { border-left-color: #16a34a; }
+    .card.status-rejected   { border-left-color: #dc2626; }
+    .card.status-stale      { border-left-color: #94a3b8; }
+    .card.status-drifted    { border-left-color: #9333ea; }
+    .card.status-dismissed  { border-left-color: #64748b; }
+    .card.status-approval_failed { border-left-color: #f97316; }
+
     .card-header { padding: 14px 18px 10px; display: flex; align-items: flex-start;
                    justify-content: space-between; gap: 12px; }
     .card-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -48,12 +79,30 @@
     .conf-low    { background: #fee2e2; color: #991b1b; }
     .time-chip   { font-size: 11px; color: #94a3b8; }
 
+    .status-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; }
+    .status-badge.approved  { background: #dcfce7; color: #15803d; }
+    .status-badge.rejected  { background: #fee2e2; color: #991b1b; }
+    .status-badge.stale     { background: #f1f5f9; color: #475569; }
+    .status-badge.drifted   { background: #f3e8ff; color: #7e22ce; }
+    .status-badge.dismissed { background: #f1f5f9; color: #64748b; }
+    .status-badge.approval_failed { background: #fff7ed; color: #c2410c; }
+
+    .age-chip { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; }
+    .age-amber { background: #fef3c7; color: #92400e; }
+    .age-red   { background: #fee2e2; color: #991b1b; }
+    .stale-window-chip { font-size: 11px; color: #475569; background: #f1f5f9;
+                         padding: 2px 7px; border-radius: 20px; border: 1px solid #e2e8f0; }
+
     .card-title { font-size: 16px; font-weight: 700; color: #1a1a2e; margin: 0 0 4px; line-height: 1.3; }
     .card-summary { font-size: 13px; color: #64748b; margin: 0; }
 
     /* ── Details section ── */
     .card-details { padding: 0 18px; max-height: 0; overflow: hidden; transition: max-height .25s ease; }
-    .card-details.open { max-height: 600px; }
+    .card-details.open { max-height: 1000px; }
+    .section-label { font-size: 11px; font-weight: 700; text-transform: uppercase;
+                     letter-spacing: .5px; color: #94a3b8; margin: 14px 0 4px;
+                     padding-top: 12px; border-top: 1px solid #f1f5f9; }
+    .state-null { color: #94a3b8; font-style: italic; }
 
     .details-table { width: 100%; border-collapse: collapse; margin: 10px 0; }
     .details-table td { padding: 7px 10px; font-size: 13px; border-bottom: 1px solid #f1f5f9;
@@ -66,36 +115,57 @@
                      border-radius: 0 6px 6px 0; font-size: 12px; color: #475569;
                      line-height: 1.6; margin: 8px 0 14px; }
 
-    /* ── Actions row ── */
-    .card-actions { padding: 12px 18px 16px; display: flex; align-items: center; gap: 10px;
+    /* ── Drift panel ── */
+    .drift-panel { display: none; margin: 0 18px 14px; background: #fdf4ff;
+                   border: 1.5px solid #d8b4fe; border-radius: 10px; overflow: hidden; }
+    .drift-panel.visible { display: block; }
+    .drift-header { padding: 10px 14px; background: #f3e8ff; font-size: 13px;
+                    font-weight: 600; color: #7e22ce; border-bottom: 1px solid #d8b4fe; }
+    .drift-table { width: 100%; border-collapse: collapse; }
+    .drift-table th { padding: 7px 12px; font-size: 11px; font-weight: 700; text-transform: uppercase;
+                      letter-spacing: .4px; color: #7e22ce; background: #faf5ff;
+                      border-bottom: 1px solid #ede9fe; }
+    .drift-table td { padding: 7px 12px; font-size: 13px; border-bottom: 1px solid #f5f3ff; }
+    .drift-table tr:last-child td { border-bottom: none; }
+    .drift-expected { color: #16a34a; font-weight: 600; }
+    .drift-actual   { color: #dc2626; font-weight: 600; }
+    .drift-buttons  { padding: 12px 14px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .btn-mark-drifted  { background: #9333ea; color: white; padding: 7px 14px; border: none;
+                         border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .btn-mark-drifted:hover { background: #7e22ce; }
+    .btn-approve-anyway { background: #fff; color: #d97706; border: 1.5px solid #d97706;
+                          padding: 7px 14px; border-radius: 7px; font-size: 13px;
+                          font-weight: 600; cursor: pointer; }
+    .btn-approve-anyway:hover { background: #d97706; color: white; }
+    .btn-cancel-drift { background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0;
+                        padding: 7px 14px; border-radius: 7px; font-size: 13px; cursor: pointer; }
+    .btn-cancel-drift:hover { background: #e2e8f0; }
+
+    .drift-info { margin: 6px 18px 14px; background: #f3e8ff; border-radius: 8px;
+                  padding: 10px 14px; font-size: 12px; color: #7e22ce; }
+    .drift-info strong { display: block; margin-bottom: 4px; }
+
+    /* ── Action buttons row ── */
+    .card-actions { padding: 12px 18px 16px; display: flex; align-items: center; gap: 8px;
                     flex-wrap: wrap; border-top: 1px solid #f1f5f9; margin-top: 4px; }
     .btn { padding: 7px 18px; border: none; border-radius: 7px; font-size: 13px;
            font-weight: 600; cursor: pointer; transition: all .15s; white-space: nowrap; }
-    .btn-approve { background: #16a34a; color: white; }
-    .btn-approve:hover { background: #15803d; }
-    .btn-approve:disabled { background: #86efac; cursor: not-allowed; }
-    .btn-reject  { background: #fff; color: #dc2626; border: 1.5px solid #dc2626; }
-    .btn-reject:hover  { background: #dc2626; color: white; }
-    .btn-reject:disabled { opacity: .5; cursor: not-allowed; }
-    .btn-toggle-details { background: #f8fafc; color: #64748b; border: 1px solid #e2e8f0;
-                          font-size: 12px; padding: 5px 12px; }
-    .btn-toggle-details:hover { background: #e2e8f0; }
+    .btn-approve  { background: #16a34a; color: white; }
+    .btn-approve:hover  { background: #15803d; }
+    .btn-approve:disabled  { background: #86efac; cursor: not-allowed; }
+    .btn-reject   { background: #fff; color: #dc2626; border: 1.5px solid #dc2626; }
+    .btn-reject:hover   { background: #dc2626; color: white; }
+    .btn-reject:disabled   { opacity: .5; cursor: not-allowed; }
+    .btn-dismiss  { background: #fff; color: #64748b; border: 1.5px solid #cbd5e1; }
+    .btn-dismiss:hover  { background: #f1f5f9; }
+    .btn-dismiss:disabled  { opacity: .5; cursor: not-allowed; }
+    .btn-details  { background: #f8fafc; color: #64748b; border: 1px solid #e2e8f0;
+                    font-size: 12px; padding: 5px 12px; margin-left: auto; }
+    .btn-details:hover  { background: #e2e8f0; }
 
-    /* ── Override area ── */
-    .override-area { display: none; background: #fffbeb; border: 1px solid #fde68a;
-                     border-radius: 8px; padding: 12px 14px; width: 100%;
-                     margin-top: 4px; }
-    .override-area.visible { display: block; }
-    .override-area label { font-size: 12px; font-weight: 600; color: #78350f;
-                           display: block; margin-bottom: 6px; }
-    .override-fields { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
-    .override-field { display: flex; flex-direction: column; gap: 4px; }
-    .override-field label { font-size: 11px; color: #92400e; font-weight: 600; }
-    .override-field select, .override-field input {
-      padding: 5px 8px; border: 1px solid #fbbf24; border-radius: 5px;
-      font-size: 12px; background: #fff; min-width: 120px; }
-    .note-input { flex: 1; min-width: 200px; padding: 5px 10px; border: 1px solid #e2e8f0;
-                  border-radius: 5px; font-size: 12px; font-family: inherit; }
+    .note-input { flex: 1; min-width: 180px; padding: 5px 10px; border: 1px solid #e2e8f0;
+                  border-radius: 5px; font-size: 12px; font-family: inherit; color: #475569; }
+    .note-input::placeholder { color: #94a3b8; }
 
     /* ── Empty / error states ── */
     .empty-state { text-align: center; padding: 60px 20px; color: #94a3b8; }
@@ -103,10 +173,9 @@
     .empty-state p { font-size: 15px; }
 
     .error-banner { background: #fee2e2; border: 1px solid #fca5a5; border-radius: 8px;
-                    padding: 12px 16px; font-size: 13px; color: #991b1b; margin-top: 8px;
+                    padding: 12px 16px; font-size: 13px; color: #991b1b; margin: 0 18px 12px;
                     display: none; }
 
-    /* ── Toast ── */
     #toast { position: fixed; bottom: 24px; right: 24px; background: #1a1a2e; color: white;
              padding: 10px 18px; border-radius: 8px; font-size: 13px; display: none;
              box-shadow: 0 4px 12px rgba(0,0,0,.2); z-index: 999; max-width: 360px; }
@@ -115,8 +184,8 @@
 <body>
 
 <header>
-  <div style="display:flex;align-items:center;gap:10px;">
-    <h1 style="font-size:17px;font-weight:700;">Fundly</h1>
+  <div class="header-brand">
+    <h1>Fundly</h1>
     <span style="width:1px;height:20px;background:#334;margin:0 4px;display:inline-block;"></span>
     <span style="font-size:12px;color:#6677aa;">Agent Platform</span>
   </div>
@@ -124,14 +193,41 @@
     <a href="/dashboard">📦 Orders</a>
     <a href="/agents">🤖 Agents</a>
     <a href="/runs">📋 Runs</a>
-    <a href="/approvals" style="color:#a5b4fc;border-bottom:3px solid #4f46e5;">🔔 Action Inbox</a>
+    <a href="/approvals" class="active">🔔 Action Inbox</a>
     <a href="/docs" target="_blank" style="color:#6677aa;">API</a>
   </nav>
 </header>
 
 <div class="main">
 
-  <!-- ── Filter bar ── -->
+  {% if auto_staled_count > 0 %}
+  <div class="stale-notice" id="stale-notice">
+    ⏱ <strong>{{ auto_staled_count }} action{{ 's' if auto_staled_count != 1 else '' }}</strong>
+    exceeded the review window and {{ 'were' if auto_staled_count != 1 else 'was' }} automatically
+    marked stale. {{ 'They are' if auto_staled_count != 1 else 'It is' }} now in History.
+    <button onclick="this.parentElement.remove()" title="Dismiss">✕</button>
+  </div>
+  {% endif %}
+
+  <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:0;">
+    <div style="display:flex;gap:4px;">
+      <a href="/approvals{% if selected_agent %}?agent_name={{ selected_agent }}{% endif %}"
+         class="view-tab {% if view == 'active' %}active{% endif %}">
+        🔔 Active
+        {% if view == 'active' %}<span style="font-size:11px;background:#e0e7ff;color:#3730a3;
+          padding:1px 6px;border-radius:10px;margin-left:4px;">{{ total }}</span>{% endif %}
+      </a>
+      <a href="/approvals?view=history{% if selected_agent %}&agent_name={{ selected_agent }}{% endif %}"
+         class="view-tab {% if view == 'history' %}active{% endif %}">
+        📋 History
+      </a>
+    </div>
+    <button style="padding:5px 12px;background:#f3f4f6;border:1px solid #ddd;border-radius:6px;
+                   font-size:12px;cursor:pointer;margin-bottom:1px;" onclick="location.reload()">
+      ↺ Refresh
+    </button>
+  </div>
+
   <div class="filter-bar">
     <label>Agent</label>
     <select onchange="applyFilter('agent_name', this.value)">
@@ -141,6 +237,7 @@
       {% endfor %}
     </select>
 
+    {% if view == 'active' %}
     <label>Confidence</label>
     <select onchange="applyFilter('confidence', this.value)">
       <option value="" {% if not selected_confidence %}selected{% endif %}>All</option>
@@ -148,109 +245,192 @@
       <option value="medium" {% if selected_confidence == 'medium' %}selected{% endif %}>Medium</option>
       <option value="low"    {% if selected_confidence == 'low'    %}selected{% endif %}>Low</option>
     </select>
+    {% endif %}
 
-    <button style="padding:5px 12px;background:#f3f4f6;border:1px solid #ddd;border-radius:6px;
-                   font-size:12px;cursor:pointer;" onclick="location.reload()">
-      ↺ Refresh
-    </button>
-
-    <span class="count-badge">{{ total }} pending</span>
+    <span class="count-badge">{{ total }} {{ 'pending' if view == 'active' else 'records' }}</span>
   </div>
 
-  <!-- ── Action cards ── -->
-  {% if actions %}
-    {% for action in actions %}
-    <div class="card conf-{{ action.confidence }}" id="card-{{ action.id }}">
+  <!-- ── Active cards ── -->
+  {% if view == 'active' %}
+    {% if actions %}
+      {% for action in actions %}
+      <div class="card conf-{{ action.confidence }}" id="card-{{ action.id }}">
 
-      <div class="card-header">
-        <div style="flex:1;min-width:0;">
-          <div class="card-meta" style="margin-bottom:8px;">
-            <span class="agent-chip">🤖 {{ action.agent_name }}</span>
-            <span class="conf-chip conf-{{ action.confidence }}">{{ action.confidence|upper }}</span>
-            {% for tag in action.tags %}
-            <span style="background:#e0e7ff;color:#3730a3;font-size:10px;font-weight:600;
-                         padding:1px 6px;border-radius:10px;">{{ tag }}</span>
-            {% endfor %}
-            <span class="time-chip">{{ action.created_at[:16].replace("T"," ") }}</span>
+        <div class="card-header">
+          <div style="flex:1;min-width:0;">
+            <div class="card-meta" style="margin-bottom:8px;">
+              <span class="agent-chip">🤖 {{ action.agent_name }}</span>
+              <span class="conf-chip conf-{{ action.confidence }}">{{ action.confidence|upper }}</span>
+              {% for tag in action.tags %}
+              <span style="background:#e0e7ff;color:#3730a3;font-size:10px;font-weight:600;
+                           padding:1px 6px;border-radius:10px;">{{ tag }}</span>
+              {% endfor %}
+              <span class="time-chip">{{ action.created_at[:16].replace("T"," ") }}</span>
+              <span id="stale-label-{{ action.id }}"></span>
+              <span id="age-{{ action.id }}"></span>
+            </div>
+            <p class="card-title">{{ action.title }}</p>
+            <p class="card-summary">{{ action.summary }}</p>
           </div>
-          <p class="card-title">{{ action.title }}</p>
-          <p class="card-summary">{{ action.summary }}</p>
+          <button class="btn btn-details" onclick="toggleDetails('{{ action.id }}')">
+            Details ▾
+          </button>
         </div>
-        <button class="btn btn-toggle-details" onclick="toggleDetails('{{ action.id }}')">
-          Details ▾
-        </button>
-      </div>
 
-      <!-- Collapsible details -->
-      <div class="card-details" id="details-{{ action.id }}">
-        {% if action.display_data %}
-        <table class="details-table">
-          {% for item in action.display_data %}
-          <tr>
-            <td>{{ item.label }}</td>
-            <td>{{ item.value }}</td>
-          </tr>
-          {% endfor %}
-        </table>
-        {% endif %}
-        {% if action.reasoning %}
-        <div class="reasoning-box">{{ action.reasoning }}</div>
-        {% endif %}
-      </div>
-
-      <!-- Action buttons + override -->
-      <div class="card-actions">
-        <button class="btn btn-approve" id="approve-btn-{{ action.id }}"
-                onclick="approveAction('{{ action.id }}')">
-          ✓ Approve
-        </button>
-        <button class="btn btn-reject" id="reject-btn-{{ action.id }}"
-                onclick="rejectAction('{{ action.id }}')">
-          ✗ Reject
-        </button>
-        <button class="btn btn-toggle-details"
-                style="font-size:12px;"
-                onclick="toggleOverride('{{ action.id }}')">
-          ⚙ Override
-        </button>
-        <input class="note-input" id="note-{{ action.id }}"
-               placeholder="Optional note…" type="text">
-      </div>
-
-      <!-- Override panel (hidden by default) -->
-      <div class="override-area" id="override-{{ action.id }}">
-        <label>Override fields — merged into the approval action body</label>
-        <div class="override-fields" id="override-fields-{{ action.id }}">
-          <!-- Rendered dynamically by renderOverrideFields() -->
+        <!-- Collapsible details -->
+        <div class="card-details" id="details-{{ action.id }}">
+          {% if action.display_data %}
+          <table class="details-table">
+            {% for item in action.display_data %}
+            <tr><td>{{ item.label }}</td><td>{{ item.value }}</td></tr>
+            {% endfor %}
+          </table>
+          {% endif %}
+          {% if action.reasoning %}
+          <div class="reasoning-box">{{ action.reasoning }}</div>
+          {% endif %}
+          {% set state_fields = action.expected_state.items() | list | selectattr(0, 'ne', 'resource_id') | list if action.expected_state else [] %}
+          {% if state_fields %}
+          <div class="section-label">Resource state when proposed</div>
+          <table class="details-table" style="margin-bottom:14px;">
+            {% for k, v in state_fields %}
+            <tr>
+              <td>{{ k }}</td>
+              <td>{% if v is none %}<span class="state-null">null</span>{% else %}{{ v }}{% endif %}</td>
+            </tr>
+            {% endfor %}
+          </table>
+          {% endif %}
         </div>
+
+        <!-- Drift panel (shown when approve detects drift) -->
+        <div class="drift-panel" id="drift-{{ action.id }}">
+          <div class="drift-header">⚠ Resource state has changed since this action was proposed</div>
+          <table class="drift-table">
+            <thead><tr><th>Field</th><th>Expected (at proposal)</th><th>Current</th></tr></thead>
+            <tbody id="drift-rows-{{ action.id }}"></tbody>
+          </table>
+          <div class="drift-buttons">
+            <button class="btn-mark-drifted" onclick="markDrifted('{{ action.id }}')">Mark as Drifted</button>
+            <button class="btn-approve-anyway" onclick="approveAnyway('{{ action.id }}')">Approve Anyway</button>
+            <button class="btn-cancel-drift" onclick="cancelDrift('{{ action.id }}')">Cancel</button>
+          </div>
+        </div>
+
+        <!-- Action row: Approve · Reject · Dismiss + optional note -->
+        <div class="card-actions">
+          <button class="btn btn-approve" id="approve-btn-{{ action.id }}"
+                  onclick="approveAction('{{ action.id }}')">✓ Approve</button>
+          <button class="btn btn-reject" id="reject-btn-{{ action.id }}"
+                  onclick="rejectAction('{{ action.id }}')">✗ Reject</button>
+          <button class="btn btn-dismiss" id="dismiss-btn-{{ action.id }}"
+                  onclick="dismissAction('{{ action.id }}')">Dismiss</button>
+          <input class="note-input" id="note-{{ action.id }}"
+                 placeholder="Optional note…" type="text">
+        </div>
+
+        <div class="error-banner" id="error-{{ action.id }}"></div>
+
       </div>
+      {% endfor %}
 
-      <!-- Error banner -->
-      <div class="error-banner" id="error-{{ action.id }}"></div>
-
+    {% else %}
+    <div class="empty-state">
+      <span class="icon">✅</span>
+      <p>No pending actions{% if selected_agent %} for <strong>{{ selected_agent }}</strong>{% endif %}. All clear!</p>
     </div>
-    {% endfor %}
+    {% endif %}
 
+  <!-- ── History cards ── -->
   {% else %}
-  <div class="empty-state">
-    <span class="icon">✅</span>
-    <p>No pending actions
-    {% if selected_agent %} for <strong>{{ selected_agent }}</strong>{% endif %}.
-    All clear!</p>
-  </div>
+    {% if actions %}
+      {% for action in actions %}
+      <div class="card status-{{ action.status }}" id="card-{{ action.id }}">
+
+        <div class="card-header">
+          <div style="flex:1;min-width:0;">
+            <div class="card-meta" style="margin-bottom:8px;">
+              <span class="agent-chip">🤖 {{ action.agent_name }}</span>
+              <span class="status-badge {{ action.status }}">
+                {% if action.status == 'approved' %}✓ Approved
+                {% elif action.status == 'rejected' %}✗ Rejected
+                {% elif action.status == 'dismissed' %}— Dismissed
+                {% elif action.status == 'stale' %}⏱ Stale
+                {% elif action.status == 'drifted' %}⚠ Drifted
+                {% elif action.status == 'approval_failed' %}⚠ Failed
+                {% else %}{{ action.status }}{% endif %}
+              </span>
+              {% if action.drift_override %}
+              <span style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:600;
+                           padding:1px 6px;border-radius:10px;">drift overridden</span>
+              {% endif %}
+              <span class="time-chip">{{ action.created_at[:16].replace("T"," ") }}</span>
+            </div>
+            <p class="card-title">{{ action.title }}</p>
+            <p class="card-summary">{{ action.summary }}</p>
+            {% if action.decided_at %}
+            <p style="font-size:11px;color:#94a3b8;margin-top:4px;">
+              {{ action.decided_at[:16].replace("T"," ") }}
+              {% if action.decision_note %} · "{{ action.decision_note }}"{% endif %}
+            </p>
+            {% endif %}
+          </div>
+          <button class="btn btn-details" onclick="toggleDetails('{{ action.id }}')">
+            Details ▾
+          </button>
+        </div>
+
+        <div class="card-details" id="details-{{ action.id }}">
+          {% if action.display_data %}
+          <table class="details-table">
+            {% for item in action.display_data %}
+            <tr><td>{{ item.label }}</td><td>{{ item.value }}</td></tr>
+            {% endfor %}
+          </table>
+          {% endif %}
+          {% if action.reasoning %}
+          <div class="reasoning-box">{{ action.reasoning }}</div>
+          {% endif %}
+        </div>
+
+        {% if action.drift_details %}
+        <div class="drift-info">
+          <strong>{% if action.status == 'drifted' %}Drift details (action discarded):{% else %}Drift detected — approved anyway:{% endif %}</strong>
+          {% for field, vals in action.drift_details.items() %}
+          <span style="margin-right:12px;">
+            <strong>{{ field }}:</strong>
+            <span style="color:#16a34a;">{{ vals.expected }}</span> →
+            <span style="color:#dc2626;">{{ vals.actual }}</span>
+          </span>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if action.approval_error %}
+        <div class="error-banner" style="display:block;">{{ action.approval_error }}</div>
+        {% endif %}
+
+      </div>
+      {% endfor %}
+
+    {% else %}
+    <div class="empty-state">
+      <span class="icon">📋</span>
+      <p>No history yet{% if selected_agent %} for <strong>{{ selected_agent }}</strong>{% endif %}.</p>
+    </div>
+    {% endif %}
   {% endif %}
 
-</div><!-- /main -->
+</div>
 
 <div id="toast"></div>
 
-<!-- Embed action data for JS -->
 <script>
 const API_KEY = '{{ api_key }}';
 const ACTIONS = {{ actions | tojson }};
+const VIEW = '{{ view }}';
 const hdrs = { 'Content-Type': 'application/json', 'X-API-Key': API_KEY };
-
-// ── Utilities ─────────────────────────────────────────────────────────────────
+const pendingDrift = {};
 
 function toast(msg, ok = true) {
   const el = document.getElementById('toast');
@@ -267,155 +447,214 @@ function applyFilter(param, value) {
   window.location = url.toString();
 }
 
+// ── Age chips ─────────────────────────────────────────────────────────────────
+
+function formatDurationShort(seconds) {
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+  if (seconds < 86400) return `${Math.round(seconds / 3600)}h`;
+  return `${Math.round(seconds / 86400)}d`;
+}
+
+function staleWindowLabel(seconds) {
+  if (!seconds) return null;
+  if (seconds % 86400 === 0) return `${seconds / 86400}d`;
+  if (seconds % 3600 === 0) return `${seconds / 3600}h`;
+  if (seconds % 60 === 0) return `${seconds / 60}m`;
+  return `${seconds}s`;
+}
+
+function renderAgeChips() {
+  if (VIEW !== 'active') return;
+  ACTIONS.forEach(action => {
+    if (!action.stale_after_seconds) return;
+
+    // Static stale window label — always shown when stale_after is configured
+    const labelEl = document.getElementById(`stale-label-${action.id}`);
+    if (labelEl) {
+      const w = staleWindowLabel(action.stale_after_seconds);
+      if (w) labelEl.innerHTML = `<span class="stale-window-chip">⏱ Stale after ${w}</span>`;
+    }
+
+    // Countdown chip — shown when >50% of the window has elapsed
+    const el = document.getElementById(`age-${action.id}`);
+    if (!el) return;
+    const ageSec = (Date.now() - new Date(action.created_at)) / 1000;
+    const remaining = action.stale_after_seconds - ageSec;
+    const pct = ageSec / action.stale_after_seconds;
+    if (pct < 0.5) return;
+    if (remaining > 0) {
+      const cls = pct >= 0.9 ? 'age-red' : 'age-amber';
+      el.innerHTML = `<span class="age-chip ${cls}">${formatDurationShort(remaining)} left</span>`;
+    } else {
+      el.innerHTML = `<span class="age-chip age-red">⛔ Past window</span>`;
+    }
+  });
+}
+renderAgeChips();
+
 // ── Details toggle ────────────────────────────────────────────────────────────
 
 function toggleDetails(id) {
-  const el = document.getElementById(`details-${id}`);
-  el.classList.toggle('open');
+  document.getElementById(`details-${id}`).classList.toggle('open');
 }
 
-// ── Override panel ────────────────────────────────────────────────────────────
+// ── Drift panel ───────────────────────────────────────────────────────────────
 
-function toggleOverride(id) {
-  const area = document.getElementById(`override-${id}`);
-  const isVisible = area.classList.contains('visible');
-  if (isVisible) {
-    area.classList.remove('visible');
-  } else {
-    area.classList.add('visible');
-    renderOverrideFields(id);
-  }
-}
-
-function renderOverrideFields(id) {
-  const action = ACTIONS.find(a => a.id === id);
-  if (!action) return;
-  const container = document.getElementById(`override-fields-${id}`);
-  if (container.children.length > 0) return; // already rendered
-
-  const body = action.approval_action.body || {};
-  const schema = action.approval_action.body_schema || {};
-
-  if (Object.keys(body).length === 0) {
-    container.innerHTML = '<span style="font-size:12px;color:#78350f;">No overridable fields for this action.</span>';
-    return;
-  }
-
-  Object.entries(body).forEach(([key, defaultVal]) => {
-    const fieldSchema = schema[key];
-    const wrapper = document.createElement('div');
-    wrapper.className = 'override-field';
-
-    const label = document.createElement('label');
-    label.textContent = fieldSchema?.label || key;
-    wrapper.appendChild(label);
-
-    let input;
-    if (fieldSchema?.type === 'enum' && fieldSchema.options) {
-      input = document.createElement('select');
-      // blank = keep original
-      const blankOpt = document.createElement('option');
-      blankOpt.value = '';
-      blankOpt.textContent = `Keep (${defaultVal})`;
-      input.appendChild(blankOpt);
-      fieldSchema.options.forEach(opt => {
-        const o = document.createElement('option');
-        o.value = opt;
-        o.textContent = opt.charAt(0).toUpperCase() + opt.slice(1);
-        input.appendChild(o);
-      });
-    } else {
-      input = document.createElement('input');
-      input.type = 'text';
-      input.placeholder = `Override ${key} (current: ${defaultVal})`;
-    }
-    input.id = `override-field-${id}-${key}`;
-    wrapper.appendChild(input);
-    container.appendChild(wrapper);
+function showDriftPanel(id, driftDetails) {
+  pendingDrift[id] = driftDetails;
+  const tbody = document.getElementById(`drift-rows-${id}`);
+  tbody.innerHTML = '';
+  Object.entries(driftDetails).forEach(([field, vals]) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><strong>${field}</strong></td>
+      <td class="drift-expected">${vals.expected ?? 'null'}</td>
+      <td class="drift-actual">${vals.actual ?? 'null'}</td>`;
+    tbody.appendChild(tr);
   });
+  document.getElementById(`drift-${id}`).classList.add('visible');
+  setButtons(id, false);
+  document.getElementById(`approve-btn-${id}`).textContent = '✓ Approve';
 }
 
-function collectOverrideBody(id) {
-  const action = ACTIONS.find(a => a.id === id);
-  if (!action) return null;
-  const body = action.approval_action.body || {};
-  const overrides = {};
-  Object.keys(body).forEach(key => {
-    const el = document.getElementById(`override-field-${id}-${key}`);
-    if (el && el.value.trim()) {
-      overrides[key] = el.value.trim();
-    }
-  });
-  return Object.keys(overrides).length > 0 ? overrides : null;
+function cancelDrift(id) {
+  document.getElementById(`drift-${id}`).classList.remove('visible');
+  delete pendingDrift[id];
 }
 
-// ── Approve / Reject ──────────────────────────────────────────────────────────
-
-async function approveAction(id) {
-  const approveBtn = document.getElementById(`approve-btn-${id}`);
-  const rejectBtn  = document.getElementById(`reject-btn-${id}`);
-  const errorEl    = document.getElementById(`error-${id}`);
-
-  approveBtn.disabled = true;
-  rejectBtn.disabled  = true;
-  approveBtn.textContent = '⏳ Approving…';
-  errorEl.style.display = 'none';
-
-  const override_body = collectOverrideBody(id);
+async function markDrifted(id) {
+  const drift = pendingDrift[id];
+  if (!drift) return;
   const note = document.getElementById(`note-${id}`)?.value?.trim() || null;
+  const resp = await fetch(`/api/v1/actions/${id}/mark-drifted`, {
+    method: 'POST', headers: hdrs,
+    body: JSON.stringify({ drift_details: drift, note }),
+  });
+  if (resp.ok) {
+    toast('Action marked as drifted and archived');
+    removeCard(id, 1500);
+  } else {
+    toast('Failed to mark as drifted', false);
+  }
+}
 
+async function approveAnyway(id) {
+  document.getElementById(`drift-${id}`).classList.remove('visible');
+  setButtons(id, true);
+  document.getElementById(`approve-btn-${id}`).textContent = '⏳ Approving…';
+
+  const note = document.getElementById(`note-${id}`)?.value?.trim() || null;
   const resp = await fetch(`/api/v1/actions/${id}/approve`, {
     method: 'POST', headers: hdrs,
-    body: JSON.stringify({ override_body, note, decided_by: 'human' })
+    body: JSON.stringify({ note, override_drift: true }),
+  });
+
+  if (resp.ok) {
+    toast('✓ Approved despite drift — override recorded');
+    document.getElementById(`approve-btn-${id}`).textContent = '✓ Approved';
+    removeCard(id, 1800);
+  } else {
+    const err = await resp.json();
+    showError(id, err.detail?.error || err.detail?.message || JSON.stringify(err.detail));
+    setButtons(id, false);
+    document.getElementById(`approve-btn-${id}`).textContent = '✓ Approve';
+    toast('Execution failed', false);
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function setButtons(id, disabled) {
+  ['approve-btn', 'reject-btn', 'dismiss-btn'].forEach(prefix => {
+    const el = document.getElementById(`${prefix}-${id}`);
+    if (el) el.disabled = disabled;
+  });
+}
+
+function removeCard(id, delay) {
+  setTimeout(() => {
+    const card = document.getElementById(`card-${id}`);
+    if (card) card.remove();
+  }, delay);
+}
+
+function showError(id, msg) {
+  const el = document.getElementById(`error-${id}`);
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+// ── Approve / Reject / Dismiss ────────────────────────────────────────────────
+
+async function approveAction(id) {
+  setButtons(id, true);
+  document.getElementById(`approve-btn-${id}`).textContent = '⏳ Approving…';
+  document.getElementById(`error-${id}`).style.display = 'none';
+
+  const note = document.getElementById(`note-${id}`)?.value?.trim() || null;
+  const resp = await fetch(`/api/v1/actions/${id}/approve`, {
+    method: 'POST', headers: hdrs,
+    body: JSON.stringify({ note }),
   });
 
   if (resp.ok) {
     toast('✓ Action approved and executed');
-    const card = document.getElementById(`card-${id}`);
-    card.style.opacity = '0.4';
-    card.style.pointerEvents = 'none';
-    card.querySelector('.card-title').style.textDecoration = 'line-through';
-    approveBtn.textContent = '✓ Approved';
-    setTimeout(() => card.remove(), 1800);
+    document.getElementById(`approve-btn-${id}`).textContent = '✓ Approved';
+    document.getElementById(`card-${id}`).querySelector('.card-title').style.textDecoration = 'line-through';
+    removeCard(id, 1800);
   } else {
     const err = await resp.json();
-    const msg = err.detail?.error || err.detail?.message || JSON.stringify(err.detail);
-    errorEl.textContent = `Execution failed: ${msg}`;
-    errorEl.style.display = 'block';
-    approveBtn.disabled = false;
-    rejectBtn.disabled  = false;
-    approveBtn.textContent = '✓ Approve';
+    if (err.detail?.conflict === 'state_drift') {
+      showDriftPanel(id, err.detail.drift_details);
+      toast('⚠ Resource state has changed — review drift below', false);
+      return;
+    }
+    showError(id, err.detail?.error || err.detail?.message || JSON.stringify(err.detail));
+    setButtons(id, false);
+    document.getElementById(`approve-btn-${id}`).textContent = '✓ Approve';
     toast('Execution failed — see error below', false);
   }
 }
 
 async function rejectAction(id) {
-  const approveBtn = document.getElementById(`approve-btn-${id}`);
-  const rejectBtn  = document.getElementById(`reject-btn-${id}`);
-
-  approveBtn.disabled = true;
-  rejectBtn.disabled  = true;
-  rejectBtn.textContent = '⏳ Rejecting…';
+  setButtons(id, true);
+  document.getElementById(`reject-btn-${id}`).textContent = '⏳ Rejecting…';
 
   const note = document.getElementById(`note-${id}`)?.value?.trim() || null;
-
   const resp = await fetch(`/api/v1/actions/${id}/reject`, {
     method: 'POST', headers: hdrs,
-    body: JSON.stringify({ note, decided_by: 'human' })
+    body: JSON.stringify({ note }),
   });
 
   if (resp.ok) {
     toast('Action rejected');
-    const card = document.getElementById(`card-${id}`);
-    card.style.opacity = '0.35';
-    card.style.pointerEvents = 'none';
-    rejectBtn.textContent = '✗ Rejected';
-    setTimeout(() => card.remove(), 1500);
+    document.getElementById(`reject-btn-${id}`).textContent = '✗ Rejected';
+    removeCard(id, 1500);
   } else {
-    approveBtn.disabled = false;
-    rejectBtn.disabled  = false;
-    rejectBtn.textContent = '✗ Reject';
+    setButtons(id, false);
+    document.getElementById(`reject-btn-${id}`).textContent = '✗ Reject';
     toast('Reject failed', false);
+  }
+}
+
+async function dismissAction(id) {
+  setButtons(id, true);
+  document.getElementById(`dismiss-btn-${id}`).textContent = '⏳ Dismissing…';
+
+  const note = document.getElementById(`note-${id}`)?.value?.trim() || null;
+  const resp = await fetch(`/api/v1/actions/${id}/dismiss`, {
+    method: 'POST', headers: hdrs,
+    body: JSON.stringify({ note }),
+  });
+
+  if (resp.ok) {
+    toast('Action dismissed');
+    document.getElementById(`dismiss-btn-${id}`).textContent = '— Dismissed';
+    removeCard(id, 1500);
+  } else {
+    setButtons(id, false);
+    document.getElementById(`dismiss-btn-${id}`).textContent = '— Dismiss';
+    toast('Dismiss failed', false);
   }
 }
 </script>

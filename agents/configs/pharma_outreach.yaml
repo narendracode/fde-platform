@@ -10,6 +10,7 @@ agent:
   # ── Feature flags ─────────────────────────────────────────────────────────────
   feature_flags:
     human_in_the_loop: true   # true → propose_action per email; false → send_email directly
+    stale_after: "2d"         # auto-mark stale after 2 days if analyst has not reviewed
 
   # ── Runtime inputs ───────────────────────────────────────────────────────────
   inputs:

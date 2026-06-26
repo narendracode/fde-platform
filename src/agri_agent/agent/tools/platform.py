@@ -34,6 +34,7 @@ def propose_action(
     display_data: str,
     approval_action: str,
     tags: str = "[]",
+    expected_state: str = "{}",
 ) -> str:
     """Propose an action for human review (human_in_the_loop = true).
 
@@ -59,6 +60,10 @@ def propose_action(
                            "url_params":{"order_id":"uuid"},"body":{"mode":"air","decided_by":"ai"},
                            "body_schema":{"mode":{"type":"enum","options":["air","train","road"],"label":"Override mode"}}}
         tags:             JSON string — optional list of tag strings, e.g. '["dispatch","urgent"]'
+        expected_state:   JSON string — snapshot of the resource state at proposal time for drift
+                          detection. Must include "resource_id" plus any tracked fields.
+                          Example: '{"resource_id":"uuid","status":"pending","shipment_mode":null}'
+                          Only needed when track_resource_state is configured for this agent.
 
     Returns JSON with the created action's id and status.
     """
@@ -78,6 +83,11 @@ def propose_action(
     except (json.JSONDecodeError, TypeError):
         tags_parsed = []
 
+    try:
+        expected_state_parsed: dict[str, Any] = json.loads(expected_state)
+    except (json.JSONDecodeError, TypeError):
+        expected_state_parsed = {}
+
     if confidence not in ("high", "medium", "low"):
         confidence = "medium"
 
@@ -90,6 +100,7 @@ def propose_action(
         "display_data": display_data_parsed,
         "tags": tags_parsed,
         "approval_action": approval_action_parsed,
+        "expected_state": expected_state_parsed if expected_state_parsed else None,
     }
 
     with _client() as c:

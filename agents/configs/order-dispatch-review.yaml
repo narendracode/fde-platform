@@ -9,6 +9,10 @@ agent:
 
   feature_flags:
     human_in_the_loop: true
+    stale_after: "4h"
+    track_resource_state:
+      fields: ["status", "shipment_mode", "due_date", "urgency_days"]
+      check_url: "/api/v1/orders/{resource_id}"
 
   model:
     provider: anthropic
@@ -56,6 +60,12 @@ agent:
                             "body":{"mode":"air","decided_by":"ai"},
                             "body_schema":{"mode":{"type":"enum","options":["air","train","road"],
                                                    "label":"Override mode"}}}'
+         expected_state:  JSON string capturing the order's current state for drift detection.
+                          Use EXACTLY this structure — fill in the order's actual values:
+                          '{"resource_id":"THE-ORDER-UUID","status":"pending","shipment_mode":null,
+                            "due_date":"YYYY-MM-DD","urgency_days":N}'
+                          Replace THE-ORDER-UUID with the order's actual UUID.
+                          Replace the field values with the actual values from the order.
 
     5. After processing all orders, output a summary:
        - Total orders proposed
@@ -67,9 +77,9 @@ agent:
     - medium: near a boundary (e.g. urgency_days=3, amount near threshold)
     - low:    multiple rules apply or significant uncertainty
 
-    IMPORTANT: The display_data and approval_action arguments MUST be valid JSON strings.
-    Build them as strings with proper escaping. Replace THE-ORDER-UUID with the actual
-    UUID from get_pending_orders results.
+    IMPORTANT: The display_data, approval_action, and expected_state arguments MUST be
+    valid JSON strings. Build them as strings with proper escaping. Replace THE-ORDER-UUID
+    with the actual UUID from get_pending_orders results in all three fields.
 
   inputs:
     batch_size:
