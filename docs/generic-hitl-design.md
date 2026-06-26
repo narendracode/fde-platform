@@ -98,12 +98,15 @@ agent_actions
   rejection_action  JSONB (optional)  {method, url, body}  — e.g. log, notify
 
   ── Lifecycle ───────────────────────────────
-  status            str               pending_review | approved | rejected
-                                      | approval_failed | expired
-  decided_by        str | null        analyst username / "system"
+  status            str               pending_review | approved | rejected | dismissed
+                                      | approval_failed | expired | stale | drifted
+  decided_by        str | null        Always "human" when set by the platform.
+                                      Never a free-text field — the platform knows
+                                      the decision came from a human via /approvals.
   decided_at        datetime | null
-  decision_note     str | null        human's optional comment
-  override_body     JSONB | null      human overrides some fields of approval_action.body
+  decision_note     str | null        human's optional note
+  override_body     JSONB | null      (stored but not exposed in UI — internal use only)
+  approval_error    text | null       error message if approval_action HTTP call failed
   expires_at        datetime | null   stale actions auto-expire
 
   created_at        datetime
@@ -121,8 +124,8 @@ agent_actions
 }
 ```
 
-The platform resolves `url_params` into the URL and merges `override_body` (if provided
-by the human) on top of `body` before executing the call. No custom code needed.
+The platform resolves `url_params` into the URL before executing the call. No custom code needed.
+(`override_body` is stored on the model but not exposed in the UI — see section 8.)
 
 ---
 
@@ -218,7 +221,7 @@ agent-specific templates or JavaScript.
 │  │  Reasoning: urgency_days=2, amount=$14,200 → Rule 1: air.        │  │
 │  │  Margin 28% confirms upgrade.                                    │  │
 │  │                                                                   │  │
-│  │  [✓ Approve]  [✗ Reject]  [override body ▾]  [📝 note]          │  │
+│  │  [✓ Approve]  [✗ Reject]  [Dismiss]  + optional note field          │  │
 │  └───────────────────────────────────────────────────────────────────┘  │
 │                                                                         │
 │  ┌───────────────────────────────────────────────────────────────────┐  │
@@ -231,17 +234,28 @@ agent-specific templates or JavaScript.
 ```
 
 The UI loops over `pending_review` actions and renders each with:
-- Header: agent name, confidence badge, time ago
+- Header: agent name, confidence badge, timestamp
+- `⏱ Stale after Xh` chip (static, when stale_after is configured for the agent)
+- Age countdown chip — amber when >50% of stale window elapsed, red when >90%
 - Title + summary line
-- `display_data` as a two-column key-value table
-- Reasoning paragraph
-- Approve / Reject / (optional override) / Note
+- Collapsible details: `display_data` key-value table + reasoning box
+- **Resource state when proposed** — table of `expected_state` fields (when present)
+- Three action buttons: **Approve / Reject / Dismiss** + optional note field
+
+**Approve / Reject / Dismiss semantics:**
+- **Approve** — executes `approval_action` immediately (with drift check if `track_resource_state` is configured)
+- **Reject** — definitive no; marks `rejected`; optionally executes `rejection_action`
+- **Dismiss** — analyst cannot decide now (e.g. needs more context, escalating to manager); marks `dismissed`; no API call; no prejudice; action can be re-proposed by the agent
+
+There is no override panel in the UI. The action is executed exactly as the agent proposed.
+If the agent's recommendation is wrong, the analyst rejects it — the agent is re-run with
+updated context rather than having the human patch the agent's decision in-flight.
 
 **The Approve button executes `POST /api/v1/actions/{id}/approve`.**
 
 The platform endpoint:
 1. Reads `approval_action` from the record
-2. Resolves URL params, merges override_body if provided
+2. Resolves URL params into the URL
 3. Calls the stored API (e.g. `PATCH /orders/{id}/dispatch`) — server-side HTTP
 4. If the call succeeds: marks action `approved`
 5. If the call fails: marks action `approval_failed`, returns error to UI
@@ -287,28 +301,31 @@ reviewed the intent first.
 
 ---
 
-## 8. Override Support
+## 8. Override Support — Design Decision: Not Implemented
 
-The `/approvals` UI supports an optional override before approving. This is handled
-generically via `override_body` — the human can modify any field of `approval_action.body`
-without agent-specific code.
+The initial design included an override panel in the UI that would allow the human to
+modify fields of `approval_action.body` before approving (e.g. change mode from "air"
+to "train"). The `override_body` field is stored on the model and `body_schema` was
+defined for this purpose.
 
-For the dispatch case:
-- AI proposed: `mode: "air"`
-- Human disagrees, selects "train" from a rendered dropdown (built from the body fields)
-- `POST /api/v1/actions/{id}/approve` with `override_body: {"mode": "train"}`
-- Platform merges override into body: `{"mode": "train", "decided_by": "ai"}`
-- Calls `PATCH /orders/{id}/dispatch` with the merged body
+**This feature was not implemented in the UI.** The override panel was removed because:
 
-The UI can render override controls automatically from the `approval_action.body` schema —
-string fields become text inputs, enum fields (if annotated) become dropdowns. This
-requires a small `body_schema` optional field in `approval_action`:
+1. **Trust boundary clarity**: If the agent's recommendation is wrong, the correct response
+   is to reject and re-run the agent with updated context — not to patch the agent's
+   decision in-flight. Allowing humans to modify the body blurs the line between "AI
+   decided, human approved" and "human decided, AI was a starting point."
 
-```json
-"body_schema": {
-  "mode": {"type": "enum", "options": ["air", "train", "road"], "label": "Override mode"}
-}
-```
+2. **Audit trail simplicity**: With no override, the audit trail clearly shows what the
+   agent proposed and that a human approved exactly that. Overrides would require tracking
+   what changed and who changed it, adding complexity with unclear benefit.
+
+3. **Correct interaction pattern**: The right pattern is:
+   - Agent is wrong → human rejects → agent re-runs with feedback → agent proposes correctly
+   - Not: agent proposes → human patches the proposal → human approves modified proposal
+
+The `override_body` field and `body_schema` remain in the data model and API for potential
+future use in specialised workflows, but the `/approvals` UI exposes only:
+**Approve / Reject / Dismiss** with an optional note field.
 
 ---
 
@@ -318,29 +335,32 @@ requires a small `body_schema` optional field in `approval_action`:
                      Agent calls propose_action()
                               │
                               ▼
-                       pending_review  ◄──── default, shown in inbox
+                       pending_review  ◄──── shown in active inbox
                               │
-                ┌─────────────┴──────────────┐
-                │                            │
-         Human approves                Human rejects
-                │                            │
-                ▼                            ▼
-       Platform calls                   rejected
-       approval_action                       │
-          API (HTTP)               (optional) rejection_action
-                │                       API called
-          ┌─────┴──────┐
-          │            │
-       success       failure
-          │            │
-       approved   approval_failed
-                  (shown in inbox
-                   with error msg,
-                   human can retry)
+        ┌─────────────────────┼────────────────────┬───────────────────────┐
+        │                     │                    │                       │
+ Human approves         Human rejects       Human dismisses       Inbox loads +
+        │                     │          (can't decide now)   stale_after exceeded
+        ▼                     ▼                    │                       │
+Platform calls            rejected            dismissed               stale
+approval_action        (definitive no,     (neutral; no API     (platform auto-marks,
+   API (HTTP)           no API call)         call; can be         no human action)
+   ┌──┴──┐                                   re-proposed)
+success failure
+   │     │
+approved  approval_failed ── Human retries ──► (loops back to approval check)
+          (retry available)
 
-       expires_at passes without decision
-                   → expired
+  Human clicks "Mark as Drifted" (from drift panel, after failed drift check):
+                                               │
+                                            drifted
+                                        (diff stored in drift_details)
+
+  expires_at passes without decision → expired (legacy; prefer stale_after)
 ```
+
+**Active inbox** shows: `pending_review`
+**History view** shows: `approved`, `rejected`, `dismissed`, `stale`, `drifted`, `approval_failed`, `expired`
 
 ---
 
@@ -348,18 +368,31 @@ requires a small `body_schema` optional field in `approval_action`:
 
 | Method | Path | What it does |
 |---|---|---|
-| `GET` | `/actions` | List actions. Filter by `status`, `agent_name`, `confidence`, `agent_run_id` |
-| `GET` | `/actions/{id}` | Get single action with full detail |
-| `POST` | `/actions/{id}/approve` | Approve: execute `approval_action`, mark `approved` |
-| `POST` | `/actions/{id}/reject` | Reject: optionally execute `rejection_action`, mark `rejected` |
-| `POST` | `/actions/{id}/retry` | Retry a failed `approval_action` execution |
+| `POST` | `/actions` | Create action (called by `propose_action` tool). Looks up `stale_after_seconds` from agent config in DB. |
+| `GET` | `/actions` | List actions. Filter by `status`, `agent_name`, `confidence`. **Auto-marks stale** before returning. Returns `auto_staled_count`. |
 | `GET` | `/actions/counts` | Summary counts by agent and status — for dashboard badges |
+| `GET` | `/actions/{id}` | Get single action with full detail |
+| `POST` | `/actions/{id}/approve` | Run drift check (if `track_resource_state` set). On drift: return 409. On pass: execute `approval_action`, mark `approved`. |
+| `POST` | `/actions/{id}/reject` | Mark `rejected`, optionally execute `rejection_action` |
+| `POST` | `/actions/{id}/dismiss` | Mark `dismissed` — analyst cannot decide now, no API call |
+| `POST` | `/actions/{id}/mark-drifted` | Mark `drifted` — human acknowledges drift, stores diff |
+| `POST` | `/actions/{id}/retry` | Retry a failed `approval_action` execution |
 
-The `POST /actions/{id}/approve` body:
+**Approve request body:**
+```json
+{ "note": "Optional analyst note", "override_drift": false }
+```
+`override_drift: true` is sent by the UI when the analyst clicks "Approve Anyway" on the
+drift panel — the approve call re-executes immediately, recording `drift_override=true`.
+
+**409 drift response body:**
 ```json
 {
-  "override_body": { "mode": "train" },
-  "note": "Changed to train — air cost not justified at this margin"
+  "conflict": "state_drift",
+  "drift_details": {
+    "status": {"expected": "pending", "actual": "dispatched"},
+    "shipment_mode": {"expected": null, "actual": "road"}
+  }
 }
 ```
 
@@ -410,36 +443,35 @@ table owns the lifecycle of every pending human decision, regardless of domain.
 
 ---
 
-## 13. Implementation Sequence
+## 13. Implementation — Completed
 
-When this is built (in a follow-up), the sequence is:
+All phases described in this document are implemented. Key implementation notes:
 
-```
-Step 1 — Data layer
-  AgentAction model + Alembic migration
-  /api/v1/actions CRUD endpoints
-  Platform-side execution engine (approve → call approval_action HTTP)
+**Step 1 — Data layer** ✅
+- `AgentAction` model in `db/models.py`
+- Alembic migrations 007 (initial) + 008 (staleness/drift fields)
+- Full `/api/v1/actions` CRUD with approve, reject, dismiss, mark-drifted, retry, counts
 
-Step 2 — Platform tool
-  propose_action() tool in tools/platform.py
-  Register in _TOOL_REGISTRY
-  Unit test: propose_action creates the right record
+**Step 2 — Platform tool** ✅
+- `propose_action` in `tools/platform.py`; all args are JSON strings for LangGraph compatibility
+- `stale_after_seconds` not passed by agent — looked up from agent DB config at create time
+- Registered as `propose_action` in `_TOOL_REGISTRY`
 
-Step 3 — Generic UI (/approvals)
-  Jinja2 template driven by display_data (no domain logic)
-  Approve/reject with optional override_body
-  Filter by agent_name, confidence, date
+**Step 3 — Generic UI** ✅
+- `/approvals` — single Jinja2 page, driven by `display_data`
+- Active / History tab switcher (URL-based `?view=history`)
+- Approve / Reject / Dismiss buttons + optional note (no override panel — see section 8)
+- Drift panel with Mark as Drifted / Approve Anyway / Cancel
+- Age countdown chips + static stale window chips
+- Resource state when proposed (expected_state fields in collapsible details)
+- Auto-stale notice banner
 
-Step 4 — Migrate dispatch agent
-  Replace recommend_dispatch with propose_action in system prompt + tools
-  Remove pending_review from orders table (migration)
-  Remove /orders/recommend and /orders/approve endpoints
-  Remove "Pending Review" section from dashboard.html
+**Step 4 — Migrate dispatch agent** ✅
+- `order-dispatch-review` uses `propose_action` with `expected_state` for drift detection
+- Legacy `recommend_dispatch` tool kept in registry for backward compatibility but not used
 
-Step 5 — Validate with email agent
-  Add human_in_the_loop path to pharma-outreach using propose_action
-  Confirm /approvals renders email review without any new UI code
-```
+**Step 5 — Validate with email agent** ✅
+- `pharma-outreach` uses `propose_action` with `stale_after: "2d"`, no `track_resource_state`
 
 ---
 
@@ -695,9 +727,9 @@ Stale records are available under the History filter with reason:
 Since auto-marking only fires on inbox load, active cards show an age indicator so the
 reviewer knows an action is approaching its window before it disappears on the next load:
 
-- ≤ 50% of `stale_after` window elapsed → no indicator
-- 50–90% elapsed → amber `⏱ Xh Ym remaining`
-- > 90% elapsed → red `⚠ Expires soon`
+- ≤ 50% of `stale_after` window elapsed → no countdown (static "⏱ Stale after Xh" chip shown always)
+- 50–90% elapsed → amber `⏱ Xh Ym left` countdown chip added
+- > 90% elapsed → red countdown chip; if past window: `⛔ Past window`
 
 This gives reviewers advance notice and encourages timely review rather than silent
 disappearance as a surprise.
@@ -906,7 +938,7 @@ New and changed fields on `agent_actions`:
                                shown in History)
 ```
 
-All non-active statuses (`stale`, `drifted`, `rejected`, `approved`, `approval_failed`)
+All non-active statuses (`stale`, `drifted`, `rejected`, `dismissed`, `approved`, `approval_failed`, `expired`)
 are hidden from the default inbox view and available under a **History** filter.
 
 ---
