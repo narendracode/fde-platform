@@ -547,6 +547,10 @@ Both call PATCH /orders/1/dispatch
 Without optimistic locking, both can succeed — first write wins but no error raised for
 the second, depending on how idempotent the domain endpoint is.
 
+> **Out of scope for this deployment.** This system assumes a single human reviewer
+> at a time. Case 5 is documented for completeness and future reference when the
+> platform scales to multi-reviewer teams.
+
 ---
 
 #### Case 6 — Temporal Expiry Without Contextual Awareness
@@ -620,335 +624,352 @@ No failure signal of any kind — the harm is purely at the business layer.
 
 ---
 
-### 14.3 Root Cause Analysis
+### 14.3 Design Principle: Action Dependency Classification
 
-All nine cases stem from the same underlying gap: **the AgentAction captures intent at
-point-in-time T₀ but is executed at T₁, with no mechanism to detect or handle the delta
-between T₀ and T₁.**
+Not all `AgentAction` records carry the same staleness risk. Before applying any
+protection mechanism, classify each action by its dependency on external state:
 
-There are two distinct sub-problems:
+| Category | Description | Drift risk | Examples |
+|---|---|---|---|
+| **Resource-independent** | Action has no dependency on current resource state | None | Send a pre-generated report, trigger a webhook with static payload |
+| **Resource-dependent** | Action targets a specific resource whose state may change | HIGH | Dispatch an order, update a pricing record, hold an account |
 
-| Sub-problem | Cases | Nature |
-|---|---|---|
-| **State drift** | 1, 2, 3, 6, 7 | Resource changed between propose and approve |
-| **Action multiplicity** | 4, 5, 8, 9 | Multiple actions targeting same resource, from same or different agents |
+**Resource-dependent actions are the only category that needs staleness protection.**
+An action that sends a pre-composed email has no state to drift. An action that dispatches
+an order depends on the order still being in `pending` status — that can change at any time.
 
----
-
-### 14.4 Solution Design
-
-The solution is a set of complementary mechanisms. No single mechanism handles all cases.
+The agent knows which category applies because the feature flags in its YAML are explicit
+about it. When neither flag is set, the action is implicitly treated as resource-independent.
 
 ---
 
-#### Mechanism 1 — `invalidated` Status + Auto-Invalidation Hooks *(Highest Priority)*
+### 14.4 Solution: Two Feature Flags
 
-Add `invalidated` as a first-class lifecycle status. It is distinct from `rejected`
-(a human decision) — it means the action was made irrelevant by an external change.
+Rather than building infrastructure that touches every domain endpoint, the solution is
+**per-agent YAML configuration**. Each agent declares its own staleness contract. The
+platform enforces it at approval time. No domain code is modified.
+
+Two flags are introduced under `feature_flags` in each agent's YAML:
+
+---
+
+#### Flag 1 — `stale_after`
+
+**Purpose:** Automatically retire actions that have sat in the inbox longer than makes
+business sense, before a reviewer ever sees or acts on them.
+
+**Format:** A duration string — `"30m"`, `"2h"`, `"1d"`. Omit the flag entirely if
+the action has no time-based expiry requirement.
+
+**Behavior — auto-mark at inbox load (API-level):**
+
+The enforcement happens server-side when the inbox is fetched (`GET /api/v1/actions`),
+not at approval click. This means stale actions are retired silently and automatically —
+no user dialog, no manual step.
 
 ```
-pending_review
-  → approved          (human approved + platform executed successfully)
-  → rejected          (human explicitly rejected)
-  → approval_failed   (platform execution failed)
-  → expired           (expires_at passed with no decision)
-  → invalidated       (resource state changed externally — action is now irrelevant)
-                      carried with: invalidation_reason, invalidated_at, invalidated_by
+Reviewer opens inbox → GET /api/v1/actions?status=pending_review
+  Platform runs before returning results:
+    SELECT * FROM agent_actions
+    WHERE status = 'pending_review'
+      AND stale_after_seconds IS NOT NULL
+      AND created_at + stale_after_seconds < NOW()
+    → Found 2 actions past their window
+    → UPDATE status = 'stale', stale_marked_at = NOW()
+  Response: { "actions": [...], "auto_staled_count": 2 }
+```
+
+The active inbox never shows the stale actions — they were already transitioned before
+the page rendered. The UI shows a dismissible notice if any were auto-staled:
+
+```
+ℹ 2 actions were automatically marked stale (past their review window)
+  and moved to History.  [View History]
+```
+
+Stale records are available under the History filter with reason:
+`"Automatically marked stale — exceeded 4h review window (age: 6h 14m)"`
+
+**Age indicator chips (proactive warning while the action is still active):**
+
+Since auto-marking only fires on inbox load, active cards show an age indicator so the
+reviewer knows an action is approaching its window before it disappears on the next load:
+
+- ≤ 50% of `stale_after` window elapsed → no indicator
+- 50–90% elapsed → amber `⏱ Xh Ym remaining`
+- > 90% elapsed → red `⚠ Expires soon`
+
+This gives reviewers advance notice and encourages timely review rather than silent
+disappearance as a surprise.
+
+---
+
+#### Flag 2 — `track_resource_state`
+
+**Purpose:** Detect state drift between when the agent made its proposal and when the
+human tries to approve it. Prevents the human from approving a decision based on
+information that is no longer true.
+
+**Format:** A list of field names to snapshot, or `true` to use a default set.
+Set alongside `resource_check_url` — the endpoint the platform will call to re-fetch
+the resource at approval time.
+
+```yaml
+feature_flags:
+  human_in_the_loop: true
+  track_resource_state:
+    fields: ["status", "shipment_mode", "due_date", "urgency_days"]
+    check_url: "/api/v1/orders/{resource_id}"
 ```
 
 **How it works:**
 
-Domain endpoints that change resource state run an **invalidation hook** after successfully
-completing. The hook queries `agent_actions` for any `pending_review` records targeting
-the same resource and marks them `invalidated`.
-
-```
-Staff dispatches Order #1 via ROAD  →  PATCH /orders/1/dispatch succeeds
-  → Invalidation hook fires:
-     SELECT * FROM agent_actions
-     WHERE resource_id = '1' AND status = 'pending_review'
-     → Found: "Dispatch Order #1 via AIR" card
-     → UPDATE status = 'invalidated',
-              invalidation_reason = 'Order already dispatched via road by user:john',
-              invalidated_at = now()
-```
-
-This requires two additions to `agent_actions`:
-- `resource_type: str | None` — the type of resource this action targets (e.g. "order")
-- `resource_id: str | None` — the ID of that resource (for efficient querying)
-
-The agent populates these via `propose_action`. The domain endpoint's hook uses them
-to find related actions efficiently (indexed lookup, no URL parsing needed).
-
-**Inbox behavior for invalidated actions:**
-- Removed from the main pending count and default view
-- Available under a "History" or "Resolved" filter
-- Shown with a banner: "Invalidated — Order already dispatched via ROAD by John at 09:30"
-- Not actionable (no Approve/Reject buttons)
-
-This mechanism **directly solves Cases 1, 3, 8** and partially solves Case 7.
-
----
-
-#### Mechanism 2 — State Snapshot + Pre-Approval Validation
-
-When the agent calls `propose_action`, it records the key fields of the resource it
-observed at that moment as `expected_state`. At approval time, the platform re-fetches
-and compares before executing.
-
-```json
-"expected_state": {
-  "resource_type": "order",
-  "resource_id": "uuid-of-order-1",
-  "snapshot": {
-    "status": "pending",
-    "shipment_mode": null,
-    "due_date": "2026-07-05",
-    "urgency_days": 2
-  }
-}
-```
-
-At `POST /actions/{id}/approve`:
-1. Platform fetches current resource state via a lightweight check endpoint
-2. Compares critical fields against `expected_state.snapshot`
-3. Decision:
-   - **No drift** → proceed to execution
-   - **Non-critical drift** (e.g. urgency_days changed from 2 to 3) → show warning with diff, ask human to confirm
-   - **Critical drift** (e.g. status changed from `pending` to `dispatched`) → block approval, explain conflict
-
-```
-Human clicks Approve for "Dispatch Order #1 via AIR"
-Platform checks: current status = dispatched (expected: pending)
-Response: 409 with body:
-{
-  "conflict": "state_drift",
-  "field": "status",
-  "expected": "pending",
-  "actual": "dispatched",
-  "message": "Order was dispatched via ROAD at 09:30. This action is no longer valid."
-}
-```
-
-The UI surfaces this as a clear error card — not a generic "approval failed" — with
-enough detail for the human to understand what happened.
-
-This solves **Cases 2, 7** and acts as a safety net backup for Case 1 (when the
-invalidation hook was not triggered, e.g. change came from outside the system).
-
-**What fields to include in snapshot:** Only the fields that would change the agent's
-decision or the action's validity. For orders: `status`, `shipment_mode`, `due_date`.
-For emails: no snapshot needed (idempotency is handled differently — see Mechanism 5).
-
----
-
-#### Mechanism 3 — Duplicate Action Detection on Creation
-
-Before inserting a new `AgentAction`, check whether a `pending_review` action already
-exists for the same `resource_type` + `resource_id` + same `agent_name`. If yes:
-
-- **Strategy A (replace):** Invalidate the old action with reason "superseded by newer
-  agent run" and create the new one. Clean inbox, always shows latest agent judgment.
-- **Strategy B (skip):** Return the existing action ID, do not create a duplicate. Safe
-  but means a re-run won't update the inbox if the agent's recommendation changed.
-
-Recommended: Strategy A with a configurable policy per agent YAML
-(`duplicate_action_policy: replace | skip`).
-
-This solves **Case 4** (re-run creates duplicates).
-
----
-
-#### Mechanism 4 — Optimistic Locking on Approval (Concurrent Reviewer Protection)
-
-When a reviewer opens an action card, the platform issues a short-lived **claim token**
-(a UUID stored in `claimed_by` and `claimed_at` fields, expiring after N minutes). The
-Approve button sends this token.
-
-The approval endpoint validates: `claimed_by = this_token` and `claimed_at` is not
-expired. If another reviewer has already claimed or approved it → 409 with clear message.
-
-Alternatively (simpler): rely on a database-level atomic status transition:
-```sql
-UPDATE agent_actions
-SET status = 'approved', decided_by = 'user:john', decided_at = now()
-WHERE id = ? AND status = 'pending_review'  -- only succeeds once
-```
-
-If this UPDATE affects 0 rows → the action was already resolved → surface the conflict
-to the second reviewer. This is the simplest form of optimistic locking and handles
-**Case 5** with minimal complexity.
-
----
-
-#### Mechanism 5 — Idempotency Classification and Duplicate Execution Protection
-
-Not all actions have the same idempotency characteristics. This must be modeled explicitly.
-
-| Action type | Idempotent? | Risk if executed twice | Strategy |
-|---|---|---|---|
-| `PATCH /orders/{id}/dispatch` with same mode | Yes | None | Re-execution is harmless |
-| `PATCH /orders/{id}/dispatch` with different mode | No | Conflicting dispatch record | Conflict detection via state check |
-| `POST /outreach/send-email` | No | Duplicate email to customer | Deduplication token |
-| `POST /payments/charge` | No | Double charge | Idempotency key mandatory |
-
-For non-idempotent actions, `propose_action` should carry a **deduplication key**
-(`dedup_key`) that the receiving endpoint checks. If the same key has already been
-processed → return `200 Already processed` rather than executing again.
-
-The dedup key for emails: `{agent_run_id}:{prospect_email}` — unique per run per recipient.
-
-This solves **Case 9** (silent wrong outcome for non-idempotent actions).
-
----
-
-#### Mechanism 6 — Resource-Contextual Expiry + Background Enforcement
-
-The `expires_at` field already exists. What's missing is:
-1. **Automatic population** — `propose_action` should derive expiry from the resource context
-   when the agent provides it. For orders: `expires_at = due_date - 4 hours` (configurable buffer).
-2. **Background enforcement** — a periodic task (or per-request check) transitions
-   `pending_review` actions past their `expires_at` to `expired`.
-3. **Inbox age warnings** — actions older than 2 hours show an amber warning; older than
-   8 hours show a red warning. The age is shown prominently, not just "created N minutes ago".
-
-This solves **Case 6**.
-
----
-
-#### Mechanism 7 — UI Staleness Indicators and Explicit Confirmation
-
-The `/approvals` UI should surface signals that help humans detect stale actions
-before approving:
-
-- **Age warning** — prominent indicator when action is older than a configurable threshold
-- **"Verify before approving" button** — re-fetches the resource state on demand and
-  shows a freshness check: "Order #1 is still pending with no shipment mode — safe to approve"
-  or "Order #1 status has changed to dispatched — this action may be stale"
-- **Invalidated banner** — when an action is invalidated, show reason prominently in
-  the history view
-- **State diff panel** — when pre-approval validation detects drift, show a side-by-side
-  of "When proposed" vs "Now" for all snapshot fields
-
-This is the last line of defense — the UI empowers humans to catch cases the system missed.
-
----
-
-### 14.5 Mechanism-to-Case Coverage Matrix
-
-| Case | Mechanism 1 (Invalidate) | Mechanism 2 (Snapshot) | Mechanism 3 (Dedup) | Mechanism 4 (Locking) | Mechanism 5 (Idempotency) | Mechanism 6 (Expiry) | Mechanism 7 (UI) |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| 1 Direct conflict | ✅ Primary | ✅ Backup | | | | | ✅ |
-| 2 Reasoning stale | | ✅ Primary | | | | | ✅ |
-| 3 Resource deleted | ✅ Primary | ✅ Backup | | | | | ✅ |
-| 4 Duplicate actions | | | ✅ Primary | | | | |
-| 5 Race condition | | | | ✅ Primary | | | |
-| 6 Expiry | | | | | | ✅ Primary | ✅ |
-| 7 Failed retry | | ✅ Primary | | | | | ✅ |
-| 8 Cross-agent conflict | ✅ Primary | ✅ Backup | ✅ | | | | ✅ |
-| 9 Silent wrong outcome | | | ✅ | | ✅ Primary | | |
-
----
-
-### 14.6 Data Model Changes Required
-
-```
-agent_actions — new / changed fields:
-
-  ── Resource targeting (for auto-invalidation) ──────────
-  resource_type       str | None        "order" | "prospect" | "product"
-  resource_id         str | None        ID of the resource this action targets
-                                        (indexed for fast invalidation queries)
-
-  ── State snapshot (for pre-approval validation) ─────────
-  expected_state      JSONB | None      Snapshot of resource at propose time:
-                                        {resource_type, resource_id, snapshot: {field: value}}
-
-  ── Invalidation ────────────────────────────────────────
-  status              str               Extended: + "invalidated"
-  invalidation_reason text | None       Human-readable reason for invalidation
-  invalidated_at      datetime | None   When it was invalidated
-  invalidated_by      str | None        Who/what triggered it ("system:dispatch-hook" | "user:john")
-
-  ── Duplicate / claim protection ────────────────────────
-  dedup_key           str | None        For non-idempotent actions — unique per logical action
-  claimed_by          str | None        Reviewer who opened the action (optional locking)
-  claimed_at          datetime | None   When claim was taken (for expiry)
-```
-
----
-
-### 14.7 Changes to `propose_action` Tool
-
-The tool gains two optional new parameters:
+*At propose time (agent side):*
+The system prompt (written for this flag) instructs the agent to capture the current
+values of the tracked fields from the resource it just fetched and include them as
+`expected_state` in the `propose_action` call:
 
 ```python
 propose_action(
+    title="Dispatch ORD-001 via AIR",
     ...
-    resource_type="order",          # enables auto-invalidation lookup
-    resource_id="uuid-of-order-1",  # enables auto-invalidation lookup
-    expected_state='{"status":"pending","shipment_mode":null,"urgency_days":2}',
-    dedup_key="agent_run_id:order_id",  # for non-idempotent actions
+    expected_state={
+        "resource_id": "uuid-of-order",
+        "status": "pending",
+        "shipment_mode": None,
+        "due_date": "2026-07-05",
+        "urgency_days": 2
+    }
 )
 ```
 
-These are optional — existing agents continue working without them. Agents that add them
-gain automatic staleness protection.
+*At approval time (platform side):*
+1. Platform reads `expected_state` from the `AgentAction` record
+2. Platform calls `check_url` (e.g. `GET /api/v1/orders/{resource_id}`) to fetch current state
+3. Compares current values of the tracked fields against `expected_state`
+4. Decision:
+
+**No drift** → proceed to execute the approval action as normal.
+
+**Drift detected** → block the approval and show a drift panel:
+
+```
+⚠ Resource state has changed since this action was proposed
+
+  Field          When Proposed        Now
+  ─────────────────────────────────────────────────────
+  status         pending              dispatched ← changed
+  shipment_mode  —                    road ← changed
+  due_date       2026-07-05           2026-07-05
+  urgency_days   2                    2
+
+  The order was dispatched via ROAD while this action was awaiting review.
+  Proceeding may cause a conflict.
+
+  [Mark as Drifted]   [Approve Anyway]   [Cancel]
+```
+
+- **Mark as Drifted**: transitions record to `drifted` status, removes from active inbox,
+  stores the diff in `drift_details`. History filter shows it with the full diff.
+- **Approve Anyway**: human explicitly overrides the drift warning and proceeds with approval.
+  The override is recorded in the audit trail (`drift_override: true`, `drift_details` preserved).
+- **Cancel**: nothing happens, card stays in inbox.
+
+The `Approve Anyway` path is intentional — there are cases where drift is cosmetic
+(e.g. urgency_days changed from 2 to 1 — even more urgent, air is still correct) and
+the human is the right person to make that call.
 
 ---
 
-### 14.8 Changes to Domain Endpoints
+### 14.5 YAML Configuration
 
-Domain endpoints that change resource state add an invalidation hook **after** the
-state change succeeds. This is a one-time addition per endpoint — no ongoing per-agent work.
+**order-dispatch-review agent** (resource-dependent, time-sensitive):
 
-```python
-# In PATCH /orders/{id}/dispatch — after successful dispatch:
-await invalidate_pending_actions(
-    session=session,
-    resource_type="order",
-    resource_id=str(order_id),
-    reason=f"Order dispatched via {mode} by {decided_by} at {datetime.utcnow()}"
-)
+```yaml
+feature_flags:
+  human_in_the_loop: true
+  stale_after: "4h"                      # orders are time-critical; 4h is the safety window
+  track_resource_state:
+    fields: ["status", "shipment_mode", "due_date", "urgency_days"]
+    check_url: "/api/v1/orders/{resource_id}"
 ```
 
-The `invalidate_pending_actions` helper is a platform utility — 10 lines of code, reused
-by every domain endpoint. Domain code has no knowledge of the inbox — it just calls the
-helper.
+**pharma-outreach agent** (resource-independent if email is pre-composed):
+
+```yaml
+feature_flags:
+  human_in_the_loop: true
+  stale_after: "2d"                      # outreach window is wider; 2 days is reasonable
+  # track_resource_state not set — email content doesn't depend on mutable resource state
+```
+
+**A future payment-hold agent** (high-stakes, tight window):
+
+```yaml
+feature_flags:
+  human_in_the_loop: true
+  stale_after: "1h"
+  track_resource_state:
+    fields: ["status", "balance_usd", "credit_limit_usd"]
+    check_url: "/api/v1/accounts/{resource_id}"
+```
+
+---
+
+### 14.6 System Prompt Requirements
+
+When `track_resource_state` is set, the system prompt must instruct the agent to:
+
+1. Capture the tracked fields from the resource it already fetched (no extra API call needed)
+2. Include them as `expected_state` in the `propose_action` call
+
+Example system prompt section added when the flag is on:
+
+```
+[Feature flags]
+...
+track_resource_state:
+  fields: ["status", "shipment_mode", "due_date", "urgency_days"]
+  check_url: "/api/v1/orders/{resource_id}"
+
+When track_resource_state is configured:
+- After fetching order details and before calling propose_action, capture the current
+  values of the tracked fields from the order you just read.
+- Pass these as expected_state in the propose_action call. Example:
+    expected_state={
+        "resource_id": "<order UUID>",
+        "status": "pending",
+        "shipment_mode": null,
+        "due_date": "2026-07-05",
+        "urgency_days": 2
+    }
+- This snapshot is stored with the action so the platform can detect state drift
+  before a human approves it. Do not skip this — it protects the reviewer.
+```
+
+The agent does not need to understand why it is providing this data — it just follows
+the instruction in the feature flags block. The platform owns the validation logic.
+
+---
+
+### 14.7 Data Model Changes
+
+New and changed fields on `agent_actions`:
+
+```
+  ── Resource state tracking ─────────────────────────────
+  expected_state      JSONB | None      Snapshot captured by agent at propose time.
+                                        {resource_id, field: value, ...}
+                                        Populated when track_resource_state is configured.
+
+  ── Staleness / drift outcomes ──────────────────────────
+  status              str               Extended with two new terminal states:
+                                          "stale"   — exceeded stale_after window,
+                                                       auto-marked at inbox load
+                                          "drifted" — resource drift detected,
+                                                       human acknowledged and dismissed
+  stale_after_seconds int | None        Parsed from YAML stale_after at propose time.
+                                        Stored so enforcement is self-contained in the
+                                        record — no YAML lookup needed at query time.
+  stale_marked_at     datetime | None   When the platform auto-marked the action stale
+                                        (set by GET /actions inbox-load enforcement).
+  drift_detected_at   datetime | None   When drift was first detected on an approval attempt
+  drift_details       JSONB | None      Full diff: {field: {expected, actual}, ...}
+  drift_override      bool              True if human clicked "Approve Anyway" despite drift
+```
+
+**Updated lifecycle:**
+
+```
+                     Agent calls propose_action()
+                              │
+                              ▼
+                       pending_review  ◄──── shown in active inbox
+                              │
+          ┌───────────────────┼───────────────────────┐
+          │                   │                       │
+   Human approves      Human rejects       Inbox loads + stale_after exceeded
+          │                   │            (automatic, no human action needed)
+          ▼                   ▼                       │
+  Platform executes       rejected                  stale
+  approval_action     (human decision)        (platform auto-marks,
+     API (HTTP)                                hidden from inbox,
+     ┌────┴────┐                               shown in History)
+  success    failure
+     │          │             Human clicks "Mark as Drifted"
+  approved  approval_failed   (after seeing drift panel at approval click)
+            (retry available)         │
+                                   drifted
+                              (human decision,
+                               diff stored,
+                               hidden from inbox,
+                               shown in History)
+```
+
+All non-active statuses (`stale`, `drifted`, `rejected`, `approved`, `approval_failed`)
+are hidden from the default inbox view and available under a **History** filter.
+
+---
+
+### 14.8 Coverage Against Failure Cases
+
+| Case | `stale_after` | `track_resource_state` | Notes |
+|---|:---:|:---:|---|
+| 1 — Action already performed (conflict) | ✅ Reduces window | ✅ Detects at approval | |
+| 2 — Reasoning stale (state drifted, no error) | | ✅ Primary | |
+| 3 — Resource deleted / cancelled | | ✅ Detects missing resource | |
+| 4 — Duplicate actions from re-run | | | Accepted gap — manageable at current scale |
+| 5 — Concurrent reviewers | — | — | Out of scope — single-reviewer deployment |
+| 6 — Temporal expiry | ✅ Auto-marks at inbox load | | |
+| 7 — Failed retry + state changed | | ✅ Re-checks on retry | |
+| 8 — Cross-agent conflict | | ✅ Second approver blocked | |
+| 9 — Silent non-idempotent repeat (e.g. email) | ✅ Reduces window | | Accepted gap — partial coverage |
+
+**8 of the 8 applicable cases addressed** (Case 5 is out of scope for single-reviewer
+deployments). One accepted gap remains:
+- **Case 4** (duplicate inbox cards from re-runs) — manageable manually at current team
+  size; can be addressed with a dedup-on-create policy when the need arises
 
 ---
 
 ### 14.9 Implementation Sequence
 
-In priority order, building on the existing HITL foundation:
-
 ```
-Phase 1 — Prevent harm (Mechanisms 1 + 4)
-  Add `invalidated` status to AgentAction lifecycle
-  Add resource_type, resource_id, invalidation fields to agent_actions table (migration)
-  Add invalidate_pending_actions() platform utility
-  Wire hook into PATCH /orders/{id}/dispatch (and any other mutating endpoints)
-  Add atomic status-check to approval endpoint (Mechanism 4 — optimistic lock)
-  Update /approvals UI: show invalidated actions in history, grey out with reason
+Phase 1 — Data and enforcement
+  Add new fields to agent_actions:
+    expected_state, stale_after_seconds, stale_marked_at,
+    drift_detected_at, drift_details, drift_override
+  Add new status values: "stale", "drifted"
+  Alembic migration
+  Update propose_action tool: accept expected_state and stale_after_seconds params,
+    store them on the AgentAction record
+  Update GET /actions (inbox load):
+    before returning results, find all pending_review records where
+    stale_after_seconds IS NOT NULL AND created_at + stale_after_seconds < NOW()
+    → mark them stale (status='stale', stale_marked_at=NOW()) in a single UPDATE
+    → include auto_staled_count in the response body
+  Add drift check to POST /actions/{id}/approve:
+    if expected_state is set → call check_url, compare tracked fields,
+    if any field differs → return structured drift response (not a hard failure)
+    human sees diff panel and decides: Mark as Drifted / Approve Anyway / Cancel
+  New endpoint: POST /actions/{id}/mark-drifted
+    accepts drift_details body, transitions to drifted, stores diff
 
-Phase 2 — Catch what hooks miss (Mechanism 2)
-  Add expected_state field to AgentAction model
-  Add expected_state param to propose_action tool
-  Add pre-approval validation step in approval engine:
-    fetch resource, compare snapshot, return structured conflict response
-  Update /approvals UI: show diff panel when conflict detected
-  Update order-dispatch-review YAML: include expected_state in propose_action calls
+Phase 2 — Agent YAML and system prompts
+  Add stale_after and track_resource_state flags to order-dispatch-review.yaml
+  Update system prompt: instruct agent to capture expected_state when flag is set
+  Add stale_after to pharma-outreach.yaml (no track_resource_state — email is static)
+  Validate: run agent, propose an action, manually change the order, try to approve →
+    drift panel should appear with expected vs current diff
 
-Phase 3 — Inbox hygiene (Mechanisms 3 + 6)
-  Add dedup_key field, duplicate detection on AgentAction creation
-  Implement expires_at enforcement (background job or per-request check)
-  Add age warning indicators to /approvals UI
-  Add resource-contextual expiry to order-dispatch-review agent
-
-Phase 4 — Non-idempotent action safety (Mechanism 5)
-  Add dedup_key support to POST /outreach/send-email
-  Add dedup_key param to pharma-outreach propose_action calls
-  Verify endpoint handles duplicate dedup_key gracefully
+Phase 3 — Inbox UI
+  Add age indicator chips to action cards (amber / red based on stale_after progress)
+  On inbox load: if auto_staled_count > 0, show dismissible notice banner
+    "N actions were automatically marked stale and moved to History"
+  Handle drift response from approval endpoint:
+    show diff panel with three choices — Mark as Drifted / Approve Anyway / Cancel
+  History filter: show stale + drifted records with reason/diff
+  Active inbox: stale + drifted records already excluded server-side; no client filtering needed
 ```
 
 ---
@@ -972,3 +993,25 @@ full-automation mode calls `PATCH /orders/{id}/dispatch` directly. The AI agent 
 review mode calls `propose_action` with `approval_action = PATCH /orders/{id}/dispatch`.
 A human approves. The platform calls `PATCH /orders/{id}/dispatch`.
 **Same API. Same result. Same audit trail. Zero extra UI work.**
+
+### Staleness Protection Design
+
+The stale action problem is solved by two optional per-agent feature flags:
+
+| Flag | What it solves | Enforcement point | Human action required |
+|---|---|---|---|
+| `stale_after` | Actions past their useful review window | **Inbox load (automatic)** — platform auto-marks before page renders | None — action silently moves to History; dismissible notice shown |
+| `track_resource_state` | Resource changed while action awaited review | **Approval click** — platform re-checks state before executing | Human sees diff, chooses: Mark as Drifted / Approve Anyway / Cancel |
+
+Both flags are declared in agent YAML. The agent includes the snapshot in `propose_action`
+when instructed by its system prompt (driven by the flag).
+
+`stale_after` requires no human interaction — expired actions retire themselves. The
+reviewer only sees active, within-window actions when they open the inbox.
+
+`track_resource_state` keeps the human in the loop — the platform detects drift but
+the human decides whether it matters. An override is explicit and recorded in the audit trail.
+
+**No domain endpoint changes. No background jobs. No infrastructure beyond what the
+HITL system already provides.** Applicable to 8 of the 8 in-scope failure cases,
+with one known gap (Case 4 — duplicate cards from agent re-runs) accepted for now.
