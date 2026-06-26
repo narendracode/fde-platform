@@ -443,7 +443,517 @@ Step 5 — Validate with email agent
 
 ---
 
-## 14. Summary
+## 14. Stale Action Problem — Analysis and Solution Design
+
+### 14.1 The Problem
+
+An `AgentAction` is created at a point in time based on the agent's observation of the
+world. Between that moment and the moment a human reviews it, the real-world state may
+have changed. The action can become **stale, invalid, or actively harmful** if executed.
+
+This is not an edge case — in any busy system with concurrent users and automated agents,
+the window between action creation and human review will routinely see state changes.
+
+---
+
+### 14.2 Complete Failure Case Taxonomy
+
+#### Case 1 — Direct Resource Conflict (Same Action Already Performed)
+
+The most common case. A staff member performs the exact action the agent proposed, before
+the human reviewer approves it.
+
+```
+Agent run at 09:00: proposes "Dispatch Order #1 via AIR"
+09:30: warehouse staff dispatches Order #1 via ROAD manually from the Orders page
+10:00: reviewer opens inbox, sees the agent card, clicks Approve
+10:00: platform calls PATCH /orders/1/dispatch → Order is already dispatched
+Result: API error (409), or worse — order gets dispatched twice in some systems
+```
+
+**Risk level: HIGH.** Causes immediate operational errors or double-execution.
+
+---
+
+#### Case 2 — Reasoning Invalidated (State Drifted, Action Still Executes)
+
+The resource changes in a way that makes the agent's reasoning wrong, but the action
+itself can still technically execute. This is more dangerous than Case 1 because there
+is no error — the system accepts the action, but the business decision is wrong.
+
+```
+Agent run at 09:00: "Dispatch Order #1 via AIR — urgency_days=2, critical"
+09:15: customer requests due date extension → Order #1 due_date updated, urgency now 9 days
+10:00: reviewer reads "due in 2 days, CRITICAL", trusts agent, clicks Approve
+10:00: platform dispatches via AIR — succeeds, no error
+Result: unnecessary $800 air freight instead of $120 road, based on stale urgency
+```
+
+**Risk level: HIGH.** No error is raised. The human makes a wrong decision based on
+information the agent believed to be true but is no longer accurate.
+
+---
+
+#### Case 3 — Resource Deleted or Cancelled
+
+The resource the action targets no longer exists or has moved to a terminal state.
+
+```
+Agent run at 09:00: proposes "Dispatch Order #1 via AIR"
+09:20: customer cancels Order #1 → order status = cancelled
+10:00: reviewer approves
+10:00: platform calls PATCH /orders/1/dispatch → 404 or 422
+Result: action goes to approval_failed with a confusing error
+The reviewer has no context to understand why it failed
+```
+
+**Risk level: MEDIUM.** Action fails harmlessly, but the reviewer experience is poor
+and the failed action pollutes the audit trail without clear explanation.
+
+---
+
+#### Case 4 — Duplicate Agent Actions (Re-Run Before Review)
+
+The agent is re-triggered (manually or on schedule) before the previous run's actions
+are reviewed. Multiple pending actions now target the same resource.
+
+```
+Run 1 at 09:00: proposes "Dispatch Order #1 via AIR" (pending_review)
+Staff manually re-runs the agent at 09:30 (Order #1 still pending in DB)
+Run 2 at 09:30: proposes "Dispatch Order #1 via TRAIN" (pending_review)
+Reviewer sees two cards for Order #1 in the inbox
+Reviewer approves AIR card at 10:00 → dispatched via AIR
+Reviewer approves TRAIN card at 10:05 → conflict or re-dispatch
+```
+
+**Risk level: HIGH.** Creates inbox clutter and conflicting approvals. The second
+approval either errors or silently overrides the first decision.
+
+---
+
+#### Case 5 — Race Condition (Concurrent Human Approvals)
+
+Two reviewers see the same pending action simultaneously and both click Approve.
+
+```
+Reviewer A opens inbox — sees "Dispatch Order #1 via AIR" card
+Reviewer B opens inbox — same card (both in pending_review)
+Both click Approve within 500ms of each other
+Both requests hit the platform approval engine concurrently
+Both call PATCH /orders/1/dispatch
+```
+
+**Risk level: MEDIUM** (lower in practice with small review teams, but rises with scale).
+Without optimistic locking, both can succeed — first write wins but no error raised for
+the second, depending on how idempotent the domain endpoint is.
+
+---
+
+#### Case 6 — Temporal Expiry Without Contextual Awareness
+
+The action sits in the inbox past the point where it is meaningful, even if the resource
+has not been touched.
+
+```
+Agent proposes "Dispatch Order #1 via AIR — due in 1 day"
+Inbox is not reviewed for 2 days (reviewer on leave, notifications missed)
+Reviewer returns, sees the card, approves it
+Order is 1 day overdue — dispatching now may violate SLA
+The system has no knowledge that this action has become nonsensical
+```
+
+**Risk level: MEDIUM.** Action executes correctly but at the wrong time, potentially
+breaking SLA commitments or downstream logistics planning.
+
+---
+
+#### Case 7 — Approval Failure Followed by Stale Retry
+
+The first approval attempt fails (network, API down, transient error). The resource
+state changes during the window before the human retries.
+
+```
+10:00: Reviewer approves "Dispatch Order #1 via AIR"
+10:00: HTTP call fails (API timeout) → status = approval_failed
+10:05: Staff manually dispatches Order #1 via ROAD
+10:10: Reviewer sees "approval_failed" card, clicks Retry
+10:10: Platform calls PATCH /orders/1/dispatch → conflict
+```
+
+**Risk level: MEDIUM.** The retry path has no awareness that the world changed between
+the first attempt and the retry.
+
+---
+
+#### Case 8 — Cross-Agent Conflict (Two Agents, Same Resource)
+
+Two different agents independently propose conflicting actions on the same resource.
+
+```
+Order dispatch agent: proposes "Dispatch Order #1 via AIR" (pending_review)
+Credit check agent: proposes "Hold Order #1 — credit limit exceeded" (pending_review)
+Reviewer A approves dispatch → Order #1 dispatched
+Reviewer B approves hold → tries to hold an already-dispatched order → error
+```
+
+**Risk level: HIGH** in complex systems. Agent actions have no awareness of each other.
+Both appear in the inbox as independent cards with no indication they target the same
+resource.
+
+---
+
+#### Case 9 — Silent Wrong Outcome (No Error, Wrong Business Effect)
+
+The approval executes without any error, but produces a wrong business outcome because
+the action was not idempotent and the side effect compounds with something already done.
+
+```
+Pharma outreach agent: proposes "Send email to Kohinoor Pharma"
+Sales rep manually emails Kohinoor Pharma from their email client
+Reviewer approves agent action → email sent to Kohinoor Pharma again
+No API error — two emails delivered, customer receives duplicates
+Result: damaged relationship, zero technical indication anything went wrong
+```
+
+**Risk level: HIGH** for non-idempotent actions (emails, SMS, payment triggers).
+No failure signal of any kind — the harm is purely at the business layer.
+
+---
+
+### 14.3 Root Cause Analysis
+
+All nine cases stem from the same underlying gap: **the AgentAction captures intent at
+point-in-time T₀ but is executed at T₁, with no mechanism to detect or handle the delta
+between T₀ and T₁.**
+
+There are two distinct sub-problems:
+
+| Sub-problem | Cases | Nature |
+|---|---|---|
+| **State drift** | 1, 2, 3, 6, 7 | Resource changed between propose and approve |
+| **Action multiplicity** | 4, 5, 8, 9 | Multiple actions targeting same resource, from same or different agents |
+
+---
+
+### 14.4 Solution Design
+
+The solution is a set of complementary mechanisms. No single mechanism handles all cases.
+
+---
+
+#### Mechanism 1 — `invalidated` Status + Auto-Invalidation Hooks *(Highest Priority)*
+
+Add `invalidated` as a first-class lifecycle status. It is distinct from `rejected`
+(a human decision) — it means the action was made irrelevant by an external change.
+
+```
+pending_review
+  → approved          (human approved + platform executed successfully)
+  → rejected          (human explicitly rejected)
+  → approval_failed   (platform execution failed)
+  → expired           (expires_at passed with no decision)
+  → invalidated       (resource state changed externally — action is now irrelevant)
+                      carried with: invalidation_reason, invalidated_at, invalidated_by
+```
+
+**How it works:**
+
+Domain endpoints that change resource state run an **invalidation hook** after successfully
+completing. The hook queries `agent_actions` for any `pending_review` records targeting
+the same resource and marks them `invalidated`.
+
+```
+Staff dispatches Order #1 via ROAD  →  PATCH /orders/1/dispatch succeeds
+  → Invalidation hook fires:
+     SELECT * FROM agent_actions
+     WHERE resource_id = '1' AND status = 'pending_review'
+     → Found: "Dispatch Order #1 via AIR" card
+     → UPDATE status = 'invalidated',
+              invalidation_reason = 'Order already dispatched via road by user:john',
+              invalidated_at = now()
+```
+
+This requires two additions to `agent_actions`:
+- `resource_type: str | None` — the type of resource this action targets (e.g. "order")
+- `resource_id: str | None` — the ID of that resource (for efficient querying)
+
+The agent populates these via `propose_action`. The domain endpoint's hook uses them
+to find related actions efficiently (indexed lookup, no URL parsing needed).
+
+**Inbox behavior for invalidated actions:**
+- Removed from the main pending count and default view
+- Available under a "History" or "Resolved" filter
+- Shown with a banner: "Invalidated — Order already dispatched via ROAD by John at 09:30"
+- Not actionable (no Approve/Reject buttons)
+
+This mechanism **directly solves Cases 1, 3, 8** and partially solves Case 7.
+
+---
+
+#### Mechanism 2 — State Snapshot + Pre-Approval Validation
+
+When the agent calls `propose_action`, it records the key fields of the resource it
+observed at that moment as `expected_state`. At approval time, the platform re-fetches
+and compares before executing.
+
+```json
+"expected_state": {
+  "resource_type": "order",
+  "resource_id": "uuid-of-order-1",
+  "snapshot": {
+    "status": "pending",
+    "shipment_mode": null,
+    "due_date": "2026-07-05",
+    "urgency_days": 2
+  }
+}
+```
+
+At `POST /actions/{id}/approve`:
+1. Platform fetches current resource state via a lightweight check endpoint
+2. Compares critical fields against `expected_state.snapshot`
+3. Decision:
+   - **No drift** → proceed to execution
+   - **Non-critical drift** (e.g. urgency_days changed from 2 to 3) → show warning with diff, ask human to confirm
+   - **Critical drift** (e.g. status changed from `pending` to `dispatched`) → block approval, explain conflict
+
+```
+Human clicks Approve for "Dispatch Order #1 via AIR"
+Platform checks: current status = dispatched (expected: pending)
+Response: 409 with body:
+{
+  "conflict": "state_drift",
+  "field": "status",
+  "expected": "pending",
+  "actual": "dispatched",
+  "message": "Order was dispatched via ROAD at 09:30. This action is no longer valid."
+}
+```
+
+The UI surfaces this as a clear error card — not a generic "approval failed" — with
+enough detail for the human to understand what happened.
+
+This solves **Cases 2, 7** and acts as a safety net backup for Case 1 (when the
+invalidation hook was not triggered, e.g. change came from outside the system).
+
+**What fields to include in snapshot:** Only the fields that would change the agent's
+decision or the action's validity. For orders: `status`, `shipment_mode`, `due_date`.
+For emails: no snapshot needed (idempotency is handled differently — see Mechanism 5).
+
+---
+
+#### Mechanism 3 — Duplicate Action Detection on Creation
+
+Before inserting a new `AgentAction`, check whether a `pending_review` action already
+exists for the same `resource_type` + `resource_id` + same `agent_name`. If yes:
+
+- **Strategy A (replace):** Invalidate the old action with reason "superseded by newer
+  agent run" and create the new one. Clean inbox, always shows latest agent judgment.
+- **Strategy B (skip):** Return the existing action ID, do not create a duplicate. Safe
+  but means a re-run won't update the inbox if the agent's recommendation changed.
+
+Recommended: Strategy A with a configurable policy per agent YAML
+(`duplicate_action_policy: replace | skip`).
+
+This solves **Case 4** (re-run creates duplicates).
+
+---
+
+#### Mechanism 4 — Optimistic Locking on Approval (Concurrent Reviewer Protection)
+
+When a reviewer opens an action card, the platform issues a short-lived **claim token**
+(a UUID stored in `claimed_by` and `claimed_at` fields, expiring after N minutes). The
+Approve button sends this token.
+
+The approval endpoint validates: `claimed_by = this_token` and `claimed_at` is not
+expired. If another reviewer has already claimed or approved it → 409 with clear message.
+
+Alternatively (simpler): rely on a database-level atomic status transition:
+```sql
+UPDATE agent_actions
+SET status = 'approved', decided_by = 'user:john', decided_at = now()
+WHERE id = ? AND status = 'pending_review'  -- only succeeds once
+```
+
+If this UPDATE affects 0 rows → the action was already resolved → surface the conflict
+to the second reviewer. This is the simplest form of optimistic locking and handles
+**Case 5** with minimal complexity.
+
+---
+
+#### Mechanism 5 — Idempotency Classification and Duplicate Execution Protection
+
+Not all actions have the same idempotency characteristics. This must be modeled explicitly.
+
+| Action type | Idempotent? | Risk if executed twice | Strategy |
+|---|---|---|---|
+| `PATCH /orders/{id}/dispatch` with same mode | Yes | None | Re-execution is harmless |
+| `PATCH /orders/{id}/dispatch` with different mode | No | Conflicting dispatch record | Conflict detection via state check |
+| `POST /outreach/send-email` | No | Duplicate email to customer | Deduplication token |
+| `POST /payments/charge` | No | Double charge | Idempotency key mandatory |
+
+For non-idempotent actions, `propose_action` should carry a **deduplication key**
+(`dedup_key`) that the receiving endpoint checks. If the same key has already been
+processed → return `200 Already processed` rather than executing again.
+
+The dedup key for emails: `{agent_run_id}:{prospect_email}` — unique per run per recipient.
+
+This solves **Case 9** (silent wrong outcome for non-idempotent actions).
+
+---
+
+#### Mechanism 6 — Resource-Contextual Expiry + Background Enforcement
+
+The `expires_at` field already exists. What's missing is:
+1. **Automatic population** — `propose_action` should derive expiry from the resource context
+   when the agent provides it. For orders: `expires_at = due_date - 4 hours` (configurable buffer).
+2. **Background enforcement** — a periodic task (or per-request check) transitions
+   `pending_review` actions past their `expires_at` to `expired`.
+3. **Inbox age warnings** — actions older than 2 hours show an amber warning; older than
+   8 hours show a red warning. The age is shown prominently, not just "created N minutes ago".
+
+This solves **Case 6**.
+
+---
+
+#### Mechanism 7 — UI Staleness Indicators and Explicit Confirmation
+
+The `/approvals` UI should surface signals that help humans detect stale actions
+before approving:
+
+- **Age warning** — prominent indicator when action is older than a configurable threshold
+- **"Verify before approving" button** — re-fetches the resource state on demand and
+  shows a freshness check: "Order #1 is still pending with no shipment mode — safe to approve"
+  or "Order #1 status has changed to dispatched — this action may be stale"
+- **Invalidated banner** — when an action is invalidated, show reason prominently in
+  the history view
+- **State diff panel** — when pre-approval validation detects drift, show a side-by-side
+  of "When proposed" vs "Now" for all snapshot fields
+
+This is the last line of defense — the UI empowers humans to catch cases the system missed.
+
+---
+
+### 14.5 Mechanism-to-Case Coverage Matrix
+
+| Case | Mechanism 1 (Invalidate) | Mechanism 2 (Snapshot) | Mechanism 3 (Dedup) | Mechanism 4 (Locking) | Mechanism 5 (Idempotency) | Mechanism 6 (Expiry) | Mechanism 7 (UI) |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| 1 Direct conflict | ✅ Primary | ✅ Backup | | | | | ✅ |
+| 2 Reasoning stale | | ✅ Primary | | | | | ✅ |
+| 3 Resource deleted | ✅ Primary | ✅ Backup | | | | | ✅ |
+| 4 Duplicate actions | | | ✅ Primary | | | | |
+| 5 Race condition | | | | ✅ Primary | | | |
+| 6 Expiry | | | | | | ✅ Primary | ✅ |
+| 7 Failed retry | | ✅ Primary | | | | | ✅ |
+| 8 Cross-agent conflict | ✅ Primary | ✅ Backup | ✅ | | | | ✅ |
+| 9 Silent wrong outcome | | | ✅ | | ✅ Primary | | |
+
+---
+
+### 14.6 Data Model Changes Required
+
+```
+agent_actions — new / changed fields:
+
+  ── Resource targeting (for auto-invalidation) ──────────
+  resource_type       str | None        "order" | "prospect" | "product"
+  resource_id         str | None        ID of the resource this action targets
+                                        (indexed for fast invalidation queries)
+
+  ── State snapshot (for pre-approval validation) ─────────
+  expected_state      JSONB | None      Snapshot of resource at propose time:
+                                        {resource_type, resource_id, snapshot: {field: value}}
+
+  ── Invalidation ────────────────────────────────────────
+  status              str               Extended: + "invalidated"
+  invalidation_reason text | None       Human-readable reason for invalidation
+  invalidated_at      datetime | None   When it was invalidated
+  invalidated_by      str | None        Who/what triggered it ("system:dispatch-hook" | "user:john")
+
+  ── Duplicate / claim protection ────────────────────────
+  dedup_key           str | None        For non-idempotent actions — unique per logical action
+  claimed_by          str | None        Reviewer who opened the action (optional locking)
+  claimed_at          datetime | None   When claim was taken (for expiry)
+```
+
+---
+
+### 14.7 Changes to `propose_action` Tool
+
+The tool gains two optional new parameters:
+
+```python
+propose_action(
+    ...
+    resource_type="order",          # enables auto-invalidation lookup
+    resource_id="uuid-of-order-1",  # enables auto-invalidation lookup
+    expected_state='{"status":"pending","shipment_mode":null,"urgency_days":2}',
+    dedup_key="agent_run_id:order_id",  # for non-idempotent actions
+)
+```
+
+These are optional — existing agents continue working without them. Agents that add them
+gain automatic staleness protection.
+
+---
+
+### 14.8 Changes to Domain Endpoints
+
+Domain endpoints that change resource state add an invalidation hook **after** the
+state change succeeds. This is a one-time addition per endpoint — no ongoing per-agent work.
+
+```python
+# In PATCH /orders/{id}/dispatch — after successful dispatch:
+await invalidate_pending_actions(
+    session=session,
+    resource_type="order",
+    resource_id=str(order_id),
+    reason=f"Order dispatched via {mode} by {decided_by} at {datetime.utcnow()}"
+)
+```
+
+The `invalidate_pending_actions` helper is a platform utility — 10 lines of code, reused
+by every domain endpoint. Domain code has no knowledge of the inbox — it just calls the
+helper.
+
+---
+
+### 14.9 Implementation Sequence
+
+In priority order, building on the existing HITL foundation:
+
+```
+Phase 1 — Prevent harm (Mechanisms 1 + 4)
+  Add `invalidated` status to AgentAction lifecycle
+  Add resource_type, resource_id, invalidation fields to agent_actions table (migration)
+  Add invalidate_pending_actions() platform utility
+  Wire hook into PATCH /orders/{id}/dispatch (and any other mutating endpoints)
+  Add atomic status-check to approval endpoint (Mechanism 4 — optimistic lock)
+  Update /approvals UI: show invalidated actions in history, grey out with reason
+
+Phase 2 — Catch what hooks miss (Mechanism 2)
+  Add expected_state field to AgentAction model
+  Add expected_state param to propose_action tool
+  Add pre-approval validation step in approval engine:
+    fetch resource, compare snapshot, return structured conflict response
+  Update /approvals UI: show diff panel when conflict detected
+  Update order-dispatch-review YAML: include expected_state in propose_action calls
+
+Phase 3 — Inbox hygiene (Mechanisms 3 + 6)
+  Add dedup_key field, duplicate detection on AgentAction creation
+  Implement expires_at enforcement (background job or per-request check)
+  Add age warning indicators to /approvals UI
+  Add resource-contextual expiry to order-dispatch-review agent
+
+Phase 4 — Non-idempotent action safety (Mechanism 5)
+  Add dedup_key support to POST /outreach/send-email
+  Add dedup_key param to pharma-outreach propose_action calls
+  Verify endpoint handles duplicate dedup_key gracefully
+```
+
+---
+
+## 15. Summary
 
 The current approach is **domain-coupled** — each agent brings its own review UI.
 The proposed approach is **platform-owned** — agents write self-describing intents,
