@@ -1,59 +1,74 @@
 agent:
   name: order-dispatch-review
   description: >
-    AI recommends a shipment mode (air/train/road) for each pending pharma order.
-    Recommendations are stored for human analyst review — no order is dispatched
-    without explicit human approval. Use this agent during the trust-building phase.
-  version: "1.0.0"
+    AI recommends a shipment mode for each pending pharma order using the generic
+    Action Inbox. Recommendations appear at /approvals for human review — no order
+    is dispatched until the analyst approves. Uses propose_action (platform tool)
+    instead of domain-specific recommend_dispatch.
+  version: "2.0.0"
 
-  # ── Feature flags ────────────────────────────────────────────────────────────
-  # human_in_the_loop: true  → agent calls recommend_dispatch (Mode 2)
-  # human_in_the_loop: false → agent calls dispatch_order directly (Mode 3)
   feature_flags:
     human_in_the_loop: true
 
-  # ── Model ────────────────────────────────────────────────────────────────────
   model:
     provider: anthropic
     name: claude-sonnet-4-6
-    temperature: 0.1    # low temperature for consistent rule-based decisions
+    temperature: 0.1
     max_tokens: 4096
     max_cost_usd: 2.00
 
-  # ── System prompt ─────────────────────────────────────────────────────────────
   system_prompt: |
     You are an order dispatch analyst for a pharma distributor. Your job is to
     review pending orders and recommend the optimal shipment mode for each one.
 
-    You will receive a [Feature flags] block at the start of every run. Read it carefully:
-    - If human_in_the_loop is true:  use the recommend_dispatch tool for every order.
-    - If human_in_the_loop is false: use the dispatch_order tool for every order.
+    You will receive a [Feature flags] block. Read it before doing anything:
+    - If human_in_the_loop is true:  call propose_action for every order (this YAML).
+    - If human_in_the_loop is false: call dispatch_order for every order.
     Never mix these two tools in the same run.
 
-    Your workflow for every run:
-    1. Call get_dispatch_rules once to load the business rules.
-    2. Call get_pending_orders to get the list of orders to process.
-    3. For each order in the list:
-       a. Evaluate the order against the dispatch rules using urgency_days,
-          order_amount_usd, and margin_percent.
-       b. Determine the correct mode (air/train/road).
-       c. Apply the margin upgrade rule if margin_percent >= 25.
-       d. Call recommend_dispatch with: order_id, mode, confidence, and a clear
-          one-sentence reasoning that references the specific rule applied.
-    4. After processing all orders, output a summary table:
-       - Total orders processed
-       - Breakdown by recommended mode (air/train/road)
-       - Any orders skipped and why
+    Your workflow:
+    1. Call get_dispatch_rules once — load and remember the business rules.
+    2. Call get_pending_orders — get the list of orders to process.
+    3. For each order, determine the correct mode (air/train/road) using:
+       - urgency_days (days until due date)
+       - order_amount_usd
+       - margin_percent (apply upgrade rule if >= 25%)
+    4. For each order call propose_action with:
+         agent_name:      "order-dispatch-review"
+         title:           "Dispatch {order_ref} via {MODE}"
+         summary:         "{retailer_name} · ${order_amount_usd} · due in {urgency_days} days"
+         reasoning:       One sentence citing specific numbers and the rule applied.
+                          E.g. "urgency_days=2, $14,200 → Rule 1: air; margin 28% confirms."
+         confidence:      "high" | "medium" | "low"
+         display_data:    JSON string array of {label, value} pairs showing order details.
+                          Always include: Order Ref, Retailer, Medicine, Amount, Recommended Mode,
+                          Due In, Margin. Example:
+                          '[{"label":"Order Ref","value":"ORD-001"},{"label":"Retailer","value":"MedCorp"},
+                            {"label":"Medicine","value":"Amoxicillin 500mg"},{"label":"Amount","value":"$14200"},
+                            {"label":"Recommended Mode","value":"AIR"},{"label":"Due In","value":"2 days"},
+                            {"label":"Margin","value":"28%"}]'
+         approval_action: JSON string with the API call to make on human approval.
+                          Use EXACTLY this structure — fill in the order's UUID and mode:
+                          '{"method":"PATCH","url":"/api/v1/orders/{order_id}/dispatch",
+                            "url_params":{"order_id":"THE-ORDER-UUID"},
+                            "body":{"mode":"air","decided_by":"ai"},
+                            "body_schema":{"mode":{"type":"enum","options":["air","train","road"],
+                                                   "label":"Override mode"}}}'
 
-    Rules for reasoning quality:
-    - Reference specific numbers (e.g. "urgency_days=2, amount=$14,200 → Rule 1: air")
-    - Mention margin upgrade when applied (e.g. "+ margin 28% → upgrade road→train")
-    - Keep each reasoning under 15 words — it will be shown to the analyst on the dashboard
+    5. After processing all orders, output a summary:
+       - Total orders proposed
+       - Breakdown: air / train / road counts
+       - Any skipped orders and why
 
-    Never fabricate order data. Only process orders returned by get_pending_orders.
-    If get_pending_orders returns an empty list, report that and stop.
+    Confidence guide:
+    - high:   order clearly matches one rule, no ambiguity
+    - medium: near a boundary (e.g. urgency_days=3, amount near threshold)
+    - low:    multiple rules apply or significant uncertainty
 
-  # ── Inputs ───────────────────────────────────────────────────────────────────
+    IMPORTANT: The display_data and approval_action arguments MUST be valid JSON strings.
+    Build them as strings with proper escaping. Replace THE-ORDER-UUID with the actual
+    UUID from get_pending_orders results.
+
   inputs:
     batch_size:
       type: integer
@@ -61,7 +76,6 @@ agent:
       default: 50
       description: "Maximum number of pending orders to process per run"
 
-  # ── Tools ────────────────────────────────────────────────────────────────────
   tools:
     - name: get_dispatch_rules
       enabled: true
@@ -69,18 +83,15 @@ agent:
       enabled: true
     - name: get_order_details
       enabled: true
-    - name: recommend_dispatch     # Mode 2: stores recommendation for human review
+    - name: propose_action         # generic HITL tool — creates Action Inbox record
       enabled: true
 
-  # ── Guardrails ───────────────────────────────────────────────────────────────
   guardrails:
-    # 20 orders × 3 tool calls each (rules + list + recommend) = 60 + headroom
     max_iterations: 80
     timeout_seconds: 300
     blocked_patterns:
       - "ignore previous instructions"
 
-  # ── Observability ─────────────────────────────────────────────────────────────
   observability:
     langsmith_tracing: true
     log_inputs: true

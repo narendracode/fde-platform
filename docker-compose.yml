@@ -70,7 +70,8 @@ services:
     volumes:
       - ./agents:/app/agents:ro
       - ./src:/app/src:ro
-      - ./scripts:/app/scripts:ro   # live-reload scripts without rebuild
+      - ./scripts:/app/scripts:ro
+      - ./alembic:/app/alembic:ro   # live migrations without rebuild
     restart: unless-stopped
 
   worker:
@@ -109,6 +110,7 @@ services:
       - ./agents:/app/agents:ro
       - ./src:/app/src:ro
       - ./scripts:/app/scripts:ro
+      - ./alembic:/app/alembic:ro
     restart: unless-stopped
 
   jaeger:

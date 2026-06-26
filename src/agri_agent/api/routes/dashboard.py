@@ -70,11 +70,6 @@ async def dashboard(
         .where(Order.status == "pending")
         .order_by(Order.due_date.asc(), Order.order_amount_usd.desc())
     )
-    review_q = await session.execute(
-        select(Order)
-        .where(Order.status == "pending_review")
-        .order_by(Order.due_date.asc())
-    )
     ready_q = await session.execute(
         select(Order)
         .where(Order.status == "ready_to_dispatch")
@@ -86,7 +81,6 @@ async def dashboard(
         "dashboard.html",
         {
             "pending": [_enrich(o) for o in pending_q.scalars().all()],
-            "pending_review": [_enrich(o) for o in review_q.scalars().all()],
             "ready": [_enrich(o) for o in ready_q.scalars().all()],
             "ai_automation_enabled": bool(ai_enabled),
             "active_agent": active_agent,

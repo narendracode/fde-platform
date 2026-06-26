@@ -124,8 +124,14 @@
     <h1>Fundly &mdash; Order Dispatch Dashboard</h1>
     <div class="subtitle">Pharma Distributor · Shipment Mode Assignment</div>
   </div>
-  <div style="font-size:12px;color:#8899bb;">
-    API: <a href="/docs" style="color:#a5b4fc;" target="_blank">/docs</a>
+  <div style="display:flex;align-items:center;gap:18px;font-size:12px;">
+    <a href="/approvals" id="approvals-link"
+       style="color:#a5b4fc;text-decoration:none;display:flex;align-items:center;gap:6px;">
+      🔔 Action Inbox
+      <span id="approvals-badge" style="display:none;background:#ef4444;color:white;
+            font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;">0</span>
+    </a>
+    <a href="/docs" style="color:#8899bb;" target="_blank">API</a>
   </div>
 </header>
 
@@ -175,81 +181,6 @@
   <div id="agent-status">
     <span id="agent-status-text">Agent is running…</span>
   </div>
-
-  <!-- ── Pending Review section ──────────────────────────────────── -->
-  {% if pending_review %}
-  <div class="section" id="review-section">
-    <div class="section-header">
-      <div class="section-title">
-        🤖 AI Recommendations — Pending Review
-        <span class="count">({{ pending_review|length }} orders)</span>
-      </div>
-      <span style="font-size:11px;color:#888;">Select override mode only if you disagree with AI</span>
-    </div>
-    <div class="table-scroll">
-    <table class="table-review">
-      <thead>
-        <tr>
-          <th>Ref</th>
-          <th>Retailer / Medicine</th>
-          <th>Amount</th>
-          <th>Due</th>
-          <th>AI Recommends</th>
-          <th>Confidence</th>
-          <th>Reasoning</th>
-          <th style="min-width:220px;">Action</th>
-        </tr>
-      </thead>
-      <tbody id="review-tbody">
-        {% for o in pending_review %}
-        <tr id="review-row-{{ o.id }}">
-          <td><code style="font-size:11px;">{{ o.order_ref }}</code></td>
-          <td>
-            <div style="font-weight:600;font-size:13px;">{{ o.retailer_name }}</div>
-            <div style="font-size:11px;color:#888;">{{ o.medicine_name }} · {{ o.margin_percent }}% margin</div>
-          </td>
-          <td><strong>${{ "%.0f"|format(o.order_amount_usd) }}</strong></td>
-          <td class="{{ 'urg-critical' if o.urgency_days <= 2 else ('urg-high' if o.urgency_days <= 5 else 'urg-normal') }}">
-            {{ o.urgency_days }}d
-          </td>
-          <td>
-            <span class="mode-{{ o.ai_recommended_mode }}">
-              {{ '✈' if o.ai_recommended_mode == 'air' else ('🚂' if o.ai_recommended_mode == 'train' else '🚛') }}
-              {{ o.ai_recommended_mode|upper }}
-            </span>
-          </td>
-          <td class="conf-{{ o.ai_confidence }}">{{ (o.ai_confidence or '')|upper }}</td>
-          <td><div class="reasoning-text" title="{{ o.ai_reasoning }}">{{ o.ai_reasoning }}</div></td>
-          <td>
-            <div class="review-action">
-              <div class="review-action-row">
-                <span class="override-label">Override:</span>
-                <select class="mode-dropdown"
-                        id="override-{{ o.id }}"
-                        onchange="onOverrideChange('{{ o.id }}', '{{ o.ai_recommended_mode }}', this.value)">
-                  <option value="">Keep AI choice</option>
-                  <option value="air">✈ Air</option>
-                  <option value="train">🚂 Train</option>
-                  <option value="road">🚛 Road</option>
-                </select>
-              </div>
-              <div class="review-action-row">
-                <button class="btn-approve"
-                        id="approve-btn-{{ o.id }}"
-                        onclick="approveOrder('{{ o.id }}', document.getElementById('override-{{ o.id }}').value)">
-                  ✓ Approve {{ o.ai_recommended_mode|upper }}
-                </button>
-                <button class="btn-reject" onclick="rejectOrder('{{ o.id }}')">✗ Reject</button>
-              </div>
-            </div>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    </div>
-  </div>
-  {% endif %}
 
   <!-- ── Pending Orders ──────────────────────────────────────────── -->
   <div class="section">
@@ -370,31 +301,23 @@
     else { const e = await r.json(); toast(e.detail || 'Error', false); }
   }
 
-  function onOverrideChange(id, aiMode, overrideValue) {
-    const btn = document.getElementById(`approve-btn-${id}`);
-    if (overrideValue) {
-      btn.textContent = `✓ Approve ${overrideValue.toUpperCase()} (override)`;
-      btn.style.background = '#d97706';  // amber = override
-    } else {
-      btn.textContent = `✓ Approve ${aiMode.toUpperCase()}`;
-      btn.style.background = '';  // reset to CSS class colour
-    }
+  // ── Approvals badge — poll counts and show red dot if pending actions ───────
+  async function refreshApprovalsBadge() {
+    try {
+      const r = await fetch('/api/v1/actions/counts', { headers });
+      if (!r.ok) return;
+      const data = await r.json();
+      const badge = document.getElementById('approvals-badge');
+      if (data.total > 0) {
+        badge.textContent = data.total;
+        badge.style.display = 'inline-block';
+      } else {
+        badge.style.display = 'none';
+      }
+    } catch (_) {}
   }
-
-  async function approveOrder(id, overrideMode) {
-    const body = overrideMode ? { override_mode: overrideMode } : {};
-    const r = await fetch(`/api/v1/orders/${id}/approve`, {
-      method: 'POST', headers, body: JSON.stringify(body)
-    });
-    if (r.ok) { toast('Recommendation approved'); setTimeout(() => location.reload(), 800); }
-    else { const e = await r.json(); toast(e.detail || 'Error', false); }
-  }
-
-  async function rejectOrder(id) {
-    const r = await fetch(`/api/v1/orders/${id}/reject`, { method: 'POST', headers });
-    if (r.ok) { toast('Recommendation rejected — order returned to pending'); setTimeout(() => location.reload(), 800); }
-    else { const e = await r.json(); toast(e.detail || 'Error', false); }
-  }
+  refreshApprovalsBadge();
+  setInterval(refreshApprovalsBadge, 10000);
 
   async function toggleAI(enabled) {
     await fetch('/api/v1/settings/ai_automation_enabled', {

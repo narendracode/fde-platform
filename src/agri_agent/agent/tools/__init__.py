@@ -3,6 +3,7 @@
 from langchain_core.tools import BaseTool
 
 from agri_agent.agent.tools.calculator import calculator
+from agri_agent.agent.tools.platform import propose_action
 from agri_agent.agent.tools.dispatch import (
     dispatch_order,
     get_dispatch_rules,
@@ -23,7 +24,8 @@ _TOOL_REGISTRY: dict[str, BaseTool] = {
     "get_order_details": get_order_details,
     "get_dispatch_rules": get_dispatch_rules,
     "dispatch_order": dispatch_order,
-    "recommend_dispatch": recommend_dispatch,
+    "recommend_dispatch": recommend_dispatch,   # kept for backward compat
+    "propose_action": propose_action,
 }
 
 

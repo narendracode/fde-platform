@@ -25,6 +25,9 @@ class Settings(BaseSettings):
 
     # API security
     api_key: str = "dev-secret-key-change-in-prod"
+    # Base URL the platform uses when executing approval_action HTTP calls.
+    # In Docker the API calls itself via loopback; workers call via service name.
+    api_base_url: str = "http://localhost:8000"
 
     # App
     log_level: str = "info"

@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fundly — Pharma Outreach</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+           background: #f0f2f5; color: #1a1a2e; font-size: 14px; }
+
+    header { background: #1a1a2e; color: #fff; padding: 14px 28px;
+             display: flex; align-items: center; justify-content: space-between; }
+    header h1 { font-size: 18px; font-weight: 600; letter-spacing: .3px; }
+    header .subtitle { font-size: 12px; color: #8899bb; margin-top: 2px; }
+    .header-nav { display: flex; align-items: center; gap: 16px; }
+    .nav-link { color: #8899bb; text-decoration: none; font-size: 13px; }
+    .nav-link:hover { color: #fff; }
+    .inbox-link { position: relative; display: inline-flex; align-items: center; gap: 6px;
+                  color: #8899bb; text-decoration: none; font-size: 13px; font-weight: 600; }
+    .inbox-link:hover { color: #fff; }
+    .badge-dot { background: #ef4444; color: #fff; border-radius: 10px; font-size: 10px;
+                 font-weight: 700; padding: 1px 6px; display: none; }
+
+    .main { max-width: 860px; margin: 0 auto; padding: 28px 24px; }
+
+    .card { background: #fff; border-radius: 10px; padding: 24px 28px;
+            margin-bottom: 24px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+    .card-title { font-size: 16px; font-weight: 700; margin-bottom: 20px;
+                  display: flex; align-items: center; gap: 8px; }
+
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-group.full { grid-column: 1 / -1; }
+    label { font-size: 12px; font-weight: 600; color: #555; text-transform: uppercase;
+            letter-spacing: .4px; }
+    input, select { padding: 9px 12px; border: 1px solid #ddd; border-radius: 7px;
+                    font-size: 13px; color: #1a1a2e; width: 100%;
+                    transition: border-color .15s; }
+    input:focus, select:focus { outline: none; border-color: #4f46e5; }
+    .hint { font-size: 11px; color: #999; }
+
+    .mode-badge { display: inline-flex; align-items: center; gap: 6px;
+                  padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+    .mode-review { background: #fef3c7; color: #92400e; }
+    .mode-auto   { background: #dcfce7; color: #14532d; }
+
+    .run-btn { margin-top: 20px; padding: 10px 24px; background: #4f46e5; color: white;
+               border: none; border-radius: 8px; font-size: 14px; font-weight: 600;
+               cursor: pointer; transition: background .15s; }
+    .run-btn:hover { background: #4338ca; }
+    .run-btn:disabled { background: #999; cursor: not-allowed; }
+
+    .status-card { display: none; background: #f0f4ff; border: 1px solid #c7d2fe;
+                   border-radius: 8px; padding: 14px 18px; margin-top: 16px; }
+    .status-card.error { background: #fff0f0; border-color: #fca5a5; }
+    .status-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .spinner { width: 16px; height: 16px; border: 2px solid #c7d2fe;
+               border-top-color: #4f46e5; border-radius: 50%; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .status-title { font-weight: 600; font-size: 13px; color: #3730a3; }
+    .status-body { font-size: 12px; color: #555; line-height: 1.6; }
+    .run-id { font-family: monospace; font-size: 11px; color: #888; margin-top: 6px; }
+
+    .runs-table { width: 100%; border-collapse: collapse; }
+    .runs-table th { text-align: left; padding: 8px 12px; font-size: 11px; font-weight: 700;
+                     text-transform: uppercase; letter-spacing: .5px; color: #888;
+                     background: #fafafa; border-bottom: 1px solid #eee; }
+    .runs-table td { padding: 9px 12px; border-bottom: 1px solid #f5f5f5;
+                     font-size: 12px; vertical-align: middle; }
+    .runs-table tr:last-child td { border-bottom: none; }
+    .status-pill { display: inline-block; padding: 2px 8px; border-radius: 10px;
+                   font-size: 11px; font-weight: 600; }
+    .s-running   { background: #e0e7ff; color: #3730a3; }
+    .s-pending   { background: #fef9c3; color: #854d0e; }
+    .s-completed { background: #dcfce7; color: #14532d; }
+    .s-failed    { background: #fee2e2; color: #991b1b; }
+    .s-blocked   { background: #f3e8ff; color: #6b21a8; }
+
+    #toast { position: fixed; bottom: 24px; right: 24px; padding: 10px 18px;
+             background: #1a1a2e; color: white; border-radius: 8px; font-size: 13px;
+             display: none; z-index: 9999; box-shadow: 0 4px 12px rgba(0,0,0,.2); }
+
+    .empty-state { text-align: center; padding: 32px 16px; color: #aaa; font-size: 13px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>💊 Pharma Outreach</h1>
+    <div class="subtitle">AI-assisted retailer email campaigns</div>
+  </div>
+  <div class="header-nav">
+    <a href="/dashboard" class="nav-link">📦 Orders</a>
+    <a href="/approvals" class="inbox-link">
+      🔔 Action Inbox
+      <span class="badge-dot" id="approvals-badge"></span>
+    </a>
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- ── Run Configuration ── -->
+  <div class="card">
+    <div class="card-title">
+      🚀 Run Outreach Campaign
+      <span class="mode-badge mode-review" id="mode-badge">👤 Human Review</span>
+    </div>
+
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Region *</label>
+        <input type="text" id="region" placeholder="e.g. Mumbai, Delhi, Bangalore"
+               list="region-list" autocomplete="off">
+        <datalist id="region-list">
+          <option value="Mumbai">
+          <option value="Delhi">
+          <option value="Bangalore">
+          <option value="Hyderabad">
+          <option value="Chennai">
+          <option value="Pune">
+        </datalist>
+        <span class="hint">City or region to search for pharma retailers</span>
+      </div>
+
+      <div class="form-group">
+        <label>Min Revenue (USD)</label>
+        <input type="number" id="min_revenue_usd" value="100000" min="0" step="10000">
+        <span class="hint">Retailers below this revenue are filtered out</span>
+      </div>
+
+      <div class="form-group">
+        <label>Campaign Name</label>
+        <input type="text" id="campaign_name" value="Fundly Partnership Outreach">
+      </div>
+
+      <div class="form-group">
+        <label>Sender Name</label>
+        <input type="text" id="sender_name" value="The Fundly Team">
+      </div>
+    </div>
+
+    <button class="run-btn" id="run-btn" onclick="runAgent()">
+      ▶ Run Agent
+    </button>
+
+    <div class="status-card" id="status-card">
+      <div class="status-header">
+        <div class="spinner" id="status-spinner"></div>
+        <div class="status-title" id="status-title">Agent is running…</div>
+      </div>
+      <div class="status-body" id="status-body">
+        Discovering retailers, filtering prospects, and composing outreach emails.
+        Proposed actions will appear in the <a href="/approvals">Action Inbox</a>.
+      </div>
+      <div class="run-id" id="run-id-label"></div>
+    </div>
+  </div>
+
+  <!-- ── Recent Runs ── -->
+  <div class="card">
+    <div class="card-title">📋 Recent Runs</div>
+    <div id="runs-container">
+      <div class="empty-state">No runs yet — trigger one above.</div>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+  const API_KEY = "{{ api_key }}";
+  const headers = { "Content-Type": "application/json", "X-API-Key": API_KEY };
+
+  // Pre-populate runs from server
+  const INITIAL_RUNS = {{ runs | tojson }};
+
+  function toast(msg, ok = true) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.style.background = ok ? '#1a1a2e' : '#dc2626';
+    el.style.display = 'block';
+    setTimeout(() => el.style.display = 'none', 3500);
+  }
+
+  // ── Approvals badge ────────────────────────────────────────────────────────
+  async function refreshBadge() {
+    try {
+      const r = await fetch('/api/v1/actions/counts', { headers });
+      if (!r.ok) return;
+      const d = await r.json();
+      const badge = document.getElementById('approvals-badge');
+      if (d.total > 0) {
+        badge.textContent = d.total;
+        badge.style.display = 'inline-block';
+      } else {
+        badge.style.display = 'none';
+      }
+    } catch (_) {}
+  }
+  refreshBadge();
+  setInterval(refreshBadge, 10000);
+
+  // ── Agent Mode Badge ───────────────────────────────────────────────────────
+  const HITL = {{ hitl | tojson }};
+  const modeBadge = document.getElementById('mode-badge');
+  if (!HITL) {
+    modeBadge.textContent = '⚡ Auto Send';
+    modeBadge.className = 'mode-badge mode-auto';
+  }
+
+  // ── Run ───────────────────────────────────────────────────────────────────
+  let activeRunId = null;
+  let pollInterval = null;
+
+  async function runAgent() {
+    const region = document.getElementById('region').value.trim();
+    if (!region) { toast('Region is required', false); return; }
+
+    const btn = document.getElementById('run-btn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Starting…';
+
+    const payload = {
+      message: `Run pharma outreach for ${region}`,
+      extra_context: {
+        region,
+        min_revenue_usd: parseInt(document.getElementById('min_revenue_usd').value) || 100000,
+        campaign_name: document.getElementById('campaign_name').value.trim() || 'Fundly Partnership Outreach',
+        sender_name: document.getElementById('sender_name').value.trim() || 'The Fundly Team',
+      }
+    };
+
+    try {
+      const r = await fetch('/api/v1/agents/pharma-outreach/run/async', {
+        method: 'POST', headers, body: JSON.stringify(payload)
+      });
+      if (!r.ok) {
+        const e = await r.json();
+        toast(e.detail || 'Failed to start agent', false);
+        btn.disabled = false;
+        btn.textContent = '▶ Run Agent';
+        return;
+      }
+      const data = await r.json();
+      activeRunId = data.run_id;
+
+      // Show status card
+      const card = document.getElementById('status-card');
+      card.style.display = 'block';
+      card.className = 'status-card';
+      document.getElementById('status-title').textContent = 'Agent is running…';
+      document.getElementById('status-body').innerHTML =
+        `Discovering retailers in <strong>${region}</strong>, filtering prospects, and composing outreach emails.<br>` +
+        (HITL ? 'Proposed emails will appear in the <a href="/approvals">Action Inbox</a> for your review.' :
+                'Emails will be sent directly.');
+      document.getElementById('run-id-label').textContent = `Run ID: ${activeRunId}`;
+      document.getElementById('status-spinner').style.display = 'block';
+
+      prependRun({ id: activeRunId, status: 'pending', region, started_at: new Date().toISOString() });
+
+      // Poll for completion
+      pollInterval = setInterval(() => pollRun(activeRunId, region), 4000);
+
+    } catch (err) {
+      toast('Network error: ' + err.message, false);
+      btn.disabled = false;
+      btn.textContent = '▶ Run Agent';
+    }
+  }
+
+  async function pollRun(runId, region) {
+    try {
+      const r = await fetch(`/api/v1/runs/${runId}`, { headers });
+      if (!r.ok) return;
+      const run = await r.json();
+
+      updateRunRow(runId, run.status);
+
+      if (run.status === 'completed' || run.status === 'blocked' || run.status === 'failed') {
+        clearInterval(pollInterval);
+        pollInterval = null;
+        document.getElementById('status-spinner').style.display = 'none';
+
+        const card = document.getElementById('status-card');
+        if (run.status === 'completed') {
+          document.getElementById('status-title').textContent = '✅ Run completed';
+          document.getElementById('status-body').innerHTML =
+            HITL ? `Outreach emails proposed for review — visit <a href="/approvals">Action Inbox</a> to approve.`
+                 : `Outreach emails sent for <strong>${region}</strong>.`;
+          toast('Agent run completed');
+        } else if (run.status === 'blocked') {
+          card.className = 'status-card error';
+          document.getElementById('status-title').textContent = '⛔ Run blocked by guardrails';
+          document.getElementById('status-body').textContent = 'Agent exceeded iteration or cost limits.';
+          toast('Run blocked', false);
+        } else {
+          card.className = 'status-card error';
+          document.getElementById('status-title').textContent = '❌ Run failed';
+          document.getElementById('status-body').textContent = run.error || 'Agent run failed.';
+          toast('Run failed', false);
+        }
+
+        const btn = document.getElementById('run-btn');
+        btn.disabled = false;
+        btn.textContent = '▶ Run Agent';
+        refreshBadge();
+      }
+    } catch (_) {}
+  }
+
+  // ── Runs table ─────────────────────────────────────────────────────────────
+  function statusPill(s) {
+    const cls = { pending: 's-pending', running: 's-running', completed: 's-completed',
+                  failed: 's-failed', blocked: 's-blocked' };
+    return `<span class="status-pill ${cls[s] || ''}">${s}</span>`;
+  }
+
+  function runRow(run) {
+    const region = run.input?.extra_context?.region || '—';
+    const started = run.started_at ? new Date(run.started_at).toLocaleString() : '—';
+    return `<tr id="row-${run.id}">
+      <td style="font-family:monospace;font-size:11px;color:#888">${run.id.slice(0,8)}…</td>
+      <td><strong>${region}</strong></td>
+      <td>${statusPill(run.status)}</td>
+      <td>${started}</td>
+    </tr>`;
+  }
+
+  function renderRuns(runs) {
+    const container = document.getElementById('runs-container');
+    if (!runs.length) {
+      container.innerHTML = '<div class="empty-state">No runs yet — trigger one above.</div>';
+      return;
+    }
+    container.innerHTML = `<table class="runs-table">
+      <thead><tr><th>Run ID</th><th>Region</th><th>Status</th><th>Started</th></tr></thead>
+      <tbody>${runs.map(runRow).join('')}</tbody>
+    </table>`;
+  }
+
+  function prependRun(run) {
+    const container = document.getElementById('runs-container');
+    const tbody = container.querySelector('tbody');
+    if (tbody) {
+      tbody.insertAdjacentHTML('afterbegin', runRow(run));
+    } else {
+      // Replace empty state with table
+      container.innerHTML = `<table class="runs-table">
+        <thead><tr><th>Run ID</th><th>Region</th><th>Status</th><th>Started</th></tr></thead>
+        <tbody>${runRow(run)}</tbody>
+      </table>`;
+    }
+  }
+
+  function updateRunRow(runId, status) {
+    const row = document.getElementById(`row-${runId}`);
+    if (!row) return;
+    const pill = row.querySelector('.status-pill');
+    if (pill) {
+      const cls = { pending: 's-pending', running: 's-running', completed: 's-completed',
+                    failed: 's-failed', blocked: 's-blocked' };
+      pill.className = `status-pill ${cls[status] || ''}`;
+      pill.textContent = status;
+    }
+  }
+
+  // Init
+  renderRuns(INITIAL_RUNS);
+</script>
+</body>
+</html>
