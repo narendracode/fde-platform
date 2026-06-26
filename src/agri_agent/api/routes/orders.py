@@ -86,13 +86,16 @@ class ApproveRequest(BaseModel):
 @router.get("")
 async def list_orders(
     status_filter: str | None = Query(None, alias="status"),
+    limit: int | None = Query(None, ge=1, le=1000),
     session: AsyncSession = Depends(get_session),
     _: str = Depends(verify_api_key),
 ):
-    """List orders. Optionally filter by status (pending, pending_review, ready_to_dispatch, dispatched)."""
+    """List orders. Optionally filter by status. Use limit to cap results."""
     q = select(Order).order_by(Order.due_date.asc(), Order.order_amount_usd.desc())
     if status_filter:
         q = q.where(Order.status == status_filter)
+    if limit is not None:
+        q = q.limit(limit)
     rows = await session.execute(q)
     return [_order_out(o) for o in rows.scalars().all()]
 

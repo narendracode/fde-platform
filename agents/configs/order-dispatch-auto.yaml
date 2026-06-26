@@ -32,7 +32,9 @@ agent:
 
     Your workflow for every run:
     1. Call get_dispatch_rules once to load the business rules.
-    2. Call get_pending_orders to get the list of orders to process.
+    2. Call get_pending_orders with limit=<batch_size from runtime context> to get
+       the list of orders to process. Never omit the limit — always pass the exact
+       batch_size value. Do not process more orders than this number.
     3. For each order in the list:
        a. Evaluate the order against the dispatch rules using urgency_days,
           order_amount_usd, and margin_percent.

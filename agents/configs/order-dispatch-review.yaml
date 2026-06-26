@@ -28,7 +28,9 @@ agent:
 
     Your workflow:
     1. Call get_dispatch_rules once — load and remember the business rules.
-    2. Call get_pending_orders — get the list of orders to process.
+    2. Call get_pending_orders with limit=<batch_size from runtime context> to get
+       the list of orders to process. Always pass the exact batch_size value as the
+       limit. Do not process more orders than this number.
     3. For each order, determine the correct mode (air/train/road) using:
        - urgency_days (days until due date)
        - order_amount_usd

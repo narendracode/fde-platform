@@ -32,18 +32,22 @@ def _client() -> httpx.Client:
 # ── Tools ──────────────────────────────────────────────────────────────────────
 
 @tool
-def get_pending_orders() -> str:
-    """Retrieve all orders currently in 'pending' status.
+def get_pending_orders(limit: int = 50) -> str:
+    """Retrieve pending orders up to the specified limit.
 
-    Returns a JSON list of orders. Each order includes:
-      order_ref, retailer_name, medicine_name, quantity,
-      order_amount_usd, margin_percent, urgency_days (days until due date),
-      and id (needed to dispatch or recommend).
+    Returns a JSON list of orders sorted by urgency (soonest due date first).
+    Each order includes: order_ref, retailer_name, medicine_name, quantity,
+    order_amount_usd, margin_percent, urgency_days (days until due date),
+    and id (needed to dispatch or recommend).
 
     Call this first to discover what needs to be processed.
+
+    Args:
+        limit: Maximum number of orders to return. Pass the batch_size value
+               from the runtime context. Defaults to 50.
     """
     with _client() as c:
-        resp = c.get("/api/v1/orders", params={"status": "pending"})
+        resp = c.get("/api/v1/orders", params={"status": "pending", "limit": limit})
         resp.raise_for_status()
         orders = resp.json()
     if not orders:
