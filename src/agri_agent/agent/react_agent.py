@@ -219,6 +219,18 @@ def run_agent(
                 "otel_trace_url": jaeger_url(_tid),
             }
 
+        # ── Supervisor agents: dispatch inside this span so OTel trace is live ─
+        if config.type == "supervisor":
+            from agri_agent.agent.supervisor_agent import run_supervisor
+            result = run_supervisor(config, user_message, extra_context)
+            span.set_attribute("tokens.input", result.get("input_tokens", 0))
+            span.set_attribute("tokens.output", result.get("output_tokens", 0))
+            span.set_attribute("cost.usd", result.get("cost_usd", 0.0))
+            span.set_attribute("tool.count", 0)
+            span.set_attribute("elapsed.seconds", result.get("elapsed_seconds", 0.0))
+            span.set_attribute("agent.blocked", False)
+            return result
+
         agent = build_agent(config)
 
         # Resolve declared inputs: validate required params, apply defaults, cast types.

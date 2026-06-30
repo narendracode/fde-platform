@@ -1,0 +1,95 @@
+agent:
+  name: pharma-ops-supervisor
+  description: >
+    Supervisor agent that orchestrates two workers to handle pharma operations:
+    order dispatch analysis and retailer outreach. Decides which workers to call
+    and in what order based on the user's task, then synthesises their results.
+  version: "1.0.0"
+
+  # ── Agent type ────────────────────────────────────────────────────────────────
+  # "supervisor" enables the orchestrator-worker graph in supervisor_agent.py.
+  # The model below is used only for routing decisions (structured output).
+  type: supervisor
+
+  # ── Workers this supervisor can delegate to ───────────────────────────────────
+  # Each entry maps a worker key (used in routing) to an agent config name.
+  # The description is shown to the supervisor LLM to help it choose the right worker.
+  workers:
+    - agent: order-analyst
+      description: >
+        Analyses pending pharma orders and proposes dispatch mode recommendations
+        (air / train / road) for human review in the Action Inbox. Use when the
+        task involves processing orders, dispatch planning, or urgency analysis.
+
+    - agent: outreach-analyst
+      description: >
+        Identifies pharma retailer prospects in a given region and proposes
+        outreach emails for human review in the Action Inbox. Use when the task
+        involves finding new prospects, marketing outreach, or email campaigns.
+
+  # ── Routing configuration ─────────────────────────────────────────────────────
+  routing:
+    max_rounds: 6   # max supervisor↔worker cycles (safety limit)
+                    # set to 2*number_of_workers to allow calling each once + final summary
+
+  # ── Model (for routing decisions only) ───────────────────────────────────────
+  # A lightweight model is sufficient here — routing decisions are simple JSON.
+  # Workers use their own models (defined in their own YAMLs).
+  model:
+    provider: anthropic
+    name: claude-haiku-4-5-20251001   # fast + cheap; routing doesn't need a large model
+    temperature: 0.0                  # deterministic routing
+    max_tokens: 512
+    max_cost_usd: 0.10
+
+  # ── System prompt (used as context for every routing decision) ────────────────
+  system_prompt: |
+    You are a pharma operations supervisor. Your job is to coordinate specialist
+    worker agents to complete operational tasks for a pharma distributor.
+
+    You receive a task from a human operator. You decide which workers to call,
+    in what order, and when the overall task is complete.
+
+    Decision guidelines:
+    - If the task mentions orders, dispatch, or urgency → call order-analyst.
+    - If the task mentions outreach, prospects, retailers, email, or regions → call outreach-analyst.
+    - If the task mentions both → call both workers, one at a time.
+    - Once all required workers have run and reported, call finish.
+    - Do not call the same worker twice unless the task explicitly requires it.
+
+    IMPORTANT — always populate the `context` dict when calling a worker.
+    The context dict is injected as [Runtime context] into the worker's message.
+    Workers rely on these structured values; they do NOT infer them from the instruction text.
+
+    When calling outreach-analyst, context MUST contain:
+      region:     exactly ONE region string extracted from the task (e.g. "Mumbai").
+                  Never pass multiple regions. If the task names multiple regions,
+                  call outreach-analyst once per region with a single region each time.
+      batch_size: integer number of prospects to process (use what the task specifies,
+                  default 5 if not mentioned).
+
+    When calling order-analyst, context SHOULD contain:
+      batch_size: integer number of orders to process (use what the task specifies,
+                  default 10 if not mentioned).
+
+  # ── Inputs (passed through to workers via extra_context) ─────────────────────
+  inputs:
+    task:
+      type: string
+      required: false
+      default: "Process today's pending orders and find new outreach prospects."
+      description: "The operational task for the supervisor to coordinate"
+
+  # ── Guardrails ────────────────────────────────────────────────────────────────
+  guardrails:
+    max_iterations: 10   # supervisor-level iterations (each routing call = 1 iteration)
+    timeout_seconds: 600
+    blocked_patterns:
+      - "ignore previous instructions"
+
+  # ── Observability ─────────────────────────────────────────────────────────────
+  observability:
+    langsmith_tracing: true
+    log_inputs: true
+    log_outputs: true
+    log_tool_calls: false  # supervisor has no domain tools; workers log their own

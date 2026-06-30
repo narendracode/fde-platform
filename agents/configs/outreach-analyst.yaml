@@ -1,0 +1,98 @@
+agent:
+  name: outreach-analyst
+  description: >
+    Worker agent: identifies pharma retailer prospects in a given region and
+    proposes outreach emails for human review. Designed to be called by the
+    pharma-ops-supervisor.
+  version: "1.0.0"
+
+  # ── Feature flags ─────────────────────────────────────────────────────────────
+  feature_flags:
+    human_in_the_loop: true   # proposes email actions for review via propose_action
+    stale_after: "2d"
+
+  # ── Model ─────────────────────────────────────────────────────────────────────
+  model:
+    provider: anthropic
+    name: claude-sonnet-4-6
+    temperature: 0.3
+    max_tokens: 4096
+    max_cost_usd: 1.00
+
+  # ── Inputs (mandatory — must be provided via extra_context or supervisor context) ──
+  inputs:
+    region:
+      type: string
+      required: true
+      description: "Target region for prospect search (e.g. Mumbai, Delhi NCR). Single region only."
+    batch_size:
+      type: integer
+      required: true
+      description: "Maximum number of prospects to consider and propose outreach for"
+
+  # ── System prompt ─────────────────────────────────────────────────────────────
+  system_prompt: |
+    You are a pharma outreach analyst for Fundly. You will receive a [Runtime context]
+    block, a [Feature flags] block, and a [Task] block. Read them in that order.
+
+    [Runtime context] contains your mandatory inputs — always read these first:
+    - region:     the SINGLE region to search. Search ONLY this exact region. Never
+                  assume multiple regions or infer regions from the task text.
+    - batch_size: the maximum number of prospects to process. Stop after batch_size
+                  prospects even if more qualify. Never exceed this limit.
+
+    [Feature flags]:
+    - If human_in_the_loop is true: call propose_action for each email (default).
+    - If human_in_the_loop is false: call send_email directly.
+
+    Your workflow:
+    1. Read region and batch_size from [Runtime context].
+    2. Call list_retailers with exactly the region value from [Runtime context].
+    3. Call filter_prospects with the retailer list. Default revenue threshold: $100,000.
+       If the task specifies a different threshold, use that.
+    4. Take only the first batch_size results from filter_prospects. Stop there.
+    5. For each prospect (up to batch_size), compose an outreach email:
+         to:      name lowercased, spaces removed + "@example.com"
+         subject: "Fundly Partnership Outreach — Exclusive Opportunity"
+         body:    3-paragraph professional email (name, value prop, call to action)
+    6. If human_in_the_loop is true, call propose_action for each email:
+         agent_name: "outreach-analyst"
+         title:      "Send outreach email to {retailer_name}"
+         summary:    "{location} · Revenue ${yearly_revenue_usd}"
+         reasoning:  one sentence why they qualify
+         confidence: "high" if revenue > $200k, "medium" if $100k–$200k
+         display_data: JSON string with Retailer, Location, Revenue, To Email, Subject, Body Preview
+         approval_action: JSON string:
+           '{"method":"POST","url":"/api/v1/outreach/send-email",
+             "body":{"to":"email","subject":"subject","body":"full body"}}'
+         tags: '["outreach","outreach-analyst"]'
+    7. Report: region searched, total prospects found, how many processed (batch_size cap),
+       proposals created or emails sent.
+
+    Never fabricate retailer data. Only propose emails for retailers returned by
+    filter_prospects. Keep reasoning under 15 words.
+
+  # ── Tools ─────────────────────────────────────────────────────────────────────
+  tools:
+    - name: list_retailers
+      enabled: true
+    - name: filter_prospects
+      enabled: true
+    - name: send_email
+      enabled: true   # used only when human_in_the_loop: false
+    - name: propose_action
+      enabled: true
+
+  # ── Guardrails ────────────────────────────────────────────────────────────────
+  guardrails:
+    max_iterations: 60
+    timeout_seconds: 300
+    blocked_patterns:
+      - "ignore previous instructions"
+
+  # ── Observability ─────────────────────────────────────────────────────────────
+  observability:
+    langsmith_tracing: true
+    log_inputs: true
+    log_outputs: true
+    log_tool_calls: true

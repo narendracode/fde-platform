@@ -67,10 +67,24 @@ class InputParam(BaseModel):
         return str(value)
 
 
+class WorkerRef(BaseModel):
+    """Reference to a worker agent used by a supervisor."""
+    agent: str          # agent name — must match a YAML config filename/name
+    description: str = ""  # shown to the supervisor LLM to help it choose the right worker
+
+
+class RoutingConfig(BaseModel):
+    """Supervisor routing behaviour."""
+    max_rounds: int = 5   # max supervisor↔worker cycles before hard stop
+
+
 class AgentConfig(BaseModel):
     name: str
     description: str = ""
     version: str = "1.0.0"
+    # "react" = standard ReAct agent (default)
+    # "supervisor" = orchestrates a set of worker agents
+    type: Literal["react", "supervisor"] = "react"
     model: ModelConfig = ModelConfig()
     system_prompt: str = "You are a helpful AI assistant."
     inputs: dict[str, InputParam] = {}
@@ -78,6 +92,9 @@ class AgentConfig(BaseModel):
     guardrails: GuardrailsConfig = GuardrailsConfig()
     observability: ObservabilityConfig = ObservabilityConfig()
     feature_flags: dict[str, Any] = {}
+    # Supervisor-only fields (ignored for react agents)
+    workers: list[WorkerRef] = []
+    routing: RoutingConfig = RoutingConfig()
 
     @field_validator("name")
     @classmethod
