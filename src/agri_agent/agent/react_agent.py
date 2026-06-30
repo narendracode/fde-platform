@@ -103,6 +103,29 @@ def _cost_from_langsmith(run_id: str) -> float:
         return 0.0
 
 
+def _metrics_from_langsmith(run_id: str) -> dict[str, Any]:
+    """Read cost + token counts from a LangSmith run in a single API call.
+
+    Used by supervisor runs where token counts can't be read from message
+    usage_metadata (supervisor and worker nodes both append synthetic AIMessages).
+    Returns zeroed dict on any failure.
+    """
+    client = _get_ls_client()
+    if not client:
+        return {"cost_usd": 0.0, "input_tokens": 0, "output_tokens": 0}
+    _wait_traces()
+    try:
+        run = client.read_run(run_id)
+        return {
+            "cost_usd": float(run.total_cost or 0.0),
+            "input_tokens": int(run.prompt_tokens or 0),
+            "output_tokens": int(run.completion_tokens or 0),
+        }
+    except Exception as exc:
+        _log.warning("Could not read LangSmith metrics for run %s: %s", run_id, exc)
+        return {"cost_usd": 0.0, "input_tokens": 0, "output_tokens": 0}
+
+
 # ── Model factory ─────────────────────────────────────────────────────────────
 
 def _build_model(model_cfg):

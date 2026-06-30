@@ -298,7 +298,7 @@ def run_supervisor(
     """
     import time, uuid
     from langchain_core.runnables import RunnableConfig
-    from agri_agent.agent.react_agent import _cost_from_langsmith, _langsmith_url
+    from agri_agent.agent.react_agent import _metrics_from_langsmith, _langsmith_url
     from agri_agent.telemetry import current_trace_id, jaeger_url
 
     graph = build_supervisor_graph(config)
@@ -346,19 +346,19 @@ def run_supervisor(
         for m in result["messages"]
     ]
 
-    # Sum token usage across all messages (supervisor LLM + all worker LLMs)
+    # Token counts and cost come from LangSmith — not from message usage_metadata.
+    # All messages in the supervisor state are synthetic AIMessages constructed by
+    # the supervisor/worker nodes; none carry usage_metadata.  LangSmith aggregates
+    # prompt_tokens + completion_tokens across the full run tree (supervisor LLM +
+    # all worker LLM calls) in a single read_run call.
     input_tokens = output_tokens = 0
-    for msg in result["messages"]:
-        meta = getattr(msg, "usage_metadata", None)
-        if meta:
-            input_tokens += meta.get("input_tokens", 0)
-            output_tokens += meta.get("output_tokens", 0)
-
-    # LangSmith cost + trace URL (aggregates cost across all child runs)
     cost_usd = 0.0
     langsmith_trace_url = None
     if config.observability.langsmith_tracing:
-        cost_usd = _cost_from_langsmith(str(ls_run_id))
+        metrics = _metrics_from_langsmith(str(ls_run_id))
+        input_tokens = metrics["input_tokens"]
+        output_tokens = metrics["output_tokens"]
+        cost_usd = metrics["cost_usd"]
         langsmith_trace_url = _langsmith_url(str(ls_run_id))
 
     # OTel trace — valid because run_agent opens a span before calling us
