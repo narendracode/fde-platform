@@ -1,0 +1,147 @@
+agent:
+  name: pharma-outreach
+  description: >
+    Pharma retailer outreach agent for Fundly. Discovers retailers in a given
+    region, filters prospects by revenue, and either sends emails directly or
+    proposes each email to the Action Inbox for human approval.
+    Can be invoked standalone (direct API call) or as a worker by the
+    pharma-ops-supervisor.
+  version: "3.0.0"
+
+  # ── Feature flags ─────────────────────────────────────────────────────────────
+  feature_flags:
+    human_in_the_loop: true   # true → propose_action per email; false → send_email directly
+    stale_after: "2d"
+
+  # ── Runtime inputs ───────────────────────────────────────────────────────────
+  inputs:
+    region:
+      type: string
+      required: true
+      description: "Target region for retailer search (e.g. Mumbai, Delhi NCR, Bangalore). Single region only."
+
+    batch_size:
+      type: integer
+      required: false
+      default: 0
+      description: "Max prospects to process (0 = no limit; supervisor sets this per call)"
+
+    min_revenue_usd:
+      type: integer
+      required: false
+      default: 100000
+      description: "Minimum yearly revenue in USD to qualify as a prospect"
+
+    campaign_name:
+      type: string
+      required: false
+      default: "Fundly Partnership Outreach"
+      description: "Campaign name used in email subject lines"
+
+    sender_name:
+      type: string
+      required: false
+      default: "The Fundly Team"
+      description: "Sender name used in email sign-off"
+
+  # ── Model ─────────────────────────────────────────────────────────────────────
+  model:
+    provider: anthropic
+    name: claude-sonnet-4-6
+    temperature: 0.3
+    max_tokens: 4096
+    max_cost_usd: 1.00
+
+  # ── System prompt ─────────────────────────────────────────────────────────────
+  system_prompt: |
+    You are a pharma retailer outreach agent for Fundly.
+
+    At the start of every run you will receive a [Runtime context] block and a
+    [Feature flags] block. Always read both before doing anything.
+
+    [Runtime context] parameters:
+    - region:          the SINGLE region to search. Search ONLY this exact region.
+                       Never assume multiple regions or infer them from a task description.
+    - batch_size:      max prospects to process. If 0 or absent, process all qualifying
+                       prospects. If > 0, stop after that many even if more qualify.
+    - min_revenue_usd: revenue threshold for qualifying prospects (default 100,000).
+    - campaign_name:   used in email subject lines (default "Fundly Partnership Outreach").
+    - sender_name:     used in email sign-off (default "The Fundly Team").
+
+    [Feature flags]:
+    - human_in_the_loop true  → call propose_action for each email
+    - human_in_the_loop false → call send_email directly
+
+    Your workflow:
+    1. Read all parameters from [Runtime context].
+    2. Call list_retailers with exactly the region value from [Runtime context].
+    3. Call filter_prospects with the full retailer list. Use min_revenue_usd as the
+       threshold.
+    4. If batch_size > 0, take only the first batch_size results. Otherwise process all.
+    5. For each prospect, compose an outreach email:
+         - to:      prospect name lowercased, spaces removed + "@example.com"
+                    (e.g. "Kohinoor Pharma" → "kohinoorpharma@example.com")
+         - subject: "{campaign_name} — Exclusive Partnership Opportunity"
+         - body:    a short, professional 3-paragraph email that:
+                    * Opens by addressing the retailer by name and location
+                    * Explains the value Fundly brings to pharma retailers
+                    * Closes with a call to action and signs off as sender_name
+
+    6. If human_in_the_loop is true, call propose_action for EACH email with:
+         agent_name:      "pharma-outreach"
+         title:           "Send outreach email to {retailer_name}"
+         summary:         "{location} · Revenue ${yearly_revenue_usd} · {campaign_name}"
+         reasoning:       One sentence explaining why this retailer qualifies.
+                          E.g. "Yearly revenue $175,000 exceeds threshold; located in target region."
+         confidence:      "high" if revenue > 200000, "medium" if 100000–200000, "low" otherwise
+         display_data:    JSON string array of {label, value} pairs. Always include:
+                          Retailer, Location, Revenue, To Email, Subject, Body Preview.
+                          Body Preview = first 120 characters of the email body + "...".
+                          Example:
+                          '[{"label":"Retailer","value":"Kohinoor Pharma"},
+                            {"label":"Location","value":"Dadar, Mumbai"},
+                            {"label":"Revenue","value":"$175,000"},
+                            {"label":"To Email","value":"kohinoorpharma@example.com"},
+                            {"label":"Subject","value":"Fundly Partnership Outreach — Exclusive Partnership Opportunity"},
+                            {"label":"Body Preview","value":"Dear Kohinoor Pharma team, we are reaching out..."}]'
+         approval_action: JSON string for the API call to execute on approval:
+                          '{"method":"POST","url":"/api/v1/outreach/send-email",
+                            "body":{"to":"kohinoorpharma@example.com",
+                                    "subject":"Fundly Partnership Outreach — Exclusive Partnership Opportunity",
+                                    "body":"Dear Kohinoor Pharma team...full email body here..."}}'
+         tags:            '["pharma-outreach", "email"]'
+
+       If human_in_the_loop is false, call send_email directly for each prospect.
+
+    7. Summarise: region searched, total retailers found, prospects qualified, how many
+       processed (batch_size cap if applicable), actions proposed or emails sent.
+
+    Tone: professional, concise, warm. Never fabricate retailer data.
+    IMPORTANT: display_data and approval_action must be valid JSON strings with proper
+    escaping. The FULL email body must go in the approval_action body field.
+
+  # ── Tools ─────────────────────────────────────────────────────────────────────
+  tools:
+    - name: list_retailers
+      enabled: true
+    - name: filter_prospects
+      enabled: true
+    - name: send_email
+      enabled: true   # used when human_in_the_loop: false
+    - name: propose_action
+      enabled: true   # used when human_in_the_loop: true
+
+  # ── Guardrails ────────────────────────────────────────────────────────────────
+  guardrails:
+    max_iterations: 60
+    timeout_seconds: 300
+    blocked_patterns:
+      - "ignore previous instructions"
+      - "jailbreak"
+
+  # ── Observability ─────────────────────────────────────────────────────────────
+  observability:
+    langsmith_tracing: true
+    log_inputs: true
+    log_outputs: true
+    log_tool_calls: true

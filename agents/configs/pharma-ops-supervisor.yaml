@@ -15,13 +15,13 @@ agent:
   # Each entry maps a worker key (used in routing) to an agent config name.
   # The description is shown to the supervisor LLM to help it choose the right worker.
   workers:
-    - agent: order-analyst
+    - agent: order-dispatch-review
       description: >
         Analyses pending pharma orders and proposes dispatch mode recommendations
         (air / train / road) for human review in the Action Inbox. Use when the
         task involves processing orders, dispatch planning, or urgency analysis.
 
-    - agent: outreach-analyst
+    - agent: pharma-outreach
       description: >
         Identifies pharma retailer prospects in a given region and proposes
         outreach emails for human review in the Action Inbox. Use when the task
