@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sandhar — Supervisor View</title>
+  <title>Sandhar — Supervisor Floor View</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -18,15 +18,15 @@
             border-bottom: 3px solid transparent; }
     nav a:hover { color: #a5b4fc; }
     nav a.active { color: #a5b4fc; border-bottom-color: #4f46e5; }
-    .main { max-width: 1100px; margin: 0 auto; padding: 24px 28px; }
+    .main { max-width: 1200px; margin: 0 auto; padding: 24px 28px; }
     h2 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
     .subtitle { color: #6b7280; font-size: 13px; margin-bottom: 24px; }
-    .card { background: #fff; border-radius: 10px; padding: 24px;
+    .card { background: #fff; border-radius: 10px; padding: 20px 24px;
             box-shadow: 0 1px 4px rgba(0,0,0,.08); border: 1px solid #e5e7eb; margin-bottom: 20px; }
-    .filter-bar { display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap; }
-    .form-group { display: flex; flex-direction: column; gap: 5px; }
-    label { font-size: 12px; font-weight: 600; color: #374151; text-transform: uppercase; letter-spacing: .4px; }
-    input[type=date], select { padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; }
+    .filter-bar { display: flex; gap: 20px; align-items: flex-end; flex-wrap: wrap; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    label { font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: .5px; }
+    input[type=date] { padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; }
     .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px;
            border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer;
            border: none; transition: opacity .15s; }
@@ -35,35 +35,107 @@
     .btn-outline { background: #fff; color: #1a1a2e; border: 1px solid #d1d5db; }
     .btn-success { background: #16a34a; color: #fff; }
     .btn-warning { background: #d97706; color: #fff; }
+    .btn-danger { background: #dc2626; color: #fff; }
+
+    /* Multi-select pills */
+    .pill-group { display: flex; gap: 6px; flex-wrap: wrap; }
+    .pill { display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px;
+            border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer;
+            border: 2px solid #e5e7eb; background: #fff; color: #6b7280;
+            transition: all .15s; user-select: none; }
+    .pill:hover { border-color: #7c3aed; color: #7c3aed; }
+    .pill.active { background: #7c3aed; border-color: #7c3aed; color: #fff; }
+    .pill-all { border-color: #1a1a2e; }
+    .pill-all.active { background: #1a1a2e; border-color: #1a1a2e; }
+
+    /* Combination cards */
+    .combo-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
+    .combo-card { background: #fff; border-radius: 12px; border: 1px solid #e5e7eb;
+                  box-shadow: 0 1px 4px rgba(0,0,0,.06); overflow: hidden; }
+    .combo-header { display: flex; align-items: center; justify-content: space-between;
+                    padding: 14px 20px; border-bottom: 1px solid #f3f4f6; background: #fafafa; }
+    .combo-title { font-size: 15px; font-weight: 700; }
+    .combo-meta { font-size: 12px; color: #6b7280; }
+    .combo-body { padding: 20px; }
+
+    /* Target card */
+    .target-grid { display: grid; grid-template-columns: auto 1fr; gap: 0;
+                   background: linear-gradient(135deg, #7c3aed, #4f46e5);
+                   border-radius: 10px; overflow: hidden; margin-bottom: 20px; color: #fff; }
+    .target-main { padding: 20px 24px; }
+    .target-qty { font-size: 52px; font-weight: 800; line-height: 1; }
+    .target-label { font-size: 12px; opacity: .75; margin-top: 4px; }
+    .target-meta { padding: 20px 24px; border-left: 1px solid rgba(255,255,255,.15);
+                   display: flex; flex-direction: column; gap: 10px; min-width: 220px; }
+    .target-meta-row { display: flex; flex-direction: column; gap: 2px; }
+    .target-meta-key { font-size: 10px; font-weight: 700; text-transform: uppercase;
+                       letter-spacing: .5px; opacity: .65; }
+    .target-meta-val { font-size: 14px; font-weight: 600; }
+
+    .info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+                 gap: 12px; margin-bottom: 20px; }
+    .info-item { background: #f9fafb; border-radius: 8px; padding: 12px 14px;
+                 border: 1px solid #f3f4f6; }
+    .info-key { font-size: 10px; font-weight: 700; color: #9ca3af; text-transform: uppercase;
+                letter-spacing: .5px; margin-bottom: 4px; }
+    .info-val { font-size: 14px; font-weight: 600; color: #1a1a2e; }
+
+    /* Table */
     table { width: 100%; border-collapse: collapse; }
-    th { text-align: left; padding: 8px 12px; font-size: 11px; font-weight: 700; color: #888;
-         text-transform: uppercase; background: #fafafa; border-bottom: 1px solid #eee; }
-    td { padding: 10px 12px; border-bottom: 1px solid #f5f5f5; }
-    .target-card { background: linear-gradient(135deg, #7c3aed, #6d28d9); color: white;
-                   border-radius: 10px; padding: 20px; margin-bottom: 20px; }
-    .target-qty { font-size: 48px; font-weight: 700; }
-    .target-label { font-size: 12px; opacity: .8; margin-top: 4px; }
-    .actuals-form { display: none; }
+    th { text-align: left; padding: 8px 12px; font-size: 10px; font-weight: 700; color: #9ca3af;
+         text-transform: uppercase; letter-spacing: .4px; background: #fafafa;
+         border-bottom: 1px solid #f3f4f6; }
+    td { padding: 10px 12px; border-bottom: 1px solid #f9fafb; font-size: 13px; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #fafafa; }
+
+    /* Badges */
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+    .badge-green { background: #dcfce7; color: #16a34a; }
+    .badge-yellow { background: #fef9c3; color: #854d0e; }
+    .badge-red { background: #fee2e2; color: #dc2626; }
+    .badge-purple { background: #f3e8ff; color: #7c3aed; }
+    .badge-blue { background: #dbeafe; color: #1d4ed8; }
+    .badge-gray { background: #f3f4f6; color: #6b7280; }
+
+    /* Skill dots */
+    .skill-dots { display: flex; gap: 3px; }
+    .skill-dot { width: 8px; height: 8px; border-radius: 50%; background: #e5e7eb; }
+    .skill-dot.filled { background: #7c3aed; }
+
+    /* Actuals */
+    .actuals-form { display: none; margin-top: 16px; }
     .actuals-form.open { display: block; }
-    .form-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+    .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+                 gap: 12px; margin-bottom: 16px; }
     .form-group input { padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;
                         font-size: 14px; width: 100%; }
     .achievement-bar { height: 8px; background: #e5e7eb; border-radius: 4px; margin-top: 8px; }
     .achievement-fill { height: 100%; border-radius: 4px; transition: width .5s; }
+
+    .empty { color: #9ca3af; font-size: 13px; text-align: center; padding: 40px; }
+    .no-plan { background: #fff; border-radius: 10px; border: 1px dashed #d1d5db;
+               padding: 32px; text-align: center; color: #9ca3af; }
+    .no-plan strong { display: block; color: #6b7280; font-size: 14px; margin-bottom: 6px; }
+
     .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 100; }
     .modal-overlay.open { display: flex; align-items: center; justify-content: center; }
     .modal { background: #fff; border-radius: 12px; padding: 28px; max-width: 460px; width: 100%; }
     .modal-title { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
     .modal select, .modal textarea { width: 100%; padding: 8px 12px; border: 1px solid #d1d5db;
                                       border-radius: 6px; font-size: 14px; margin-bottom: 12px; }
+    .modal label { display: block; font-size: 11px; font-weight: 700; color: #6b7280;
+                   text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
     .modal textarea { height: 80px; resize: vertical; }
-    .empty { color: #9ca3af; font-size: 13px; text-align: center; padding: 40px; }
+
     .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #e5e7eb;
                border-top-color: #7c3aed; border-radius: 50%; animation: spin .6s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     #toast { position: fixed; bottom: 24px; right: 24px; background: #1a1a2e; color: white;
              padding: 10px 18px; border-radius: 8px; font-size: 13px; display: none;
              box-shadow: 0 4px 12px rgba(0,0,0,.2); z-index: 999; }
+    .section-title { font-size: 14px; font-weight: 700; margin-bottom: 14px; color: #374151; }
+    .actions-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
   </style>
 </head>
 <body>
@@ -74,69 +146,73 @@
     <span style="font-size:12px;color:#8899bb;">Smart Production Planning</span>
   </div>
   <nav>
-    <a href="/sandhar">🏭 Command Centre</a>
-    <a href="/sandhar/plan">📋 Plan</a>
-    <a href="/sandhar/floor" class="active">👷 Floor</a>
-    <a href="/sandhar/master">🗂 Master Data</a>
-    <a href="/sandhar/simulation">🎮 Simulation</a>
+    <a href="/sandhar">Command Centre</a>
+    <a href="/sandhar/plan">Plan</a>
+    <a href="/sandhar/floor" class="active">Floor</a>
+    <a href="/sandhar/master">Master Data</a>
+    <a href="/sandhar/simulation">Simulation</a>
     <span style="width:1px;height:20px;background:#334;margin:auto 4px;"></span>
-    <a href="/approvals">🔔 Approvals</a>
+    <a href="/approvals">Approvals</a>
   </nav>
 </header>
 
 <div class="main">
   <h2>Supervisor Floor View</h2>
-  <p class="subtitle">View your line plan, record actuals, and report disruptions</p>
+  <p class="subtitle">View line plans, record actuals, and report disruptions for selected lines and shifts</p>
 
   <div class="card">
     <div class="filter-bar">
       <div class="form-group">
-        <label>Date</label>
+        <label>Plan Date</label>
         <input type="date" id="floor-date" value="{{ today }}">
       </div>
       <div class="form-group">
-        <label>Line</label>
-        <select id="floor-line"><option value="">Select line…</option></select>
+        <label>Lines</label>
+        <div class="pill-group" id="line-pills">
+          <div class="pill pill-all active" data-value="all" onclick="togglePill(this,'line')">All Lines</div>
+        </div>
       </div>
       <div class="form-group">
-        <label>Shift</label>
-        <select id="floor-shift">
-          <option value="A">Shift A (06:00–14:00)</option>
-          <option value="B">Shift B (14:00–22:00)</option>
-          <option value="C">Shift C (22:00–06:00)</option>
-        </select>
+        <label>Shifts</label>
+        <div class="pill-group">
+          <div class="pill pill-all active" data-value="all" onclick="togglePill(this,'shift')">All</div>
+          <div class="pill" data-value="A" onclick="togglePill(this,'shift')">A (06–14)</div>
+          <div class="pill" data-value="B" onclick="togglePill(this,'shift')">B (14–22)</div>
+          <div class="pill" data-value="C" onclick="togglePill(this,'shift')">C (22–06)</div>
+        </div>
       </div>
-      <button class="btn btn-primary" onclick="loadFloorPlan()">Load Plan</button>
+      <button class="btn btn-primary" onclick="loadAll()">Load Plans</button>
     </div>
   </div>
 
   <div id="floor-content">
-    <div class="empty">Select a date, line, and shift to load the floor plan</div>
+    <div class="empty">Select date, lines, and shifts then click Load Plans</div>
   </div>
 </div>
 
 <!-- Disruption Modal -->
 <div class="modal-overlay" id="disruption-modal">
   <div class="modal">
-    <div class="modal-title">⚠️ Report Disruption</div>
-    <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Type</label>
+    <div class="modal-title">Report Disruption</div>
+    <label>Type</label>
     <select id="disr-type">
       <option value="machine_breakdown">Machine Breakdown</option>
       <option value="material_shortage">Material Shortage</option>
       <option value="production_delay">Production Delay</option>
       <option value="skill_gap">Skill Gap</option>
+      <option value="manpower_shortage">Manpower Shortage</option>
     </select>
-    <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Severity</label>
+    <label>Severity</label>
     <select id="disr-severity">
       <option value="critical">Critical</option>
       <option value="high">High</option>
       <option value="medium">Medium</option>
     </select>
-    <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Description</label>
+    <label>Description</label>
     <textarea id="disr-message" placeholder="Describe the disruption…"></textarea>
     <div style="display:flex;gap:10px;">
-      <button class="btn btn-warning" onclick="submitDisruption()">Submit Report</button>
-      <button class="btn btn-outline" onclick="document.getElementById('disruption-modal').classList.remove('open')">Cancel</button>
+      <button class="btn btn-warning" onclick="submitDisruption()">Submit</button>
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
     </div>
   </div>
 </div>
@@ -146,159 +222,386 @@
 <script>
 const API_KEY = '{{ api_key }}';
 const H = {'X-API-Key': API_KEY, 'Content-Type': 'application/json'};
-let currentPlanDetailId = null;
-let currentLineId = null;
-let currentPlanDate = null;
-let currentShiftCode = null;
 
-function toast(msg, ok=true) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.style.background = ok ? '#16a34a' : '#dc2626';
-  t.style.display = 'block';
-  setTimeout(() => t.style.display = 'none', 3000);
+let allLines = [];
+let activeDisruptionLine = null;
+let activeDisruptionDate = null;
+let activeDisruptionShift = null;
+// Track plan detail IDs per combo key for actuals submission
+const planDetailIds = {};
+
+// ── URL state ─────────────────────────────────────────────────────────────────
+function getParams() {
+  const p = new URLSearchParams(location.search);
+  return {
+    date: p.get('date') || '{{ today }}',
+    lines: p.get('lines') ? p.get('lines').split(',') : ['all'],
+    shifts: p.get('shifts') ? p.get('shifts').split(',') : ['all'],
+  };
 }
 
-// Load lines into selector
-async function loadLines() {
-  try {
-    const resp = await fetch('/api/v1/sandhar/lines', {headers: H});
-    const lines = await resp.json();
-    const sel = document.getElementById('floor-line');
-    for (const l of lines) {
-      const opt = document.createElement('option');
-      opt.value = l.id;
-      opt.textContent = `${l.line_code} — ${l.line_name}`;
-      sel.appendChild(opt);
-    }
-  } catch(e) {}
+function pushParams() {
+  const date = document.getElementById('floor-date').value;
+  const lines = getSelectedPills('line').join(',') || 'all';
+  const shifts = getSelectedPills('shift').join(',') || 'all';
+  const url = new URL(location.href);
+  url.searchParams.set('date', date);
+  url.searchParams.set('lines', lines);
+  url.searchParams.set('shifts', shifts);
+  history.pushState({}, '', url.toString());
 }
 
-async function loadFloorPlan() {
-  const planDate = document.getElementById('floor-date').value;
-  const lineId = document.getElementById('floor-line').value;
-  const shiftCode = document.getElementById('floor-shift').value;
-  if (!lineId) { toast('Please select a line', false); return; }
+// ── Pill multi-select ─────────────────────────────────────────────────────────
+function getSelectedPills(group) {
+  const container = group === 'line' ? document.getElementById('line-pills')
+                                     : document.querySelector('.pill-group:not(#line-pills)');
+  const active = [...container.querySelectorAll('.pill.active')].map(p => p.dataset.value);
+  if (active.includes('all')) return ['all'];
+  return active;
+}
 
-  currentPlanDate = planDate;
-  currentShiftCode = shiftCode;
-  currentLineId = lineId;
-
-  document.getElementById('floor-content').innerHTML = '<div class="empty"><span class="spinner"></span> Loading floor plan…</div>';
-
-  try {
-    const resp = await fetch(`/api/v1/sandhar/execution/supervisor-view?line_id=${lineId}&shift_code=${shiftCode}&plan_date=${planDate}`, {headers: H});
-    if (!resp.ok) {
-      document.getElementById('floor-content').innerHTML = '<div class="empty">No approved plan found for this line/shift/date. Generate and approve a plan first.</div>';
-      return;
-    }
-    const data = await resp.json();
-    renderFloorPlan(data);
-  } catch(e) {
-    document.getElementById('floor-content').innerHTML = '<div class="empty">Error loading floor plan: ' + e.message + '</div>';
+function togglePill(el, group) {
+  const container = el.closest('.pill-group');
+  if (el.dataset.value === 'all') {
+    container.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+    el.classList.add('active');
+  } else {
+    const allPill = container.querySelector('[data-value="all"]');
+    if (allPill) allPill.classList.remove('active');
+    el.classList.toggle('active');
+    // If none selected, fall back to All
+    const anyActive = [...container.querySelectorAll('.pill:not([data-value="all"])')].some(p => p.classList.contains('active'));
+    if (!anyActive && allPill) allPill.classList.add('active');
   }
 }
 
-function renderFloorPlan(data) {
-  // API returns: { header, details: [...], operators: [...] }
-  const planDetail = (data.details && data.details.length > 0) ? data.details[0] : {};
-  const allocations = data.operators || [];
-  currentPlanDetailId = planDetail.id;
-  const plannedQty = planDetail.planned_qty;
-  const qtyDisplay = (plannedQty !== null && plannedQty !== undefined)
-    ? plannedQty.toLocaleString() + ' units'
-    : `${planDetail.planned_manpower || 0} operators assigned`;
-
-  let html = `
-    <div class="target-card">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-        <div>
-          <div style="font-size:12px;opacity:.8;margin-bottom:4px;">PRODUCTION TARGET</div>
-          <div class="target-qty">${plannedQty !== null && plannedQty !== undefined ? plannedQty.toLocaleString() : '—'}</div>
-          <div class="target-label">${plannedQty !== null && plannedQty !== undefined ? 'units planned for Shift ' + currentShiftCode : 'Qty not computed — re-run plan to get target'}</div>
-        </div>
-        <div style="text-align:right;">
-          <div style="font-size:12px;opacity:.8;">STATUS</div>
-          <div style="font-size:18px;font-weight:700;margin-top:4px;">${planDetail.status || data.header?.status || 'planned'}</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div style="font-size:15px;font-weight:600;margin-bottom:14px;">Operator Assignments (${allocations.length} operators)</div>
-      ${allocations.length > 0 ? `
-        <table>
-          <thead><tr><th>Employee</th><th>Designation</th><th>Status</th></tr></thead>
-          <tbody>
-            ${allocations.map(a => `<tr>
-              <td>${a.name || a.employee_code || a.employee_id?.substring(0,8)+'…'}</td>
-              <td>${a.designation || '—'}</td>
-              <td><span style="color:#16a34a;">${a.allocation_status || 'Allocated'}</span></td>
-            </tr>`).join('')}
-          </tbody>
-        </table>` : '<div class="empty">No operators allocated</div>'}
-    </div>
-
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-        <div style="font-size:15px;font-weight:600;">📊 Record Actuals</div>
-        <div style="display:flex;gap:10px;">
-          <button class="btn btn-success" onclick="toggleActuals()">Enter Actuals</button>
-          <button class="btn btn-warning" onclick="document.getElementById('disruption-modal').classList.add('open')">⚠️ Report Disruption</button>
-        </div>
-      </div>
-      <div class="actuals-form" id="actuals-form">
-        <div class="form-grid">
-          <div class="form-group"><label>Produced Qty</label><input type="number" id="act-produced" min="0" placeholder="0"></div>
-          <div class="form-group"><label>Rejected Qty</label><input type="number" id="act-rejected" min="0" value="0"></div>
-          <div class="form-group"><label>Rework Qty</label><input type="number" id="act-rework" min="0" value="0"></div>
-          <div class="form-group"><label>Downtime (min)</label><input type="number" id="act-downtime" min="0" value="0"></div>
-          <div class="form-group"><label>Submitted By</label><input type="text" id="act-by" value="Supervisor" placeholder="Your name"></div>
-        </div>
-        <button class="btn btn-primary" onclick="submitActuals()">Submit Actuals</button>
-      </div>
-      <div id="actuals-result" style="margin-top:12px;"></div>
-    </div>
-  `;
-  document.getElementById('floor-content').innerHTML = html;
-}
-
-function toggleActuals() {
-  const form = document.getElementById('actuals-form');
-  form.classList.toggle('open');
-}
-
-async function submitActuals() {
-  if (!currentPlanDetailId) { toast('No plan detail loaded', false); return; }
-  const payload = {
-    produced_qty: parseInt(document.getElementById('act-produced').value) || 0,
-    rejected_qty: parseInt(document.getElementById('act-rejected').value) || 0,
-    rework_qty: parseInt(document.getElementById('act-rework').value) || 0,
-    downtime_minutes: parseInt(document.getElementById('act-downtime').value) || 0,
-    submitted_by: document.getElementById('act-by').value || 'Supervisor',
-  };
-  try {
-    const resp = await fetch(`/api/v1/sandhar/execution/${currentPlanDetailId}/actuals`, {
-      method: 'POST', headers: H, body: JSON.stringify(payload),
+function applyParamsToPills(lines, shifts) {
+  // Shifts
+  const shiftContainer = document.querySelector('.pill-group:not(#line-pills)');
+  shiftContainer.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+  if (shifts.includes('all')) {
+    shiftContainer.querySelector('[data-value="all"]').classList.add('active');
+  } else {
+    shifts.forEach(s => {
+      const p = shiftContainer.querySelector(`[data-value="${s}"]`);
+      if (p) p.classList.add('active');
     });
-    const data = await resp.json();
-    if (resp.ok) {
-      const pct = data.achievement_pct || 0;
-      const color = pct >= 85 ? '#16a34a' : pct >= 70 ? '#d97706' : '#dc2626';
-      document.getElementById('actuals-result').innerHTML = `
-        <div style="background:#f9fafb;border-radius:8px;padding:14px;">
-          <div style="font-size:13px;font-weight:600;margin-bottom:8px;">✅ Actuals Submitted</div>
-          <div style="font-size:28px;font-weight:700;color:${color};">${pct.toFixed(1)}% achieved</div>
-          <div class="achievement-bar"><div class="achievement-fill" style="width:${Math.min(pct,100)}%;background:${color};"></div></div>
-          ${data.alert_created ? '<div style="color:#d97706;font-size:12px;margin-top:8px;">⚠️ Low achievement alert created</div>' : ''}
-        </div>
-      `;
-      document.getElementById('actuals-form').classList.remove('open');
-      toast('Actuals submitted — ' + pct.toFixed(1) + '% achievement');
-    } else {
-      toast(data.detail || 'Submission failed', false);
+  }
+}
+
+// ── Load lines into pill selector ────────────────────────────────────────────
+async function loadLines() {
+  const resp = await fetch('/api/v1/sandhar/lines', {headers: H});
+  allLines = await resp.json();
+  const container = document.getElementById('line-pills');
+  for (const l of allLines) {
+    const pill = document.createElement('div');
+    pill.className = 'pill';
+    pill.dataset.value = l.id;
+    pill.dataset.code = l.line_code;
+    pill.textContent = `${l.line_code} — ${l.line_name}`;
+    pill.onclick = function() { togglePill(this, 'line'); };
+    container.appendChild(pill);
+  }
+
+  // Apply URL params after lines are loaded
+  const params = getParams();
+  document.getElementById('floor-date').value = params.date;
+  applyParamsToPills(params.lines, params.shifts);
+
+  // Apply line pills
+  if (!params.lines.includes('all')) {
+    container.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+    params.lines.forEach(code => {
+      const p = [...container.querySelectorAll('.pill')].find(x => x.dataset.value === code || x.dataset.code === code);
+      if (p) p.classList.add('active');
+    });
+  }
+
+  // Auto-load if params are present
+  if (location.search) loadAll();
+}
+
+// ── Main load ─────────────────────────────────────────────────────────────────
+function resolveSelections() {
+  const date = document.getElementById('floor-date').value;
+  let selectedLines = getSelectedPills('line');
+  let selectedShifts = getSelectedPills('shift');
+
+  if (selectedLines.includes('all')) selectedLines = allLines.map(l => l.id);
+  if (selectedShifts.includes('all')) selectedShifts = ['A', 'B', 'C'];
+
+  return { date, selectedLines, selectedShifts };
+}
+
+async function loadAll() {
+  pushParams();
+  const { date, selectedLines, selectedShifts } = resolveSelections();
+  if (!date) { toast('Please select a date', false); return; }
+
+  document.getElementById('floor-content').innerHTML =
+    '<div class="empty"><span class="spinner"></span> Loading floor plans…</div>';
+
+  const combos = [];
+  for (const lid of selectedLines) {
+    for (const shift of selectedShifts) {
+      combos.push({ lid, shift });
     }
-  } catch(e) { toast('Error: ' + e.message, false); }
+  }
+
+  const results = await Promise.all(combos.map(async ({ lid, shift }) => {
+    try {
+      const resp = await fetch(
+        `/api/v1/sandhar/execution/supervisor-view?line_id=${lid}&shift_code=${shift}&plan_date=${date}`,
+        {headers: H}
+      );
+      const data = await resp.json();
+      const line = allLines.find(l => l.id === lid) || {};
+      return { lid, shift, data, line, ok: resp.ok };
+    } catch(e) {
+      return { lid, shift, data: null, line: allLines.find(l => l.id === lid) || {}, ok: false };
+    }
+  }));
+
+  const hasData = results.some(r => r.ok && r.data?.details?.length > 0);
+  const container = document.createElement('div');
+  container.className = 'combo-grid';
+
+  for (const r of results) {
+    container.appendChild(buildComboCard(r));
+  }
+
+  document.getElementById('floor-content').innerHTML = '';
+  document.getElementById('floor-content').appendChild(container);
+}
+
+// ── Build one combo card ──────────────────────────────────────────────────────
+function buildComboCard({ lid, shift, data, line, ok }) {
+  const wrap = document.createElement('div');
+  wrap.className = 'combo-card';
+  const lineName = line.line_name || line.line_code || lid.substring(0,8);
+  const lineCode = line.line_code || '';
+
+  const shiftLabel = { A: 'Shift A (06:00–14:00)', B: 'Shift B (14:00–22:00)', C: 'Shift C (22:00–06:00)' }[shift] || shift;
+  const confidenceBadge = (c) => ({
+    high: '<span class="badge badge-green">High confidence</span>',
+    medium: '<span class="badge badge-yellow">Medium confidence</span>',
+    low: '<span class="badge badge-red">Low confidence</span>',
+  }[c] || '');
+
+  if (!ok || !data) {
+    wrap.innerHTML = `
+      <div class="combo-header">
+        <div><div class="combo-title">${lineCode} — ${lineName}</div><div class="combo-meta">${shiftLabel}</div></div>
+      </div>
+      <div class="combo-body">
+        <div class="no-plan"><strong>Unable to load plan</strong>Check that the API is reachable.</div>
+      </div>`;
+    return wrap;
+  }
+
+  const header = data.header;
+  const details = data.details || [];
+  const operators = data.operators || [];
+  const det = details[0] || null;
+  const comboKey = `${lid}-${shift}`;
+  if (det?.id) planDetailIds[comboKey] = det.id;
+
+  // Header section
+  let headerHtml = `
+    <div class="combo-header">
+      <div>
+        <div class="combo-title">${lineCode} — ${lineName} &nbsp;·&nbsp; ${shiftLabel}</div>
+        <div class="combo-meta" style="margin-top:3px;">
+          ${header ? `Plan v${header.version} &nbsp;·&nbsp; ${confidenceBadge(header.confidence)} &nbsp;·&nbsp;
+            <span class="badge ${header.status === 'approved' ? 'badge-green' : 'badge-blue'}">${header.status}</span>
+            ${header.approved_at ? ' &nbsp;·&nbsp; Approved ' + new Date(header.approved_at).toLocaleString() : ''}` : ''}
+        </div>
+      </div>
+    </div>`;
+
+  if (!det) {
+    wrap.innerHTML = headerHtml + `
+      <div class="combo-body">
+        <div class="no-plan">
+          <strong>No allocation for this line in ${shiftLabel}</strong>
+          The plan for this date only assigns each line to one shift.
+          Check the other shifts for ${lineCode}.
+        </div>
+      </div>`;
+    return wrap;
+  }
+
+  // Production target section
+  const qty = det.planned_qty;
+  const rate = det.target_rate_per_hour;
+  const targetHtml = `
+    <div class="target-grid">
+      <div class="target-main">
+        <div style="font-size:11px;opacity:.65;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Production Target</div>
+        <div class="target-qty">${qty !== null && qty !== undefined ? qty.toLocaleString() : '—'}</div>
+        <div class="target-label">${qty !== null && qty !== undefined ? 'units planned for ' + shiftLabel : 'Planned qty not computed — re-generate plan'}</div>
+        ${rate ? `<div class="target-label" style="margin-top:8px;opacity:.9;">Target rate: ${rate} units / hour</div>` : ''}
+      </div>
+      <div class="target-meta">
+        ${det.wo_number ? `<div class="target-meta-row">
+          <div class="target-meta-key">Work Order</div>
+          <div class="target-meta-val">${det.wo_number}
+            <span class="badge badge-${det.priority === 'high' ? 'red' : det.priority === 'medium' ? 'yellow' : 'gray'}" style="margin-left:6px;">${det.priority || ''}</span>
+          </div>
+        </div>` : ''}
+        ${det.product_name ? `<div class="target-meta-row">
+          <div class="target-meta-key">Product</div>
+          <div class="target-meta-val">${det.product_name} <span style="opacity:.7;font-size:12px;">(${det.product_code})</span></div>
+        </div>` : ''}
+        ${det.customer_name ? `<div class="target-meta-row">
+          <div class="target-meta-key">Customer</div>
+          <div class="target-meta-val">${det.customer_name}
+            ${det.customer_priority ? `<span class="badge badge-purple" style="margin-left:6px;">${det.customer_priority}</span>` : ''}
+          </div>
+        </div>` : ''}
+        ${det.due_date ? `<div class="target-meta-row">
+          <div class="target-meta-key">Due Date</div>
+          <div class="target-meta-val">${det.due_date}</div>
+        </div>` : ''}
+        ${det.standard_cycle_time ? `<div class="target-meta-row">
+          <div class="target-meta-key">Cycle Time</div>
+          <div class="target-meta-val">${det.standard_cycle_time} min / unit</div>
+        </div>` : ''}
+        ${det.supervisor_name ? `<div class="target-meta-row">
+          <div class="target-meta-key">Supervisor</div>
+          <div class="target-meta-val">${det.supervisor_name} <span style="opacity:.7;font-size:12px;">(${det.supervisor_code})</span></div>
+        </div>` : ''}
+      </div>
+    </div>`;
+
+  // Manpower summary
+  const gap = (det.standard_manpower || 0) - (det.planned_manpower || 0);
+  const manpowerHtml = `
+    <div class="info-grid">
+      <div class="info-item">
+        <div class="info-key">Planned Manpower</div>
+        <div class="info-val">${det.planned_manpower ?? '—'}</div>
+      </div>
+      <div class="info-item">
+        <div class="info-key">Standard Manpower</div>
+        <div class="info-val">${det.standard_manpower ?? '—'}</div>
+      </div>
+      <div class="info-item">
+        <div class="info-key">Manpower Gap</div>
+        <div class="info-val" style="color:${gap > 0 ? '#dc2626' : '#16a34a'};">${gap > 0 ? '-' + gap + ' short' : 'Fully staffed'}</div>
+      </div>
+      <div class="info-item">
+        <div class="info-key">Order Qty</div>
+        <div class="info-val">${det.order_qty?.toLocaleString() ?? '—'}</div>
+      </div>
+    </div>`;
+
+  // Skill level helper
+  const skillDots = (level) => {
+    const max = 4; const labels = ['','Trainee','Basic','Skilled','Expert'];
+    return `<div class="skill-dots" title="${labels[level] || ''}">${Array.from({length: max}, (_,i) =>
+      `<div class="skill-dot${i < (level||0) ? ' filled' : ''}"></div>`).join('')}</div>`;
+  };
+
+  // Operator table
+  const operators_html = operators.length > 0 ? `
+    <table>
+      <thead>
+        <tr>
+          <th>Code</th><th>Name</th><th>Designation</th><th>Grade</th>
+          <th>Home Shift</th><th>Skill Level</th><th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${operators.map(o => `<tr>
+          <td style="font-family:monospace;font-size:12px;">${o.employee_code || '—'}</td>
+          <td style="font-weight:600;">${o.name || '—'}</td>
+          <td>${o.designation || '—'}</td>
+          <td>${o.grade || '—'}</td>
+          <td>${o.shift_group ? 'Shift ' + o.shift_group : '—'}</td>
+          <td>${skillDots(o.skill_level)}</td>
+          <td><span class="badge badge-green">${o.allocation_status || 'Allocated'}</span></td>
+        </tr>`).join('')}
+      </tbody>
+    </table>` : '<div class="empty" style="padding:20px;">No operators allocated to this line</div>';
+
+  const comboKey2 = `${lid}-${shift}`;
+  const bodyHtml = `
+    <div class="combo-body">
+      ${targetHtml}
+      ${manpowerHtml}
+      <div class="section-title">Operator Assignments (${operators.length} of ${det.planned_manpower ?? '?'} planned)</div>
+      ${operators_html}
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid #f3f4f6;">
+        <div class="actions-row">
+          <button class="btn btn-success" onclick="toggleActuals('${comboKey2}')">Enter Actuals</button>
+          <button class="btn btn-warning" onclick="openDisruption('${lid}','${data.plan_date}','${shift}')">Report Disruption</button>
+        </div>
+        <div class="actuals-form" id="actuals-${comboKey2}">
+          <div class="form-grid">
+            <div class="form-group"><label>Produced Qty</label><input type="number" id="act-produced-${comboKey2}" min="0" placeholder="${qty || 0}"></div>
+            <div class="form-group"><label>Rejected Qty</label><input type="number" id="act-rejected-${comboKey2}" min="0" value="0"></div>
+            <div class="form-group"><label>Rework Qty</label><input type="number" id="act-rework-${comboKey2}" min="0" value="0"></div>
+            <div class="form-group"><label>Downtime (min)</label><input type="number" id="act-downtime-${comboKey2}" min="0" value="0"></div>
+            <div class="form-group"><label>Submitted By</label><input type="text" id="act-by-${comboKey2}" value="Supervisor" placeholder="Your name"></div>
+          </div>
+          <button class="btn btn-primary" onclick="submitActuals('${comboKey2}')">Submit Actuals</button>
+        </div>
+        <div id="actuals-result-${comboKey2}" style="margin-top:12px;"></div>
+      </div>
+    </div>`;
+
+  wrap.innerHTML = headerHtml + bodyHtml;
+  return wrap;
+}
+
+// ── Actuals ───────────────────────────────────────────────────────────────────
+function toggleActuals(key) {
+  document.getElementById('actuals-' + key).classList.toggle('open');
+}
+
+async function submitActuals(key) {
+  const detId = planDetailIds[key];
+  if (!detId) { toast('No plan detail for this line/shift', false); return; }
+  const payload = {
+    produced_qty: parseInt(document.getElementById('act-produced-' + key).value) || 0,
+    rejected_qty: parseInt(document.getElementById('act-rejected-' + key).value) || 0,
+    rework_qty: parseInt(document.getElementById('act-rework-' + key).value) || 0,
+    downtime_minutes: parseInt(document.getElementById('act-downtime-' + key).value) || 0,
+    submitted_by: document.getElementById('act-by-' + key).value || 'Supervisor',
+  };
+  const resp = await fetch(`/api/v1/sandhar/execution/${detId}/actuals`, {
+    method: 'POST', headers: H, body: JSON.stringify(payload),
+  });
+  const data = await resp.json();
+  if (resp.ok) {
+    const pct = data.achievement_pct || 0;
+    const color = pct >= 85 ? '#16a34a' : pct >= 70 ? '#d97706' : '#dc2626';
+    document.getElementById('actuals-result-' + key).innerHTML = `
+      <div style="background:#f9fafb;border-radius:8px;padding:14px;">
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px;">Actuals Submitted</div>
+        <div style="font-size:28px;font-weight:700;color:${color};">${pct.toFixed(1)}% achieved</div>
+        <div class="achievement-bar"><div class="achievement-fill" style="width:${Math.min(pct,100)}%;background:${color};"></div></div>
+        ${data.alert_created ? '<div style="color:#d97706;font-size:12px;margin-top:8px;">Low achievement alert created</div>' : ''}
+      </div>`;
+    document.getElementById('actuals-' + key).classList.remove('open');
+    toast('Actuals submitted — ' + pct.toFixed(1) + '% achievement');
+  } else {
+    toast(data.detail || 'Submission failed', false);
+  }
+}
+
+// ── Disruption ────────────────────────────────────────────────────────────────
+function openDisruption(lineId, planDate, shift) {
+  activeDisruptionLine = lineId;
+  activeDisruptionDate = planDate;
+  activeDisruptionShift = shift;
+  document.getElementById('disruption-modal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('disruption-modal').classList.remove('open');
 }
 
 async function submitDisruption() {
@@ -306,24 +609,32 @@ async function submitDisruption() {
     alert_type: document.getElementById('disr-type').value,
     alert_message: document.getElementById('disr-message').value,
     severity: document.getElementById('disr-severity').value,
-    plan_date: currentPlanDate || '{{ today }}',
-    shift_code: currentShiftCode || 'A',
-    related_line_id: currentLineId || '',
+    plan_date: activeDisruptionDate || document.getElementById('floor-date').value,
+    shift_code: activeDisruptionShift || 'A',
+    related_line_id: activeDisruptionLine || '',
   };
-  try {
-    const resp = await fetch('/api/v1/sandhar/execution/disruption', {
-      method: 'POST', headers: H, body: JSON.stringify(payload),
-    });
-    if (resp.ok) {
-      document.getElementById('disruption-modal').classList.remove('open');
-      document.getElementById('disr-message').value = '';
-      toast('Disruption reported');
-    } else {
-      toast('Failed to report disruption', false);
-    }
-  } catch(e) { toast('Error: ' + e.message, false); }
+  const resp = await fetch('/api/v1/sandhar/execution/disruption', {
+    method: 'POST', headers: H, body: JSON.stringify(payload),
+  });
+  if (resp.ok) {
+    closeModal();
+    document.getElementById('disr-message').value = '';
+    toast('Disruption reported');
+  } else {
+    toast('Failed to report disruption', false);
+  }
 }
 
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function toast(msg, ok=true) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = ok ? '#16a34a' : '#dc2626';
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 3200);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
 loadLines();
 </script>
 </body>

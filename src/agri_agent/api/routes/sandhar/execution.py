@@ -13,13 +13,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agri_agent.api.dependencies import verify_api_key
 from agri_agent.db.models import (
     SandharAlert,
+    SandharCustomer,
     SandharDailyKpi,
     SandharEmployee,
+    SandharEmployeeSkill,
     SandharLine,
     SandharPlanDetail,
     SandharPlanHeader,
+    SandharProduct,
     SandharProductionActual,
     SandharResourceAllocation,
+    SandharWorkOrder,
 )
 from agri_agent.db.session import get_session
 
@@ -210,18 +214,70 @@ async def supervisor_view(
     )
     allocations = alloc_result.scalars().all()
 
-    # Enrich operators with employee info
+    # Enrich details with WO / product / customer / supervisor info
+    enriched_details = []
+    for det in details:
+        entry = dict(det)
+        if det.get("wo_id"):
+            wo_r = await session.execute(select(SandharWorkOrder).where(SandharWorkOrder.id == uuid.UUID(det["wo_id"])))
+            wo = wo_r.scalar_one_or_none()
+            if wo:
+                entry["wo_number"] = wo.wo_number
+                entry["priority"] = wo.priority
+                entry["due_date"] = wo.due_date.isoformat()
+                entry["order_qty"] = wo.order_qty
+                if wo.product_id:
+                    prod_r = await session.execute(select(SandharProduct).where(SandharProduct.id == wo.product_id))
+                    prod = prod_r.scalar_one_or_none()
+                    if prod:
+                        entry["product_code"] = prod.product_code
+                        entry["product_name"] = prod.product_name
+                        entry["standard_cycle_time"] = prod.standard_cycle_time
+                        entry["standard_manpower"] = prod.standard_manpower
+                        if prod.standard_cycle_time and prod.standard_cycle_time > 0:
+                            entry["target_rate_per_hour"] = round(60 / prod.standard_cycle_time, 1)
+                if wo.customer_id:
+                    cust_r = await session.execute(select(SandharCustomer).where(SandharCustomer.id == wo.customer_id))
+                    cust = cust_r.scalar_one_or_none()
+                    if cust:
+                        entry["customer_name"] = cust.customer_name
+                        entry["customer_priority"] = cust.priority_level
+        if det.get("supervisor_employee_id"):
+            sup_r = await session.execute(select(SandharEmployee).where(SandharEmployee.id == uuid.UUID(det["supervisor_employee_id"])))
+            sup = sup_r.scalar_one_or_none()
+            if sup:
+                entry["supervisor_name"] = sup.name
+                entry["supervisor_code"] = sup.employee_code
+        enriched_details.append(entry)
+
+    # Enrich operators with employee info and skill level
     operator_list = []
     for alloc in allocations:
         emp_result = await session.execute(
-            select(SandharEmployee).where(SandharEmployee.id == alloc.employee_id)  # type: ignore[arg-type]
+            select(SandharEmployee).where(SandharEmployee.id == alloc.employee_id)
         )
         emp = emp_result.scalar_one_or_none()
+        skill_level = None
+        if emp:
+            skill_r = await session.execute(
+                select(SandharEmployeeSkill).where(
+                    and_(
+                        SandharEmployeeSkill.employee_id == emp.id,
+                        SandharEmployeeSkill.line_id == lid,
+                        SandharEmployeeSkill.active_flag == True,
+                    )
+                ).limit(1)
+            )
+            skill = skill_r.scalar_one_or_none()
+            skill_level = skill.skill_level if skill else None
         operator_list.append({
             "employee_id": str(alloc.employee_id),
             "employee_code": emp.employee_code if emp else None,
             "name": emp.name if emp else None,
             "designation": emp.designation if emp else None,
+            "grade": emp.grade if emp else None,
+            "shift_group": emp.shift_group if emp else None,
+            "skill_level": skill_level,
             "allocation_status": alloc.allocation_status,
         })
 
@@ -234,8 +290,9 @@ async def supervisor_view(
             "version": header.version,
             "status": header.status,
             "confidence": header.confidence,
+            "approved_at": header.approved_at.isoformat() if header.approved_at else None,
         },
-        "details": details,
+        "details": enriched_details,
         "operators": operator_list,
     }
 

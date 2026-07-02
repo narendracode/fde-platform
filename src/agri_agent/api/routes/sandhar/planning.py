@@ -409,6 +409,11 @@ async def create_plan_header(
         .limit(1)
     )
     existing = existing_result.scalar_one_or_none()
+
+    # Idempotency: return the existing draft rather than creating a duplicate version
+    if existing and existing.status == "draft":
+        return _header_out(existing)
+
     next_version = (existing.version + 1) if existing else 1
 
     header = SandharPlanHeader(
