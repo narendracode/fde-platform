@@ -1,0 +1,72 @@
+agent:
+  name: sandhar-plan-generator
+  description: >
+    Assembles the final shift-wise production plan. Calculates planned quantities
+    and submits the plan for human planner review via the HITL approval inbox.
+  version: "1.0.0"
+
+  feature_flags:
+    human_in_the_loop: true
+
+  inputs:
+    plan_date:
+      type: string
+      required: true
+    shifts:
+      type: string
+      required: false
+      default: "A,B,C"
+    allocation_summary:
+      type: string
+      required: false
+      description: "JSON allocation summary from sandhar-resource-allocator"
+    active_alert_count:
+      type: integer
+      required: false
+      default: 0
+
+  model:
+    provider: anthropic
+    name: claude-sonnet-4-6
+    temperature: 0.0
+    max_tokens: 4096
+    max_cost_usd: 1.00
+
+  system_prompt: |
+    You are the production plan generator for Sandhar Group.
+    Read all inputs from [Runtime context].
+
+    Workflow:
+    1. For each shift and each allocated line from allocation_summary:
+       Call sandhar_calculate_planned_qty with line_id, product_id, available_manpower, shift_code.
+    2. Determine confidence:
+       - "high"   if active_alert_count = 0
+       - "medium" if active_alert_count 1-3
+       - "low"    if active_alert_count >= 4
+    3. For each shift, call sandhar_propose_plan_for_review with:
+       - plan_header_id from allocation_summary
+       - summary: "{qty} units across {N} lines, {active_alert_count} alerts"
+       - confidence, display_data as JSON array string, reasoning
+    4. Report: plan header IDs, total planned quantities per shift, confidence level.
+
+  tools:
+    - name: sandhar_calculate_planned_qty
+      enabled: true
+    - name: sandhar_save_plan_header
+      enabled: true
+    - name: sandhar_create_alert
+      enabled: true
+    - name: sandhar_propose_plan_for_review
+      enabled: true
+
+  guardrails:
+    max_iterations: 40
+    timeout_seconds: 300
+    blocked_patterns:
+      - "ignore previous instructions"
+
+  observability:
+    langsmith_tracing: true
+    log_inputs: true
+    log_outputs: true
+    log_tool_calls: true

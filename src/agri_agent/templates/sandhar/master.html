@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sandhar — Master Data</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+           background: #f0f2f5; color: #1a1a2e; font-size: 14px; }
+    header { background: #1a1a2e; color: #fff; padding: 0 28px; height: 56px;
+             display: flex; align-items: stretch; justify-content: space-between; }
+    .header-brand { display: flex; align-items: center; gap: 10px; }
+    header h1 { font-size: 17px; font-weight: 700; }
+    nav { display: flex; align-items: stretch; }
+    nav a { display: flex; align-items: center; padding: 0 14px; color: #8899bb;
+            text-decoration: none; font-size: 13px; font-weight: 500;
+            border-bottom: 3px solid transparent; }
+    nav a:hover { color: #a5b4fc; }
+    nav a.active { color: #a5b4fc; border-bottom-color: #4f46e5; }
+    .main { max-width: 1200px; margin: 0 auto; padding: 24px 28px; }
+    h2 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+    .subtitle { color: #6b7280; font-size: 13px; margin-bottom: 24px; }
+    .tabs { display: flex; gap: 4px; margin-bottom: -1px; flex-wrap: wrap; }
+    .tab { padding: 9px 18px; border: 1px solid #e5e7eb; border-bottom: none;
+           border-radius: 8px 8px 0 0; background: #e5e7eb; cursor: pointer;
+           font-size: 13px; font-weight: 500; color: #6b7280; }
+    .tab.active { background: #fff; color: #1a1a2e; font-weight: 700; position: relative; top: 1px; }
+    .panel { display: none; background: #fff; border: 1px solid #e5e7eb;
+             border-radius: 0 10px 10px 10px; padding: 20px; }
+    .panel.active { display: block; }
+    .panel-header { display: flex; justify-content: space-between; align-items: center;
+                    margin-bottom: 16px; }
+    .panel-title { font-size: 15px; font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; padding: 8px 12px; font-size: 11px; font-weight: 700; color: #888;
+         text-transform: uppercase; background: #fafafa; border-bottom: 1px solid #eee; white-space: nowrap; }
+    td { padding: 10px 12px; border-bottom: 1px solid #f5f5f5; font-size: 13px; }
+    tr:last-child td { border-bottom: none; }
+    .badge { padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
+    .badge-green { background: #dcfce7; color: #14532d; }
+    .badge-red { background: #fee2e2; color: #991b1b; }
+    .badge-gray { background: #f3f4f6; color: #6b7280; }
+    .badge-medium { background: #fef3c7; color: #92400e; }
+    .btn { display: inline-flex; align-items: center; gap: 5px; padding: 7px 15px;
+           border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;
+           border: none; text-decoration: none; transition: opacity .15s; }
+    .btn:hover { opacity: .85; }
+    .btn-primary { background: #7c3aed; color: #fff; }
+    .btn-outline { background: #fff; color: #1a1a2e; border: 1px solid #d1d5db; }
+    .empty { color: #9ca3af; font-size: 13px; text-align: center; padding: 32px; }
+    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #e5e7eb;
+               border-top-color: #7c3aed; border-radius: 50%; animation: spin .6s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 100; }
+    .modal-overlay.open { display: flex; align-items: center; justify-content: center; }
+    .modal { background: #fff; border-radius: 12px; padding: 28px; min-width: 380px; max-width: 520px; width: 100%; }
+    .modal-title { font-size: 16px; font-weight: 700; margin-bottom: 20px; }
+    .form-group { margin-bottom: 14px; }
+    .form-group label { display: block; font-size: 12px; font-weight: 600; color: #374151;
+                         text-transform: uppercase; letter-spacing: .4px; margin-bottom: 5px; }
+    .form-group input, .form-group select { width: 100%; padding: 8px 12px;
+      border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+    #toast { position: fixed; bottom: 24px; right: 24px; background: #1a1a2e; color: white;
+             padding: 10px 18px; border-radius: 8px; font-size: 13px; display: none;
+             box-shadow: 0 4px 12px rgba(0,0,0,.2); z-index: 999; }
+    .skill-level { display: inline-block; width: 60px; text-align: center; padding: 2px 0;
+                   border-radius: 4px; font-size: 12px; font-weight: 700; }
+    .skill-3 { background: #dcfce7; color: #14532d; }
+    .skill-2 { background: #fef3c7; color: #92400e; }
+    .skill-1 { background: #fee2e2; color: #991b1b; }
+  </style>
+</head>
+<body>
+<header>
+  <div class="header-brand">
+    <h1>Sandhar Group</h1>
+    <span style="width:1px;height:20px;background:#334;"></span>
+    <span style="font-size:12px;color:#8899bb;">Smart Production Planning</span>
+  </div>
+  <nav>
+    <a href="/sandhar">🏭 Command Centre</a>
+    <a href="/sandhar/plan">📋 Plan</a>
+    <a href="/sandhar/floor">👷 Floor</a>
+    <a href="/sandhar/master" class="active">🗂 Master Data</a>
+    <a href="/sandhar/simulation">🎮 Simulation</a>
+    <span style="width:1px;height:20px;background:#334;margin:auto 4px;"></span>
+    <a href="/approvals">🔔 Approvals</a>
+  </nav>
+</header>
+
+<div class="main">
+  <h2>Master Data</h2>
+  <p class="subtitle">Employees, Lines, Machines, Products, Skills &amp; Shifts</p>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('employees')">👷 Employees</div>
+    <div class="tab" onclick="switchTab('lines')">🏭 Lines</div>
+    <div class="tab" onclick="switchTab('machines')">⚙️ Machines</div>
+    <div class="tab" onclick="switchTab('products')">📦 Products</div>
+    <div class="tab" onclick="switchTab('skills')">🎯 Skills</div>
+    <div class="tab" onclick="switchTab('shifts')">🕐 Shifts</div>
+    <div class="tab" onclick="switchTab('workorders')">📋 Work Orders</div>
+  </div>
+
+  <!-- Employees -->
+  <div class="panel active" id="panel-employees">
+    <div class="panel-header">
+      <span class="panel-title">Employees</span>
+      <div id="emp-count" style="color:#6b7280;font-size:12px;"></div>
+    </div>
+    <div id="emp-table"><div class="empty"><span class="spinner"></span></div></div>
+  </div>
+
+  <!-- Lines -->
+  <div class="panel" id="panel-lines">
+    <div class="panel-header">
+      <span class="panel-title">Assembly Lines</span>
+      <div id="line-count" style="color:#6b7280;font-size:12px;"></div>
+    </div>
+    <div id="lines-table"><div class="empty"><span class="spinner"></span></div></div>
+  </div>
+
+  <!-- Machines -->
+  <div class="panel" id="panel-machines">
+    <div class="panel-header">
+      <span class="panel-title">Machines</span>
+      <div id="machine-count" style="color:#6b7280;font-size:12px;"></div>
+    </div>
+    <div id="machines-table"><div class="empty"><span class="spinner"></span></div></div>
+  </div>
+
+  <!-- Products -->
+  <div class="panel" id="panel-products">
+    <div class="panel-header">
+      <span class="panel-title">Products</span>
+      <div id="product-count" style="color:#6b7280;font-size:12px;"></div>
+    </div>
+    <div id="products-table"><div class="empty"><span class="spinner"></span></div></div>
+  </div>
+
+  <!-- Skills -->
+  <div class="panel" id="panel-skills">
+    <div class="panel-header">
+      <span class="panel-title">Skill Matrix</span>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <span id="skills-count" style="color:#6b7280;font-size:12px;"></span>
+        <a href="#" onclick="showExpiring()">View Expiring →</a>
+      </div>
+    </div>
+    <div id="skills-table"><div class="empty"><span class="spinner"></span></div></div>
+  </div>
+
+  <!-- Shifts -->
+  <div class="panel" id="panel-shifts">
+    <div class="panel-header">
+      <span class="panel-title">Shifts</span>
+      <div id="shift-count" style="color:#6b7280;font-size:12px;"></div>
+    </div>
+    <div id="shifts-table"><div class="empty"><span class="spinner"></span></div></div>
+  </div>
+
+  <!-- Work Orders -->
+  <div class="panel" id="panel-workorders">
+    <div class="panel-header">
+      <span class="panel-title">Work Orders</span>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span id="wo-count" style="color:#6b7280;font-size:12px;"></span>
+        <select id="wo-filter-status" onchange="loadWorkOrders(true)" style="padding:5px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
+          <option value="">All statuses</option>
+          <option value="open" selected>Open</option>
+          <option value="in_progress">In Progress</option>
+          <option value="completed">Completed</option>
+          <option value="on_hold">On Hold</option>
+        </select>
+      </div>
+    </div>
+    <div id="wo-table"><div class="empty"><span class="spinner"></span></div></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const API_KEY = '{{ api_key }}';
+const H = {'X-API-Key': API_KEY};
+
+function toast(msg, ok=true) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = ok ? '#16a34a' : '#dc2626';
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 3000);
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    const names = ['employees','lines','machines','products','skills','shifts','workorders'];
+    t.classList.toggle('active', names[i] === name);
+  });
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById(`panel-${name}`).classList.add('active');
+  loaders[name]();
+}
+
+const loaded = {};
+async function loadEmployees() {
+  if (loaded.employees) return;
+  loaded.employees = true;
+  try {
+    const r = await fetch('/api/v1/sandhar/employees?limit=200', {headers: H});
+    const rows = await r.json();
+    document.getElementById('emp-count').textContent = rows.length + ' total';
+    if (!rows.length) { document.getElementById('emp-table').innerHTML = '<div class="empty">No employees. Run simulation seed first.</div>'; return; }
+    let html = '<table><thead><tr><th>Code</th><th>Name</th><th>Designation</th><th>Grade</th><th>Shift Group</th><th>Status</th></tr></thead><tbody>';
+    for (const e of rows) {
+      html += `<tr>
+        <td><code>${e.employee_code}</code></td>
+        <td>${e.name}</td>
+        <td>${e.designation || '—'}</td>
+        <td>${e.grade || '—'}</td>
+        <td>${e.shift_group || '—'}</td>
+        <td><span class="badge ${e.status === 'active' ? 'badge-green' : 'badge-red'}">${e.status || 'unknown'}</span></td>
+      </tr>`;
+    }
+    document.getElementById('emp-table').innerHTML = html + '</tbody></table>';
+  } catch(e) { document.getElementById('emp-table').innerHTML = '<div class="empty">Could not load employees</div>'; }
+}
+
+async function loadLines() {
+  if (loaded.lines) return;
+  loaded.lines = true;
+  try {
+    const r = await fetch('/api/v1/sandhar/lines', {headers: H});
+    const rows = await r.json();
+    document.getElementById('line-count').textContent = rows.length + ' lines';
+    let html = '<table><thead><tr><th>Code</th><th>Name</th><th>Capacity/Shift</th><th>Area</th><th>Status</th></tr></thead><tbody>';
+    for (const l of rows) {
+      html += `<tr>
+        <td><code>${l.line_code}</code></td>
+        <td>${l.line_name}</td>
+        <td>${l.capacity_per_shift || '—'}</td>
+        <td>${l.area || '—'}</td>
+        <td><span class="badge ${l.status === 'active' ? 'badge-green' : 'badge-gray'}">${l.status || 'unknown'}</span></td>
+      </tr>`;
+    }
+    document.getElementById('lines-table').innerHTML = html + '</tbody></table>';
+  } catch(e) { document.getElementById('lines-table').innerHTML = '<div class="empty">Error loading lines</div>'; }
+}
+
+async function loadMachines() {
+  if (loaded.machines) return;
+  loaded.machines = true;
+  try {
+    const r = await fetch('/api/v1/sandhar/machines', {headers: H});
+    const rows = await r.json();
+    document.getElementById('machine-count').textContent = rows.length + ' machines';
+    let html = '<table><thead><tr><th>Code</th><th>Name</th><th>Type</th><th>Line</th><th>Status</th></tr></thead><tbody>';
+    for (const m of rows) {
+      html += `<tr>
+        <td><code>${m.machine_code}</code></td>
+        <td>${m.machine_name}</td>
+        <td>${m.machine_type || '—'}</td>
+        <td>${m.line_id ? m.line_id.substring(0,8)+'…' : '—'}</td>
+        <td><span class="badge ${m.status === 'active' ? 'badge-green' : 'badge-red'}">${m.status === 'active' ? 'Operational' : (m.status || 'unknown')}</span></td>
+      </tr>`;
+    }
+    document.getElementById('machines-table').innerHTML = html + '</tbody></table>';
+  } catch(e) { document.getElementById('machines-table').innerHTML = '<div class="empty">Error loading machines</div>'; }
+}
+
+async function loadProducts() {
+  if (loaded.products) return;
+  loaded.products = true;
+  try {
+    const r = await fetch('/api/v1/sandhar/products', {headers: H});
+    const rows = await r.json();
+    document.getElementById('product-count').textContent = rows.length + ' products';
+    let html = '<table><thead><tr><th>Code</th><th>Name</th><th>Cycle Time</th><th>Min Manpower</th></tr></thead><tbody>';
+    for (const p of rows) {
+      html += `<tr>
+        <td><code>${p.product_code}</code></td>
+        <td>${p.product_name}</td>
+        <td>${p.standard_cycle_time || '—'} min</td>
+        <td>${p.standard_manpower || '—'}</td>
+      </tr>`;
+    }
+    document.getElementById('products-table').innerHTML = html + '</tbody></table>';
+  } catch(e) { document.getElementById('products-table').innerHTML = '<div class="empty">Error loading products</div>'; }
+}
+
+async function loadSkills() {
+  if (loaded.skills) return;
+  loaded.skills = true;
+  try {
+    const r = await fetch('/api/v1/sandhar/skills?limit=200', {headers: H});
+    const rows = await r.json();
+    document.getElementById('skills-count').textContent = rows.length + ' records';
+    let html = '<table><thead><tr><th>Employee</th><th>Product</th><th>Skill Level</th><th>Certified</th><th>Expiry</th></tr></thead><tbody>';
+    for (const s of rows) {
+      const expiry = s.certification_expiry || '—';
+      const isExpiring = expiry !== '—' && new Date(expiry) < new Date(Date.now() + 30*86400000);
+      html += `<tr>
+        <td>${s.employee_id ? s.employee_id.substring(0,8)+'…' : '—'}</td>
+        <td>${s.product_id ? s.product_id.substring(0,8)+'…' : '—'}</td>
+        <td><span class="skill-level skill-${s.skill_level}">${s.skill_level}</span></td>
+        <td><span class="badge ${s.is_certified ? 'badge-green' : 'badge-gray'}">${s.is_certified ? 'Yes' : 'No'}</span></td>
+        <td style="${isExpiring ? 'color:#d97706;font-weight:600;' : ''}">${expiry}</td>
+      </tr>`;
+    }
+    document.getElementById('skills-table').innerHTML = html + '</tbody></table>';
+  } catch(e) { document.getElementById('skills-table').innerHTML = '<div class="empty">Error loading skills</div>'; }
+}
+
+async function loadShifts() {
+  if (loaded.shifts) return;
+  loaded.shifts = true;
+  try {
+    const r = await fetch('/api/v1/sandhar/shifts', {headers: H});
+    const rows = await r.json();
+    document.getElementById('shift-count').textContent = rows.length + ' shifts';
+    let html = '<table><thead><tr><th>Code</th><th>Name</th><th>Start</th><th>End</th><th>Duration</th><th>Status</th></tr></thead><tbody>';
+    for (const s of rows) {
+      html += `<tr>
+        <td><strong>${s.shift_code}</strong></td>
+        <td>${s.shift_name}</td>
+        <td>${s.start_time}</td>
+        <td>${s.end_time}</td>
+        <td>${s.working_hours}h</td>
+        <td><span class="badge badge-green">Active</span></td>
+      </tr>`;
+    }
+    document.getElementById('shifts-table').innerHTML = html + '</tbody></table>';
+  } catch(e) { document.getElementById('shifts-table').innerHTML = '<div class="empty">Error loading shifts</div>'; }
+}
+
+async function showExpiring() {
+  try {
+    const r = await fetch('/api/v1/sandhar/skills/expiring?days_ahead=30', {headers: H});
+    const rows = await r.json();
+    if (!rows.length) { toast('No certifications expiring in 30 days'); return; }
+    toast(`${rows.length} certification(s) expiring in 30 days`, false);
+  } catch(e) { toast('Error', false); }
+}
+
+async function loadWorkOrders(force=false) {
+  if (loaded.workorders && !force) return;
+  loaded.workorders = true;
+  document.getElementById('wo-table').innerHTML = '<div class="empty"><span class="spinner"></span> Loading…</div>';
+  const status = document.getElementById('wo-filter-status').value;
+  const qs = status ? `?status=${status}&limit=200` : '?limit=200';
+  try {
+    // Fetch WOs and lookup data in parallel
+    const [woResp, prodResp, custResp] = await Promise.all([
+      fetch('/api/v1/sandhar/work-orders' + qs, {headers: H}),
+      fetch('/api/v1/sandhar/products', {headers: H}),
+      fetch('/api/v1/sandhar/customers', {headers: H}),
+    ]);
+    const rows = await woResp.json();
+    const products = await prodResp.json();
+    const customers = await custResp.json();
+
+    // Build lookup maps
+    const prodMap = Object.fromEntries((products || []).map(p => [p.id, p.product_name + ' (' + p.product_code + ')']));
+    const custMap = Object.fromEntries((customers || []).map(c => [c.id, c.customer_name]));
+
+    document.getElementById('wo-count').textContent = rows.length + ' work orders';
+    if (!rows.length) {
+      document.getElementById('wo-table').innerHTML = '<div class="empty">No work orders found. Run simulation seed first.</div>';
+      return;
+    }
+    const priorityClass = {high:'badge-red', medium:'badge-medium', low:'badge-gray'};
+    const statusClass = {open:'badge-green', in_progress:'badge-medium', completed:'badge-gray', on_hold:'badge-red'};
+    let html = '<table><thead><tr><th>WO Number</th><th>Product</th><th>Customer</th><th>Order Qty</th><th>Due Date</th><th>Priority</th><th>Status</th><th>Quality Hold</th></tr></thead><tbody>';
+    for (const wo of rows) {
+      const pri = wo.priority || 'low';
+      const st = wo.status || 'open';
+      const prodName = prodMap[wo.product_id] || (wo.product_id ? wo.product_id.substring(0,8)+'…' : '—');
+      const custName = custMap[wo.customer_id] || (wo.customer_id ? wo.customer_id.substring(0,8)+'…' : '—');
+      html += `<tr>
+        <td><code style="font-size:12px;">${wo.wo_number}</code></td>
+        <td>${prodName}</td>
+        <td>${custName}</td>
+        <td style="font-weight:600;">${(wo.order_qty || 0).toLocaleString()}</td>
+        <td>${wo.due_date || '—'}</td>
+        <td><span class="badge ${priorityClass[pri] || 'badge-gray'}">${pri}</span></td>
+        <td><span class="badge ${statusClass[st] || 'badge-gray'}">${st}</span></td>
+        <td>${wo.quality_hold ? '<span class="badge badge-red">Hold</span>' : '—'}</td>
+      </tr>`;
+    }
+    document.getElementById('wo-table').innerHTML = html + '</tbody></table>';
+  } catch(e) {
+    document.getElementById('wo-table').innerHTML = '<div class="empty">Could not load work orders</div>';
+  }
+}
+
+const loaders = {
+  employees: loadEmployees,
+  lines: loadLines,
+  machines: loadMachines,
+  products: loadProducts,
+  skills: loadSkills,
+  shifts: loadShifts,
+  workorders: loadWorkOrders,
+};
+
+loadEmployees();
+</script>
+</body>
+</html>

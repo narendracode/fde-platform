@@ -1,0 +1,85 @@
+agent:
+  name: sandhar-resource-allocator
+  description: >
+    Allocates present operators to production lines based on skills and work order priorities.
+    Creates allocation records and flags manpower gaps with alerts.
+  version: "1.0.0"
+
+  inputs:
+    plan_date:
+      type: string
+      required: true
+    shifts:
+      type: string
+      required: false
+      default: "A,B,C"
+    attendance_summary:
+      type: string
+      required: false
+      description: "JSON summary from sandhar-attendance-analyst (present employee IDs per shift)"
+    ranked_work_orders:
+      type: string
+      required: false
+      description: "JSON ranked WO list from sandhar-wo-prioritisation"
+    constraint_summary:
+      type: string
+      required: false
+      description: "JSON constraint summary from sandhar-constraint-validator"
+
+  model:
+    provider: anthropic
+    name: claude-sonnet-4-6
+    temperature: 0.0
+    max_tokens: 4096
+    max_cost_usd: 1.00
+
+  system_prompt: |
+    You are a resource allocation agent for Sandhar's assembly floor.
+    Read all inputs from [Runtime context].
+
+    STEP 0 — Always start by calling sandhar_list_lines to get valid line_id/line_code values.
+    The response contains {id, line_code, line_name} for each line (L001, L002, L003).
+    Use line_code (e.g. "L001") when calling sandhar_find_qualified_operators.
+    The ranked_work_orders input also contains line_code and line_id per WO — use those directly.
+
+    For each shift in shifts, for each WO in ranked_work_orders (highest priority first):
+    1. Get line_code from WO data (field: line_code, e.g. "L001"). Never invent line IDs.
+    2. Skip if line's primary machine is down (check constraint_summary machine_breakdown list).
+    3. Call sandhar_find_qualified_operators(line_id=<line_code>, shift_code=<shift>, plan_date=<date>).
+    4. If qualified count < standard_manpower: call sandhar_get_crossskill_candidates(line_id=<line_code>).
+    5. If gap remains after cross-skill: call sandhar_create_alert (alert_type="manpower_shortage", severity="high").
+    6. Call sandhar_calculate_planned_qty(available_manpower=<count>, standard_manpower=<from WO>, cycle_time_minutes=<from WO standard_cycle_time>, shift_hours=8) to get planned_qty.
+    7. Call sandhar_save_plan_header for this shift (if not already called for this shift).
+    8. Call sandhar_allocate_line with line_id=<UUID from sandhar_list_lines result>, wo_id, shift_code, plan_date, operator_ids (comma-sep), supervisor_id, plan_header_id, planned_qty=<from step 6>.
+
+    Report: allocations per shift, gaps, alerts created, plan_header_ids.
+
+  tools:
+    - name: sandhar_list_lines
+      enabled: true
+    - name: sandhar_get_open_work_orders
+      enabled: true
+    - name: sandhar_find_qualified_operators
+      enabled: true
+    - name: sandhar_get_operator_skills
+      enabled: true
+    - name: sandhar_get_crossskill_candidates
+      enabled: true
+    - name: sandhar_allocate_line
+      enabled: true
+    - name: sandhar_create_alert
+      enabled: true
+    - name: sandhar_save_plan_header
+      enabled: true
+
+  guardrails:
+    max_iterations: 60
+    timeout_seconds: 300
+    blocked_patterns:
+      - "ignore previous instructions"
+
+  observability:
+    langsmith_tracing: true
+    log_inputs: true
+    log_outputs: true
+    log_tool_calls: true

@@ -13,6 +13,33 @@ from agri_agent.agent.tools.dispatch import (
 )
 from agri_agent.agent.tools.outreach import filter_prospects, list_retailers, send_email
 from agri_agent.agent.tools.search import web_search
+from agri_agent.agent.tools.sandhar.attendance import (
+    sandhar_get_attendance_summary,
+    sandhar_get_present_operators,
+    sandhar_check_certification_expiry,
+    sandhar_find_qualified_operators,
+    sandhar_get_operator_skills,
+    sandhar_get_crossskill_candidates,
+)
+from agri_agent.agent.tools.sandhar.workorders import (
+    sandhar_list_lines,
+    sandhar_get_open_work_orders,
+    sandhar_get_work_order_detail,
+    sandhar_rank_work_orders,
+)
+from agri_agent.agent.tools.sandhar.constraints import (
+    sandhar_get_machine_status,
+    sandhar_check_material_availability,
+    sandhar_get_quality_holds,
+    sandhar_get_constraint_summary,
+)
+from agri_agent.agent.tools.sandhar.planning import (
+    sandhar_calculate_planned_qty,
+    sandhar_allocate_line,
+    sandhar_save_plan_header,
+    sandhar_create_alert,
+    sandhar_propose_plan_for_review,
+)
 
 _TOOL_REGISTRY: dict[str, BaseTool] = {
     "calculator": calculator,
@@ -26,6 +53,25 @@ _TOOL_REGISTRY: dict[str, BaseTool] = {
     "dispatch_order": dispatch_order,
     "recommend_dispatch": recommend_dispatch,   # kept for backward compat
     "propose_action": propose_action,
+    "sandhar_get_attendance_summary": sandhar_get_attendance_summary,
+    "sandhar_get_present_operators": sandhar_get_present_operators,
+    "sandhar_check_certification_expiry": sandhar_check_certification_expiry,
+    "sandhar_find_qualified_operators": sandhar_find_qualified_operators,
+    "sandhar_get_operator_skills": sandhar_get_operator_skills,
+    "sandhar_get_crossskill_candidates": sandhar_get_crossskill_candidates,
+    "sandhar_list_lines": sandhar_list_lines,
+    "sandhar_get_open_work_orders": sandhar_get_open_work_orders,
+    "sandhar_get_work_order_detail": sandhar_get_work_order_detail,
+    "sandhar_rank_work_orders": sandhar_rank_work_orders,
+    "sandhar_get_machine_status": sandhar_get_machine_status,
+    "sandhar_check_material_availability": sandhar_check_material_availability,
+    "sandhar_get_quality_holds": sandhar_get_quality_holds,
+    "sandhar_get_constraint_summary": sandhar_get_constraint_summary,
+    "sandhar_calculate_planned_qty": sandhar_calculate_planned_qty,
+    "sandhar_allocate_line": sandhar_allocate_line,
+    "sandhar_save_plan_header": sandhar_save_plan_header,
+    "sandhar_create_alert": sandhar_create_alert,
+    "sandhar_propose_plan_for_review": sandhar_propose_plan_for_review,
 }
 
 

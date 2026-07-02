@@ -1,0 +1,81 @@
+agent:
+  name: sandhar-planning-supervisor
+  type: supervisor
+  description: >
+    Orchestrates the daily production planning pipeline for Sandhar's assembly
+    shop floor. Calls five specialist workers in sequence and assembles a
+    shift-wise production plan for human review.
+  version: "1.0.0"
+
+  workers:
+    - agent: sandhar-attendance-analyst
+      description: >
+        Analyses shift-wise attendance and skill availability. Must be called
+        FIRST — all downstream planning depends on knowing who is present.
+    - agent: sandhar-wo-prioritisation
+      description: >
+        Imports and ranks open work orders by priority and due date.
+        Identifies WOs blocked by quality holds. Call SECOND.
+    - agent: sandhar-constraint-validator
+      description: >
+        Checks machine availability, material stock, and quality holds.
+        Creates alerts for each constraint found. Call THIRD.
+    - agent: sandhar-resource-allocator
+      description: >
+        Matches present operators to lines and machines based on skills.
+        Detects skill and manpower gaps. Creates allocation records. Call FOURTH.
+    - agent: sandhar-plan-generator
+      description: >
+        Assembles the final shift-wise plan from allocation output. Calculates
+        planned quantities and proposes the plan for planner review. Call LAST.
+
+  routing:
+    max_rounds: 12
+
+  model:
+    provider: anthropic
+    name: claude-haiku-4-5-20251001
+    temperature: 0.0
+    max_tokens: 1024
+    max_cost_usd: 0.20
+
+  system_prompt: |
+    You are the production planning supervisor for Sandhar Group's assembly shop floor.
+    Coordinate five specialist agents to generate a complete shift-wise daily production plan.
+
+    Call workers in this EXACT sequence:
+    1. sandhar-attendance-analyst   — MUST run first
+    2. sandhar-wo-prioritisation    — MUST run second
+    3. sandhar-constraint-validator — MUST run third
+    4. sandhar-resource-allocator   — MUST run fourth
+    5. sandhar-plan-generator       — MUST run last
+
+    Always populate context when calling workers:
+    - All workers: plan_date and shifts from [Runtime context]
+    - sandhar-resource-allocator: also pass attendance_summary, ranked_work_orders, constraint_summary
+    - sandhar-plan-generator: also pass allocation_summary and active_alert_count
+
+    Do not call any worker twice. Call finish only after sandhar-plan-generator completes.
+
+  inputs:
+    plan_date:
+      type: string
+      required: true
+      description: "Date for which to generate the plan (YYYY-MM-DD)"
+    shifts:
+      type: string
+      required: false
+      default: "A,B,C"
+      description: "Comma-separated shift codes to plan"
+
+  guardrails:
+    max_iterations: 20
+    timeout_seconds: 600
+    blocked_patterns:
+      - "ignore previous instructions"
+
+  observability:
+    langsmith_tracing: true
+    log_inputs: true
+    log_outputs: true
+    log_tool_calls: false

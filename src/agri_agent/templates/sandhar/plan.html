@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sandhar — Production Plan</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+           background: #f0f2f5; color: #1a1a2e; font-size: 14px; }
+    header { background: #1a1a2e; color: #fff; padding: 0 28px; height: 56px;
+             display: flex; align-items: stretch; justify-content: space-between; }
+    .header-brand { display: flex; align-items: center; gap: 10px; }
+    header h1 { font-size: 17px; font-weight: 700; }
+    nav { display: flex; align-items: stretch; }
+    nav a { display: flex; align-items: center; padding: 0 14px; color: #8899bb;
+            text-decoration: none; font-size: 13px; font-weight: 500;
+            border-bottom: 3px solid transparent; }
+    nav a:hover { color: #a5b4fc; }
+    nav a.active { color: #a5b4fc; border-bottom-color: #4f46e5; }
+    .main { max-width: 1100px; margin: 0 auto; padding: 24px 28px; }
+    h2 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+    .subtitle { color: #6b7280; font-size: 13px; margin-bottom: 24px; }
+    .card { background: #fff; border-radius: 10px; padding: 24px;
+            box-shadow: 0 1px 4px rgba(0,0,0,.08); border: 1px solid #e5e7eb; margin-bottom: 20px; }
+    .card-title { font-size: 16px; font-weight: 600; margin-bottom: 18px; }
+    .form-row { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 20px; }
+    .form-group { display: flex; flex-direction: column; gap: 5px; }
+    label { font-size: 12px; font-weight: 600; color: #374151; text-transform: uppercase; letter-spacing: .4px; }
+    input[type=date] { padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; }
+    .shift-check-group { display: flex; gap: 10px; }
+    .shift-check-label { display: flex; align-items: center; gap: 5px; cursor: pointer;
+                          padding: 7px 14px; border: 1px solid #d1d5db; border-radius: 6px;
+                          font-size: 13px; font-weight: 500; }
+    .shift-check-label:has(input:checked) { background: #ede9fe; border-color: #7c3aed; color: #7c3aed; }
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 20px;
+           border-radius: 7px; font-size: 14px; font-weight: 600; cursor: pointer;
+           border: none; transition: opacity .15s; }
+    .btn:hover { opacity: .88; }
+    .btn-primary { background: #7c3aed; color: #fff; }
+    .btn-success { background: #16a34a; color: #fff; }
+    .btn-danger { background: #dc2626; color: #fff; }
+    .btn-outline { background: #fff; color: #1a1a2e; border: 1px solid #d1d5db; }
+    .summary-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 20px; }
+    .summary-card { background: #f9fafb; border-radius: 8px; padding: 14px; border: 1px solid #e5e7eb; }
+    .summary-label { font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase; margin-bottom: 4px; }
+    .summary-value { font-size: 24px; font-weight: 700; }
+
+    /* Progress Steps */
+    .progress-steps { display: flex; gap: 0; margin: 24px 0; }
+    .step { flex: 1; display: flex; flex-direction: column; align-items: center; position: relative; }
+    .step::before { content: ''; position: absolute; top: 20px; right: -50%; width: 100%; height: 2px; background: #e5e7eb; z-index: 0; }
+    .step:last-child::before { display: none; }
+    .step-icon { width: 40px; height: 40px; border-radius: 50%; background: #e5e7eb; color: #6b7280;
+                 display: flex; align-items: center; justify-content: center; font-size: 16px;
+                 font-weight: 700; z-index: 1; position: relative; }
+    .step-icon.done { background: #dcfce7; color: #16a34a; }
+    .step-icon.active { background: #ede9fe; color: #7c3aed; }
+    .step-icon.running { background: #fef3c7; color: #d97706; }
+    .step-name { font-size: 11px; font-weight: 600; margin-top: 6px; text-align: center; color: #6b7280; }
+
+    /* Shift tabs */
+    .shift-tabs { display: flex; gap: 4px; margin-bottom: -1px; }
+    .shift-tab { padding: 8px 18px; border: 1px solid #e5e7eb; border-bottom: none;
+                 border-radius: 8px 8px 0 0; background: #f0f2f5; cursor: pointer;
+                 font-size: 13px; font-weight: 500; color: #6b7280; }
+    .shift-tab.active { background: #fff; color: #1a1a2e; font-weight: 700; position: relative; top: 1px; }
+    .shift-panel { display: none; background: #fff; border: 1px solid #e5e7eb; border-radius: 0 10px 10px 10px; padding: 20px; }
+    .shift-panel.active { display: block; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; padding: 8px 12px; font-size: 11px; font-weight: 700; color: #888;
+         text-transform: uppercase; background: #fafafa; border-bottom: 1px solid #eee; }
+    td { padding: 10px 12px; border-bottom: 1px solid #f5f5f5; font-size: 13px; }
+    .badge { padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
+    .badge-high { background: #dcfce7; color: #14532d; }
+    .badge-medium { background: #fef3c7; color: #92400e; }
+    .badge-low { background: #fee2e2; color: #991b1b; }
+    .exception-card { border: 1px solid #fca5a5; background: #fff7f7; border-radius: 8px;
+                      padding: 12px; margin: 8px 0; }
+    .exception-title { font-weight: 700; font-size: 13px; color: #991b1b; }
+    .plan-actions { display: flex; gap: 10px; margin-top: 16px; }
+    .empty { color: #9ca3af; font-size: 13px; text-align: center; padding: 24px; }
+    .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #e5e7eb;
+               border-top-color: #7c3aed; border-radius: 50%; animation: spin .6s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #toast { position: fixed; bottom: 24px; right: 24px; background: #1a1a2e; color: white;
+             padding: 10px 18px; border-radius: 8px; font-size: 13px; display: none;
+             box-shadow: 0 4px 12px rgba(0,0,0,.2); z-index: 999; }
+    #state-generating, #state-review { display: none; }
+  </style>
+</head>
+<body>
+<header>
+  <div class="header-brand">
+    <h1>Sandhar Group</h1>
+    <span style="width:1px;height:20px;background:#334;"></span>
+    <span style="font-size:12px;color:#8899bb;">Smart Production Planning</span>
+  </div>
+  <nav>
+    <a href="/sandhar">🏭 Command Centre</a>
+    <a href="/sandhar/plan" class="active">📋 Plan</a>
+    <a href="/sandhar/floor">👷 Floor</a>
+    <a href="/sandhar/master">🗂 Master Data</a>
+    <a href="/sandhar/simulation">🎮 Simulation</a>
+    <span style="width:1px;height:20px;background:#334;margin:auto 4px;"></span>
+    <a href="/approvals">🔔 Approvals</a>
+    <a href="/agents" style="color:#6677aa;">Agents</a>
+    <a href="/runs" style="color:#6677aa;">Runs</a>
+  </nav>
+</header>
+
+<div class="main">
+  <h2>Production Plan</h2>
+  <p class="subtitle">Generate and review shift-wise daily production plans</p>
+
+  <!-- State 1: Pre-generation -->
+  <div id="state-pregenerating">
+    <div class="card">
+      <div class="card-title">Generate Production Plan</div>
+      <div class="summary-cards" id="pre-summary">
+        <div class="summary-card"><div class="summary-label">Open Work Orders</div><div class="summary-value" id="pre-wo"><span class="spinner"></span></div></div>
+        <div class="summary-card"><div class="summary-label">Active Constraints</div><div class="summary-value" id="pre-constraints"><span class="spinner"></span></div></div>
+        <div class="summary-card"><div class="summary-label">Attendance Loaded</div><div class="summary-value" id="pre-attendance">—</div></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Plan Date</label>
+          <input type="date" id="plan-date" value="{{ default_date }}">
+        </div>
+        <div class="form-group">
+          <label>Shifts</label>
+          <div class="shift-check-group">
+            <label class="shift-check-label"><input type="checkbox" class="shift-check" value="A" checked> Shift A</label>
+            <label class="shift-check-label"><input type="checkbox" class="shift-check" value="B" checked> Shift B</label>
+            <label class="shift-check-label"><input type="checkbox" class="shift-check" value="C" checked> Shift C</label>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="generatePlan()">📋 Generate Plan</button>
+      </div>
+      <div id="pre-error" style="color:#dc2626;font-size:13px;margin-top:8px;display:none;"></div>
+    </div>
+  </div>
+
+  <!-- State 2: Generating -->
+  <div id="state-generating">
+    <div class="card">
+      <div class="card-title" style="display:flex;align-items:center;gap:10px;">
+        <span class="spinner"></span> Generating Plan for <span id="gen-date-label">—</span>
+      </div>
+      <div class="progress-steps">
+        <div class="step">
+          <div class="step-icon" id="step-1">1</div>
+          <div class="step-name">Attendance Analysis</div>
+        </div>
+        <div class="step">
+          <div class="step-icon" id="step-2">2</div>
+          <div class="step-name">WO Prioritisation</div>
+        </div>
+        <div class="step">
+          <div class="step-icon" id="step-3">3</div>
+          <div class="step-name">Constraint Check</div>
+        </div>
+        <div class="step">
+          <div class="step-icon" id="step-4">4</div>
+          <div class="step-name">Resource Allocation</div>
+        </div>
+        <div class="step">
+          <div class="step-icon" id="step-5">5</div>
+          <div class="step-name">Plan Generation</div>
+        </div>
+      </div>
+      <div id="gen-status" style="color:#6b7280;font-size:13px;margin-top:8px;">Agent running…</div>
+      <div style="margin-top:16px;">
+        <a href="/runs" class="btn btn-outline" style="font-size:12px;">View Run History</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- State 3: Review -->
+  <div id="state-review">
+    <div class="card">
+      <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;">
+        <span>📋 Plan Review — <span id="review-date-label">—</span></span>
+        <button class="btn btn-outline" onclick="showPregen()" style="font-size:12px;">Generate New Plan</button>
+      </div>
+      <div id="review-alerts-section"></div>
+      <div style="margin-top:16px;">
+        <div class="shift-tabs">
+          <div class="shift-tab active" id="stab-A" onclick="switchShift('A')">Shift A</div>
+          <div class="shift-tab" id="stab-B" onclick="switchShift('B')">Shift B</div>
+          <div class="shift-tab" id="stab-C" onclick="switchShift('C')">Shift C</div>
+        </div>
+        <div class="shift-panel active" id="spanel-A"><div class="empty">No plan for Shift A</div></div>
+        <div class="shift-panel" id="spanel-B"><div class="empty">No plan for Shift B</div></div>
+        <div class="shift-panel" id="spanel-C"><div class="empty">No plan for Shift C</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const API_KEY = '{{ api_key }}';
+const H = {'X-API-Key': API_KEY, 'Content-Type': 'application/json'};
+let pollInterval = null;
+let currentRunId = null;
+let currentPlanDate = null;
+let stepProgress = 0;
+
+function toast(msg, ok=true) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = ok ? '#16a34a' : '#dc2626';
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 4000);
+}
+
+function showPregen() {
+  document.getElementById('state-pregenerating').style.display = 'block';
+  document.getElementById('state-generating').style.display = 'none';
+  document.getElementById('state-review').style.display = 'none';
+}
+
+function showGenerating(planDate) {
+  document.getElementById('state-pregenerating').style.display = 'none';
+  document.getElementById('state-generating').style.display = 'block';
+  document.getElementById('state-review').style.display = 'none';
+  document.getElementById('gen-date-label').textContent = planDate;
+  // Reset steps
+  for (let i = 1; i <= 5; i++) {
+    document.getElementById(`step-${i}`).className = 'step-icon';
+    document.getElementById(`step-${i}`).textContent = i;
+  }
+  stepProgress = 0;
+}
+
+function advanceStep() {
+  if (stepProgress < 5) {
+    if (stepProgress > 0) {
+      document.getElementById(`step-${stepProgress}`).className = 'step-icon done';
+      document.getElementById(`step-${stepProgress}`).textContent = '✓';
+    }
+    stepProgress++;
+    document.getElementById(`step-${stepProgress}`).className = 'step-icon running';
+  }
+}
+
+async function generatePlan() {
+  const planDate = document.getElementById('plan-date').value;
+  if (!planDate) { toast('Please select a plan date', false); return; }
+  const shifts = [...document.querySelectorAll('.shift-check:checked')].map(c => c.value).join(',');
+  if (!shifts) { toast('Please select at least one shift', false); return; }
+
+  document.getElementById('pre-error').style.display = 'none';
+  try {
+    const resp = await fetch('/api/v1/sandhar/plan/generate', {
+      method: 'POST',
+      headers: H,
+      body: JSON.stringify({plan_date: planDate, shifts}),
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      document.getElementById('pre-error').textContent = data.detail || 'Failed to start plan generation';
+      document.getElementById('pre-error').style.display = 'block';
+      return;
+    }
+    currentRunId = data.agent_run_id;
+    currentPlanDate = planDate;
+    showGenerating(planDate);
+    advanceStep();
+    pollInterval = setInterval(pollRunStatus, 3000);
+  } catch(e) {
+    toast('Error: ' + e.message, false);
+  }
+}
+
+async function pollRunStatus() {
+  if (!currentRunId) return;
+  try {
+    const resp = await fetch(`/api/v1/runs/${currentRunId}`, {headers: H});
+    const data = await resp.json();
+    document.getElementById('gen-status').textContent = `Status: ${data.status} · Run: ${currentRunId.substring(0,8)}…`;
+    if (data.status === 'running') {
+      advanceStep();
+    } else if (data.status === 'completed') {
+      clearInterval(pollInterval);
+      for (let i = 1; i <= 5; i++) {
+        document.getElementById(`step-${i}`).className = 'step-icon done';
+        document.getElementById(`step-${i}`).textContent = '✓';
+      }
+      toast('Plan generated successfully!');
+      await loadPlanReview(currentPlanDate);
+    } else if (data.status === 'failed') {
+      clearInterval(pollInterval);
+      document.getElementById('gen-status').textContent = 'Plan generation failed: ' + (data.error || 'Unknown error');
+      toast('Plan generation failed', false);
+    }
+  } catch(e) { /* ignore poll errors */ }
+}
+
+function switchShift(code) {
+  document.querySelectorAll('.shift-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.shift-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById(`stab-${code}`).classList.add('active');
+  document.getElementById(`spanel-${code}`).classList.add('active');
+}
+
+async function loadPlanReview(planDate) {
+  document.getElementById('state-pregenerating').style.display = 'none';
+  document.getElementById('state-generating').style.display = 'none';
+  document.getElementById('state-review').style.display = 'block';
+  document.getElementById('review-date-label').textContent = planDate;
+
+  // Load plan headers for the date
+  try {
+    const resp = await fetch(`/api/v1/sandhar/plan?date=${planDate}`, {headers: H});
+    const plans = await resp.json();
+    for (const shift of ['A', 'B', 'C']) {
+      const plan = (plans || []).find(p => p.shift_code === shift);
+      renderShiftPlan(shift, plan, planDate);
+    }
+
+    // Load alerts
+    const ar = await fetch(`/api/v1/sandhar/alerts?status=active&plan_date=${planDate}&limit=20`, {headers: H});
+    const alerts = await ar.json();
+    if (alerts && alerts.length > 0) {
+      let html = `<div style="font-weight:600;font-size:13px;margin-bottom:8px;">⚠️ ${alerts.length} Active Alert${alerts.length>1?'s':''}</div>`;
+      for (const a of alerts.slice(0, 5)) {
+        html += `<div class="exception-card">
+          <div class="exception-title">${a.alert_type?.replace(/_/g,' ') || 'Alert'} — Shift ${a.shift_code || '?'}</div>
+          <div style="font-size:12px;color:#374151;margin-top:4px;">${a.alert_message || ''}</div>
+        </div>`;
+      }
+      document.getElementById('review-alerts-section').innerHTML = html;
+    }
+  } catch(e) {
+    console.error('Failed to load plan', e);
+  }
+}
+
+function renderShiftPlan(shift, plan, planDate) {
+  const panel = document.getElementById(`spanel-${shift}`);
+  if (!plan) {
+    panel.innerHTML = `<div class="empty">No plan generated for Shift ${shift}</div>`;
+    return;
+  }
+  const confClass = plan.confidence === 'high' ? 'badge-high' : plan.confidence === 'medium' ? 'badge-medium' : 'badge-low';
+  const statusBadge = plan.status === 'approved' ? '<span style="color:#16a34a;font-weight:700;">✅ Approved</span>' : `<span style="color:#d97706;font-weight:700;">${plan.status}</span>`;
+
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <div>
+        <span class="badge ${confClass}" style="margin-right:8px;">Confidence: ${plan.confidence || '—'}</span>
+        ${statusBadge}
+        <span style="color:#6b7280;font-size:12px;margin-left:8px;">v${plan.version || 1}</span>
+      </div>
+      ${plan.status !== 'approved' ? `
+      <div class="plan-actions">
+        <button class="btn btn-success" onclick="approvePlan('${plan.id}', '${shift}')">✅ Approve Plan</button>
+        <button class="btn btn-danger" onclick="rejectPlan('${plan.id}', '${shift}')">✗ Reject</button>
+      </div>` : ''}
+    </div>
+    <div id="plan-detail-${shift}"><div class="empty"><span class="spinner"></span> Loading details…</div></div>
+  `;
+  loadPlanDetails(plan.id, shift);
+}
+
+async function loadPlanDetails(headerId, shift) {
+  try {
+    const resp = await fetch(`/api/v1/sandhar/plan/${headerId}`, {headers: H});
+    const data = await resp.json();
+    const details = data.details || [];
+    if (details.length === 0) {
+      document.getElementById(`plan-detail-${shift}`).innerHTML = '<div class="empty">No line allocations in this plan yet</div>';
+      return;
+    }
+    let html = '<table><thead><tr><th>Line</th><th>Work Order</th><th>Planned Qty</th><th>Operators</th><th>Status</th></tr></thead><tbody>';
+    for (const d of details) {
+      html += `<tr>
+        <td>${d.line_id ? d.line_id.substring(0,8)+'…' : '—'}</td>
+        <td>${d.wo_id ? d.wo_id.substring(0,8)+'…' : '—'}</td>
+        <td>${d.planned_qty || '—'}</td>
+        <td>${d.available_manpower || '—'}</td>
+        <td><span style="color:#d97706;">${d.status}</span></td>
+      </tr>`;
+    }
+    document.getElementById(`plan-detail-${shift}`).innerHTML = html + '</tbody></table>';
+  } catch(e) {
+    document.getElementById(`plan-detail-${shift}`).innerHTML = '<div class="empty">Could not load plan details</div>';
+  }
+}
+
+async function approvePlan(headerId, shift) {
+  if (!confirm(`Approve the Shift ${shift} production plan?`)) return;
+  try {
+    const resp = await fetch(`/api/v1/sandhar/plan/${headerId}/approve`, {
+      method: 'POST', headers: H, body: JSON.stringify({planner_id: 'human'}),
+    });
+    if (resp.ok) {
+      toast(`Shift ${shift} plan approved!`);
+      await loadPlanReview(currentPlanDate || document.getElementById('plan-date').value);
+    } else {
+      const d = await resp.json();
+      toast(d.detail || 'Approval failed', false);
+    }
+  } catch(e) { toast('Error: ' + e.message, false); }
+}
+
+async function rejectPlan(headerId, shift) {
+  const reason = prompt(`Reason for rejecting Shift ${shift} plan? (optional)`);
+  try {
+    const resp = await fetch(`/api/v1/sandhar/plan/${headerId}/reject`, {
+      method: 'POST', headers: H, body: JSON.stringify({reason}),
+    });
+    if (resp.ok) {
+      toast(`Shift ${shift} plan rejected`);
+      await loadPlanReview(currentPlanDate || document.getElementById('plan-date').value);
+    }
+  } catch(e) { toast('Error', false); }
+}
+
+// Load pre-gen summary using the currently selected plan date
+async function loadPreSummary() {
+  const planDate = document.getElementById('plan-date').value || '{{ today }}';
+  try {
+    const wo = await fetch('/api/v1/sandhar/work-orders?status=open&limit=200', {headers: H});
+    const wos = await wo.json();
+    document.getElementById('pre-wo').textContent = wos.length;
+  } catch { document.getElementById('pre-wo').textContent = '—'; }
+  try {
+    const cs = await fetch(`/api/v1/sandhar/constraints/summary?plan_date=${planDate}`, {headers: H});
+    const c = await cs.json();
+    const cnt = (c.machine_breakdown?.length || 0) + (c.material_shortage?.length || 0) + (c.quality_hold?.length || 0);
+    document.getElementById('pre-constraints').textContent = cnt;
+  } catch { document.getElementById('pre-constraints').textContent = '—'; }
+  try {
+    const ar = await fetch(`/api/v1/sandhar/attendance/summary?date=${planDate}`, {headers: H});
+    const a = await ar.json();
+    const present = Object.values(a.shifts || {}).reduce((s, sh) => s + (sh.present || 0), 0);
+    const total = Object.values(a.shifts || {}).reduce((s, sh) => s + (sh.present || 0) + (sh.absent || 0) + (sh.late || 0) + (sh.leave || 0), 0);
+    if (present > 0) {
+      const pct = total > 0 ? Math.round(present / total * 100) : 0;
+      document.getElementById('pre-attendance').textContent = `${present} / ${total} (${pct}%)`;
+    } else {
+      document.getElementById('pre-attendance').textContent = 'Not loaded';
+    }
+  } catch { document.getElementById('pre-attendance').textContent = '—'; }
+}
+
+document.getElementById('plan-date').addEventListener('change', loadPreSummary);
+loadPreSummary();
+</script>
+</body>
+</html>

@@ -1,0 +1,59 @@
+agent:
+  name: sandhar-attendance-analyst
+  description: >
+    Analyses shift-wise attendance for a planning date. Maps present operators
+    to their skills. Raises certification expiry alerts.
+  version: "1.0.0"
+
+  inputs:
+    plan_date:
+      type: string
+      required: true
+      description: "Date to analyse (YYYY-MM-DD)"
+    shifts:
+      type: string
+      required: false
+      default: "A,B,C"
+      description: "Comma-separated shift codes"
+
+  model:
+    provider: anthropic
+    name: claude-sonnet-4-6
+    temperature: 0.0
+    max_tokens: 2048
+    max_cost_usd: 0.50
+
+  system_prompt: |
+    You are an attendance and skills analyst for Sandhar's assembly floor.
+    Read plan_date and shifts from [Runtime context].
+
+    Workflow:
+    1. Parse shifts (e.g. "A,B,C" becomes ["A", "B", "C"]).
+    2. For each shift code, call sandhar_get_attendance_summary.
+    3. For each shift code, call sandhar_get_present_operators.
+    4. Call sandhar_check_certification_expiry for plan_date.
+       For expiring certifications, call sandhar_create_alert:
+       alert_type="certification_expiry", severity="low", plan_date=plan_date, shift_code="".
+    5. Report: per-shift present/absent counts, operator vs supervisor breakdown, list of present employee_ids.
+
+  tools:
+    - name: sandhar_get_attendance_summary
+      enabled: true
+    - name: sandhar_get_present_operators
+      enabled: true
+    - name: sandhar_check_certification_expiry
+      enabled: true
+    - name: sandhar_create_alert
+      enabled: true
+
+  guardrails:
+    max_iterations: 20
+    timeout_seconds: 120
+    blocked_patterns:
+      - "ignore previous instructions"
+
+  observability:
+    langsmith_tracing: true
+    log_inputs: true
+    log_outputs: true
+    log_tool_calls: true

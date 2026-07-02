@@ -7,6 +7,19 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from agri_agent.api.routes import actions, agents, approvals, dashboard, health, orders, outreach, pages, runs
 from agri_agent.api.routes import settings as settings_router
+from agri_agent.api.routes.sandhar import pages as sandhar_pages
+from agri_agent.api.routes.sandhar import (
+    master as sandhar_master,
+    skills as sandhar_skills,
+    attendance as sandhar_attendance,
+    workorders as sandhar_workorders,
+    constraints as sandhar_constraints,
+    planning as sandhar_planning,
+    execution as sandhar_execution,
+    alerts as sandhar_alerts,
+    kpi as sandhar_kpi,
+    simulation as sandhar_simulation,
+)
 from agri_agent.config.settings import settings
 
 logging.basicConfig(level=settings.log_level.upper())
@@ -36,6 +49,19 @@ app.include_router(outreach.router)
 app.include_router(pages.router)
 app.include_router(dashboard.router)
 app.include_router(approvals.router)
+
+# ── Sandhar Production Planning ──────────────────────────────────────────────
+app.include_router(sandhar_master.router)
+app.include_router(sandhar_skills.router)
+app.include_router(sandhar_attendance.router)
+app.include_router(sandhar_workorders.router)
+app.include_router(sandhar_constraints.router)
+app.include_router(sandhar_planning.router)
+app.include_router(sandhar_execution.router)
+app.include_router(sandhar_alerts.router)
+app.include_router(sandhar_kpi.router)
+app.include_router(sandhar_simulation.router)
+app.include_router(sandhar_pages.router)
 
 
 @app.on_event("startup")
