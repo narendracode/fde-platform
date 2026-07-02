@@ -2,23 +2,18 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agri_agent.api._templates import templates
 from agri_agent.config.settings import settings
 from agri_agent.db.models import AgentAction
 from agri_agent.db.session import get_session
 from agri_agent.api.routes.actions import auto_mark_stale_actions
 
 router = APIRouter(tags=["approvals"])
-
-_templates_dir = Path(__file__).parent.parent.parent / "templates"
-templates = Jinja2Templates(directory=str(_templates_dir))
 
 _HISTORY_STATUSES = ["stale", "drifted", "approved", "rejected", "approval_failed", "expired", "dismissed"]
 

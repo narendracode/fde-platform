@@ -91,6 +91,7 @@
     </a>
   </div>
 
+  {% if 'fundly' in companies %}
   <div class="sidebar-divider"></div>
 
   <div class="sidebar-section">
@@ -99,7 +100,9 @@
       <span class="icon">📦</span> Orders
     </a>
   </div>
+  {% endif %}
 
+  {% if 'sandhar' in companies %}
   <div class="sidebar-divider"></div>
 
   <div class="sidebar-section">
@@ -120,6 +123,7 @@
       <span class="icon">🎮</span> Simulation
     </a>
   </div>
+  {% endif %}
 
   <div class="sidebar-footer">
     <a href="/docs" target="_blank">

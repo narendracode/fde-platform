@@ -16,11 +16,13 @@ from agri_agent.db.models import (
     AgentRun,
     SandharAlert,
     SandharAttendance,
+    SandharCustomer,
     SandharEmployee,
     SandharLine,
     SandharMachine,
     SandharPlanDetail,
     SandharPlanHeader,
+    SandharProduct,
     SandharResourceAllocation,
     SandharWorkOrder,
 )
@@ -280,7 +282,7 @@ async def get_plan_detail(
     session: AsyncSession = Depends(get_session),
     _: str = Depends(verify_api_key),
 ):
-    """Get full plan including details and resource allocations."""
+    """Get full plan including enriched details and resource allocations."""
     try:
         hid = uuid.UUID(header_id)
     except ValueError:
@@ -296,7 +298,74 @@ async def get_plan_detail(
     details_result = await session.execute(
         select(SandharPlanDetail).where(SandharPlanDetail.plan_header_id == hid)
     )
-    details = [_detail_out(d) for d in details_result.scalars().all()]
+    raw_details = details_result.scalars().all()
+
+    # Cache lookups to avoid N+1 queries
+    _line_cache: dict = {}
+    _wo_cache: dict = {}
+    _prod_cache: dict = {}
+    _cust_cache: dict = {}
+    _emp_cache: dict = {}
+
+    async def _line(lid):
+        if lid not in _line_cache:
+            r = await session.execute(select(SandharLine).where(SandharLine.id == lid))
+            _line_cache[lid] = r.scalar_one_or_none()
+        return _line_cache[lid]
+
+    async def _wo(wid):
+        if wid not in _wo_cache:
+            r = await session.execute(select(SandharWorkOrder).where(SandharWorkOrder.id == wid))
+            _wo_cache[wid] = r.scalar_one_or_none()
+        return _wo_cache[wid]
+
+    async def _prod(pid):
+        if pid not in _prod_cache:
+            r = await session.execute(select(SandharProduct).where(SandharProduct.id == pid))
+            _prod_cache[pid] = r.scalar_one_or_none()
+        return _prod_cache[pid]
+
+    async def _cust(cid):
+        if cid not in _cust_cache:
+            r = await session.execute(select(SandharCustomer).where(SandharCustomer.id == cid))
+            _cust_cache[cid] = r.scalar_one_or_none()
+        return _cust_cache[cid]
+
+    async def _emp(eid):
+        if eid not in _emp_cache:
+            r = await session.execute(select(SandharEmployee).where(SandharEmployee.id == eid))
+            _emp_cache[eid] = r.scalar_one_or_none()
+        return _emp_cache[eid]
+
+    enriched_details = []
+    for d in raw_details:
+        entry = _detail_out(d)
+        if d.line_id:
+            line = await _line(d.line_id)
+            if line:
+                entry["line_code"] = line.line_code
+                entry["line_name"] = line.line_name
+        if d.wo_id:
+            wo = await _wo(d.wo_id)
+            if wo:
+                entry["wo_number"] = wo.wo_number
+                entry["order_qty"] = wo.order_qty
+                entry["due_date"] = wo.due_date.isoformat() if wo.due_date else None
+                entry["priority"] = wo.priority
+                if wo.product_id:
+                    prod = await _prod(wo.product_id)
+                    if prod:
+                        entry["product_code"] = prod.product_code
+                        entry["product_name"] = prod.product_name
+                if wo.customer_id:
+                    cust = await _cust(wo.customer_id)
+                    if cust:
+                        entry["customer_name"] = cust.customer_name
+        if d.supervisor_employee_id:
+            sup = await _emp(d.supervisor_employee_id)
+            if sup:
+                entry["supervisor_name"] = sup.name or sup.employee_code
+        enriched_details.append(entry)
 
     alloc_result = await session.execute(
         select(SandharResourceAllocation).where(SandharResourceAllocation.plan_header_id == hid)
@@ -305,7 +374,7 @@ async def get_plan_detail(
 
     return {
         **_header_out(header),
-        "details": details,
+        "details": enriched_details,
         "allocations": allocations,
     }
 

@@ -2,18 +2,14 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
-from pathlib import Path
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 
+from agri_agent.api._templates import templates
 from agri_agent.config.settings import settings
 
 router = APIRouter(tags=["sandhar-ui"])
-
-_templates_dir = Path(__file__).parent.parent.parent.parent / "templates"
-templates = Jinja2Templates(directory=str(_templates_dir))
 
 
 @router.get("/sandhar", response_class=HTMLResponse)

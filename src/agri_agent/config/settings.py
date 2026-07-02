@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     log_level: str = "info"
     agents_config_dir: str = "agents/configs"
 
+    # UI feature flags — comma-separated string: "sandhar,fundly" (empty = platform only)
+    companies_to_show: str = "sandhar,fundly"
+
     # OpenTelemetry
     otel_enabled: bool = False
     otel_service_name: str = "agri-agent"

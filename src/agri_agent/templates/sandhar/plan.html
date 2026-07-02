@@ -3,7 +3,7 @@
 
 {% block head_extra %}
   <style>
-    .main { max-width: 1100px; margin: 0 auto; padding: 24px 28px; }
+    .main { max-width: 1160px; margin: 0 auto; padding: 24px 28px; }
     h2 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
     .subtitle { color: #6b7280; font-size: 13px; margin-bottom: 24px; }
     .card { background: #fff; border-radius: 10px; padding: 24px;
@@ -48,17 +48,10 @@
     .shift-tab.active { background: #fff; color: #1a1a2e; font-weight: 700; position: relative; top: 1px; }
     .shift-panel { display: none; background: #fff; border: 1px solid #e5e7eb; border-radius: 0 10px 10px 10px; padding: 20px; }
     .shift-panel.active { display: block; }
-    table { width: 100%; border-collapse: collapse; }
-    th { text-align: left; padding: 8px 12px; font-size: 11px; font-weight: 700; color: #888;
-         text-transform: uppercase; background: #fafafa; border-bottom: 1px solid #eee; }
-    td { padding: 10px 12px; border-bottom: 1px solid #f5f5f5; font-size: 13px; }
     .badge { padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
     .badge-high { background: #dcfce7; color: #14532d; }
     .badge-medium { background: #fef3c7; color: #92400e; }
     .badge-low { background: #fee2e2; color: #991b1b; }
-    .exception-card { border: 1px solid #fca5a5; background: #fff7f7; border-radius: 8px;
-                      padding: 12px; margin: 8px 0; }
-    .exception-title { font-weight: 700; font-size: 13px; color: #991b1b; }
     .plan-actions { display: flex; gap: 10px; margin-top: 16px; }
     .empty { color: #9ca3af; font-size: 13px; text-align: center; padding: 24px; }
     .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #e5e7eb;
@@ -68,13 +61,78 @@
              padding: 10px 18px; border-radius: 8px; font-size: 13px; display: none;
              box-shadow: 0 4px 12px rgba(0,0,0,.2); z-index: 999; }
     #state-generating, #state-review { display: none; }
+
+    /* ── Alerts panel ── */
+    .alerts-panel { background: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px; padding: 14px 16px; margin-bottom: 16px; }
+    .alerts-panel-title { font-size: 13px; font-weight: 700; color: #92400e; margin-bottom: 10px; }
+    .alert-row { display: flex; gap: 10px; align-items: flex-start; padding: 7px 0; border-bottom: 1px solid #fef3c7; }
+    .alert-row:last-child { border-bottom: none; }
+    .alert-sev { font-size: 10px; font-weight: 800; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; white-space: nowrap; flex-shrink: 0; }
+    .sev-critical { background: #fee2e2; color: #991b1b; }
+    .sev-high { background: #fed7aa; color: #9a3412; }
+    .sev-medium { background: #fef3c7; color: #92400e; }
+    .sev-low { background: #e0f2fe; color: #0369a1; }
+    .alert-body { flex: 1; }
+    .alert-type { font-size: 11px; font-weight: 700; color: #374151; text-transform: uppercase; letter-spacing: .4px; }
+    .alert-msg { font-size: 12px; color: #6b7280; margin-top: 1px; }
+    .alert-shift-badge { font-size: 10px; background: #f3f4f6; border-radius: 4px; padding: 1px 5px; color: #4b5563; }
+
+    /* ── Line cards ── */
+    .line-card { border: 1px solid #e5e7eb; border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+    .line-card-header { background: #f8f9fb; border-bottom: 1px solid #e5e7eb; padding: 12px 16px;
+                        display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+    .line-name-block { display: flex; align-items: center; gap: 8px; }
+    .line-name { font-size: 15px; font-weight: 700; color: #111827; }
+    .line-code-tag { font-size: 11px; background: #e0e7ff; color: #3730a3; border-radius: 4px; padding: 2px 7px; font-weight: 700; }
+    .wo-tag { font-size: 12px; font-family: monospace; background: #f3f4f6; border-radius: 4px; padding: 3px 8px;
+              color: #374151; font-weight: 600; border: 1px solid #e5e7eb; }
+    .line-card-body { padding: 16px; }
+    .line-metrics { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; margin-bottom: 14px; }
+    .metric { display: flex; flex-direction: column; gap: 2px; }
+    .metric-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #9ca3af; }
+    .metric-value { font-size: 13px; font-weight: 600; color: #111827; }
+    .metric-value.muted { color: #6b7280; font-weight: 400; }
+    .qty-block { margin-bottom: 12px; }
+    .qty-labels { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 5px; color: #374151; }
+    .qty-labels strong { font-weight: 700; }
+    .qty-bar-wrap { background: #f3f4f6; border-radius: 6px; height: 10px; overflow: hidden; }
+    .qty-bar-fill { height: 100%; border-radius: 6px; background: #7c3aed; transition: width .4s; }
+    .qty-bar-pct { font-size: 11px; color: #6b7280; margin-top: 4px; }
+    .manpower-block { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+    .manpower-ok { color: #16a34a; font-weight: 700; }
+    .manpower-warn { color: #d97706; font-weight: 700; }
+    .manpower-crit { color: #dc2626; font-weight: 700; }
+    .manpower-gap-tag { font-size: 11px; background: #fee2e2; color: #991b1b; border-radius: 4px; padding: 2px 6px; font-weight: 700; }
+    .manpower-surplus-tag { font-size: 11px; background: #dcfce7; color: #14532d; border-radius: 4px; padding: 2px 6px; font-weight: 700; }
+    .priority-badge { padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 800; text-transform: uppercase; }
+    .pri-high { background: #fee2e2; color: #991b1b; }
+    .pri-medium { background: #fef3c7; color: #92400e; }
+    .pri-low { background: #dcfce7; color: #14532d; }
+    .status-tag { font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 700; }
+    .status-planned { background: #ede9fe; color: #5b21b6; }
+    .status-in_progress { background: #fef3c7; color: #92400e; }
+    .status-completed { background: #dcfce7; color: #14532d; }
+    .version-history details > summary { font-size: 12px; color: #6b7280; cursor: pointer; user-select: none; }
+    .version-history .history-body { margin-top: 8px; padding: 10px 14px; background: #f9fafb;
+                                      border-radius: 8px; border: 1px solid #f3f4f6; }
+    .history-row { display: flex; justify-content: space-between; padding: 4px 0;
+                   border-bottom: 1px solid #f0f0f0; font-size: 12px; }
+    .history-row:last-child { border-bottom: none; }
   </style>
 {% endblock %}
 
 {% block content %}
 <div class="main">
-  <h2>Production Plan</h2>
-  <p class="subtitle">Generate and review shift-wise daily production plans</p>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+    <h2>Production Plan</h2>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div class="form-group" style="margin-bottom:0;">
+        <label style="margin-bottom:3px;">Plan Date</label>
+        <input type="date" id="plan-date" value="{{ default_date }}" onchange="onDateChange()">
+      </div>
+    </div>
+  </div>
+  <p class="subtitle">Generate and review shift-wise daily production plans for Sandhar</p>
 
   <div id="state-pregenerating">
     <div class="card">
@@ -86,11 +144,7 @@
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label>Plan Date</label>
-          <input type="date" id="plan-date" value="{{ default_date }}">
-        </div>
-        <div class="form-group">
-          <label>Shifts</label>
+          <label>Shifts to Generate</label>
           <div class="shift-check-group">
             <label class="shift-check-label"><input type="checkbox" class="shift-check" value="A" checked> Shift A</label>
             <label class="shift-check-label"><input type="checkbox" class="shift-check" value="B" checked> Shift B</label>
@@ -124,11 +178,14 @@
 
   <div id="state-review">
     <div class="card">
-      <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;">
-        <span>📋 Plan Review — <span id="review-date-label">—</span></span>
+      <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+        <span>📋 Production Plan — <span id="review-date-label">—</span></span>
         <button class="btn btn-outline" onclick="showPregen()" style="font-size:12px;">Generate New Plan</button>
       </div>
+
+      <!-- Persistent alerts panel — always shown when alerts exist -->
       <div id="review-alerts-section"></div>
+
       <div style="margin-top:16px;">
         <div class="shift-tabs">
           <div class="shift-tab active" id="stab-A" onclick="switchShift('A')">Shift A</div>
@@ -190,6 +247,32 @@ function advanceStep() {
   }
 }
 
+function updateURL(date) {
+  const url = new URL(window.location);
+  url.searchParams.set('date', date);
+  window.history.pushState({}, '', url);
+}
+
+async function onDateChange() {
+  const planDate = document.getElementById('plan-date').value;
+  if (!planDate) return;
+  updateURL(planDate);
+  await loadPreSummary();
+  // Check if an existing plan exists for this date — if so, switch to review
+  try {
+    const resp = await fetch(`/api/v1/sandhar/plan?date=${planDate}`, {headers: H});
+    if (resp.ok) {
+      const plans = await resp.json();
+      if (plans && plans.length > 0) {
+        currentPlanDate = planDate;
+        await loadPlanReview(planDate);
+        return;
+      }
+    }
+  } catch(_) {}
+  showPregen();
+}
+
 async function generatePlan() {
   const planDate = document.getElementById('plan-date').value;
   if (!planDate) { toast('Please select a plan date', false); return; }
@@ -208,6 +291,7 @@ async function generatePlan() {
     }
     currentRunId = data.agent_run_id;
     currentPlanDate = planDate;
+    updateURL(planDate);
     showGenerating(planDate);
     advanceStep();
     pollInterval = setInterval(pollRunStatus, 3000);
@@ -250,6 +334,7 @@ async function loadPlanReview(planDate) {
   document.getElementById('state-generating').style.display = 'none';
   document.getElementById('state-review').style.display = 'block';
   document.getElementById('review-date-label').textContent = planDate;
+  updateURL(planDate);
   try {
     const resp = await fetch(`/api/v1/sandhar/plan?date=${planDate}`, {headers: H});
     const plans = await resp.json();
@@ -257,16 +342,33 @@ async function loadPlanReview(planDate) {
       const plan = (plans || []).find(p => p.shift_code === shift);
       renderShiftPlan(shift, plan, planDate);
     }
+    await loadAlertsPanel(planDate);
+  } catch(e) { console.error('Failed to load plan', e); }
+}
+
+async function loadAlertsPanel(planDate) {
+  try {
     const ar = await fetch(`/api/v1/sandhar/alerts?status=active&plan_date=${planDate}&limit=20`, {headers: H});
     const alerts = await ar.json();
-    if (alerts && alerts.length > 0) {
-      let html = `<div style="font-weight:600;font-size:13px;margin-bottom:8px;">⚠️ ${alerts.length} Active Alert${alerts.length>1?'s':''}</div>`;
-      for (const a of alerts.slice(0, 5)) {
-        html += `<div class="exception-card"><div class="exception-title">${a.alert_type?.replace(/_/g,' ') || 'Alert'} — Shift ${a.shift_code || '?'}</div><div style="font-size:12px;color:#374151;margin-top:4px;">${a.alert_message || ''}</div></div>`;
-      }
-      document.getElementById('review-alerts-section').innerHTML = html;
-    }
-  } catch(e) { console.error('Failed to load plan', e); }
+    const container = document.getElementById('review-alerts-section');
+    if (!alerts || alerts.length === 0) { container.innerHTML = ''; return; }
+    const sevClass = s => ({critical:'sev-critical',high:'sev-high',medium:'sev-medium',low:'sev-low'}[s] || 'sev-low');
+    let rows = alerts.map(a => `
+      <div class="alert-row">
+        <span class="alert-sev ${sevClass(a.severity)}">${a.severity || 'info'}</span>
+        <div class="alert-body">
+          <div class="alert-type">${(a.alert_type || 'alert').replace(/_/g,' ')}
+            ${a.shift_code ? `<span class="alert-shift-badge">Shift ${a.shift_code}</span>` : ''}
+          </div>
+          <div class="alert-msg">${a.alert_message || ''}</div>
+        </div>
+      </div>`).join('');
+    container.innerHTML = `
+      <div class="alerts-panel">
+        <div class="alerts-panel-title">⚠️ ${alerts.length} Active Alert${alerts.length>1?'s':''} for ${planDate}</div>
+        ${rows}
+      </div>`;
+  } catch(_) {}
 }
 
 function renderShiftPlan(shift, plan, planDate) {
@@ -275,43 +377,143 @@ function renderShiftPlan(shift, plan, planDate) {
   const confClass = plan.confidence === 'high' ? 'badge-high' : plan.confidence === 'medium' ? 'badge-medium' : 'badge-low';
   const isApproved = plan.status === 'approved';
   const statusBadge = isApproved
-    ? '<span style="color:#16a34a;font-weight:700;">✅ Active Plan</span>'
-    : `<span style="color:#d97706;font-weight:700;">⏳ ${plan.status}</span>`;
+    ? '<span style="color:#16a34a;font-weight:700;">✅ Approved & Active</span>'
+    : `<span style="color:#d97706;font-weight:700;">⏳ Awaiting Approval</span>`;
   const history = plan.history || [];
   let historyHtml = '';
   if (history.length > 0) {
-    historyHtml = `<details style="margin-top:14px;"><summary style="font-size:12px;color:#6b7280;cursor:pointer;user-select:none;">${history.length} earlier version${history.length > 1 ? 's' : ''} (superseded)</summary><div style="margin-top:8px;padding:10px 14px;background:#f9fafb;border-radius:8px;border:1px solid #f3f4f6;">${history.map(h => `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f0f0f0;font-size:12px;"><span>v${h.version} &nbsp;·&nbsp; <span style="color:#6b7280;">${h.status}</span> &nbsp;·&nbsp; confidence: ${h.confidence || '—'}</span><span style="color:#9ca3af;">Created ${new Date(h.created_at).toLocaleString()}</span></div>`).join('')}</div></details>`;
+    historyHtml = `<div class="version-history" style="margin-top:14px;"><details>
+      <summary>${history.length} earlier version${history.length>1?'s':''} (superseded)</summary>
+      <div class="history-body">${history.map(h => `
+        <div class="history-row">
+          <span>v${h.version} &nbsp;·&nbsp; <span style="color:#6b7280">${h.status}</span> &nbsp;·&nbsp; confidence: ${h.confidence || '—'}</span>
+          <span style="color:#9ca3af">${new Date(h.created_at).toLocaleString()}</span>
+        </div>`).join('')}</div>
+    </details></div>`;
   }
   panel.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
-      <div>
-        <span class="badge ${confClass}" style="margin-right:8px;">Confidence: ${plan.confidence || '—'}</span>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span class="badge ${confClass}">Confidence: ${plan.confidence || '—'}</span>
         ${statusBadge}
-        <span style="color:#9ca3af;font-size:12px;margin-left:8px;">Version ${plan.version}</span>
-        ${isApproved && plan.approved_at ? `<span style="color:#9ca3af;font-size:12px;margin-left:8px;">· Approved ${new Date(plan.approved_at).toLocaleString()}</span>` : ''}
+        <span style="color:#9ca3af;font-size:12px;">Version ${plan.version}</span>
+        ${isApproved && plan.approved_at ? `<span style="color:#9ca3af;font-size:12px;">· Approved ${new Date(plan.approved_at).toLocaleString()}</span>` : ''}
       </div>
-      ${!isApproved ? `<div class="plan-actions"><button class="btn btn-success" onclick="approvePlan('${plan.id}', '${shift}')">✅ Approve Plan</button><button class="btn btn-danger" onclick="rejectPlan('${plan.id}', '${shift}')">✗ Reject</button></div>` : `<div class="plan-actions"><button class="btn btn-outline" onclick="reGeneratePlan('${shift}')">↺ Re-generate Shift ${shift}</button></div>`}
+      ${!isApproved
+        ? `<div class="plan-actions">
+             <button class="btn btn-success" onclick="approvePlan('${plan.id}','${shift}')">✅ Approve Plan</button>
+             <button class="btn btn-danger" onclick="rejectPlan('${plan.id}','${shift}')">✗ Reject</button>
+           </div>`
+        : `<div class="plan-actions">
+             <button class="btn btn-outline" onclick="reGeneratePlan('${shift}')">↺ Re-generate Shift ${shift}</button>
+           </div>`}
     </div>
-    <div id="plan-detail-${shift}"><div class="empty"><span class="spinner"></span> Loading details…</div></div>
+    <div id="plan-detail-${shift}"><div class="empty"><span class="spinner"></span> Loading line allocations…</div></div>
     ${historyHtml}
   `;
   loadPlanDetails(plan.id, shift);
 }
+
+function _fmt(v, fallback='—') { return (v != null && v !== '') ? v : fallback; }
+function _fmtDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso + (iso.length === 10 ? 'T00:00:00' : ''));
+  return d.toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'});
+}
+function _priClass(p) { return p === 'high' ? 'pri-high' : p === 'medium' ? 'pri-medium' : 'pri-low'; }
+function _statusClass(s) { return {'planned':'status-planned','in_progress':'status-in_progress','completed':'status-completed'}[s] || 'status-planned'; }
 
 async function loadPlanDetails(headerId, shift) {
   try {
     const resp = await fetch(`/api/v1/sandhar/plan/${headerId}`, {headers: H});
     const data = await resp.json();
     const details = data.details || [];
+    const container = document.getElementById(`plan-detail-${shift}`);
     if (details.length === 0) {
-      document.getElementById(`plan-detail-${shift}`).innerHTML = '<div class="empty">No line allocations saved in this plan — agent may not have called sandhar_allocate_line</div>';
+      container.innerHTML = '<div class="empty">No line allocations saved — the agent may not have completed sandhar_allocate_line</div>';
       return;
     }
-    let html = `<table><thead><tr><th>Line</th><th>Work Order</th><th>Product</th><th>Planned Qty</th><th>Operators</th><th>Status</th></tr></thead><tbody>`;
-    for (const d of details) {
-      html += `<tr><td style="font-family:monospace;font-size:12px;">${d.line_id ? d.line_id.substring(0,8)+'…' : '—'}</td><td style="font-family:monospace;font-size:12px;">${d.wo_id ? d.wo_id.substring(0,8)+'…' : '—'}</td><td>—</td><td style="font-weight:600;">${d.planned_qty?.toLocaleString() ?? '—'}</td><td>${d.available_manpower ?? '—'} / ${d.planned_manpower ?? '—'}</td><td><span style="color:#d97706;font-size:12px;">${d.status}</span></td></tr>`;
-    }
-    document.getElementById(`plan-detail-${shift}`).innerHTML = html + '</tbody></table>';
+
+    // Build summary row
+    const totalPlanned = details.reduce((s,d) => s + (d.planned_qty||0), 0);
+    const totalMp = details.reduce((s,d) => s + (d.available_manpower||0), 0);
+    const totalMpReq = details.reduce((s,d) => s + (d.planned_manpower||0), 0);
+    const linesWithGap = details.filter(d => (d.available_manpower||0) < (d.planned_manpower||0)).length;
+
+    let summaryHtml = `
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px;padding:12px 14px;background:#f8f9fb;border-radius:8px;border:1px solid #e5e7eb;">
+        <div><div class="metric-label">Lines Planned</div><div class="metric-value">${details.length}</div></div>
+        <div><div class="metric-label">Total Units Planned</div><div class="metric-value">${totalPlanned.toLocaleString()}</div></div>
+        <div><div class="metric-label">Total Operators</div><div class="metric-value">${totalMp} / ${totalMpReq}</div></div>
+        <div><div class="metric-label">Lines with Manpower Gap</div><div class="metric-value" style="color:${linesWithGap>0?'#dc2626':'#16a34a'}">${linesWithGap}</div></div>
+      </div>`;
+
+    let cardsHtml = details.map(d => {
+      const plannedQty = d.planned_qty || 0;
+      const orderQty = d.order_qty || 0;
+      const pct = orderQty > 0 ? Math.min(100, Math.round(plannedQty / orderQty * 100)) : 0;
+      const avail = d.available_manpower ?? 0;
+      const req = d.planned_manpower ?? 0;
+      const gap = avail - req;
+      const mpClass = gap < 0 ? 'manpower-crit' : gap === 0 ? 'manpower-ok' : 'manpower-ok';
+      const gapTag = gap < 0
+        ? `<span class="manpower-gap-tag">⚠ ${Math.abs(gap)} short</span>`
+        : gap > 0 ? `<span class="manpower-surplus-tag">+${gap} extra</span>` : '';
+
+      return `
+        <div class="line-card">
+          <div class="line-card-header">
+            <div class="line-name-block">
+              <span class="line-name">${_fmt(d.line_name, 'Unknown Line')}</span>
+              ${d.line_code ? `<span class="line-code-tag">${d.line_code}</span>` : ''}
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              ${d.wo_number ? `<span class="wo-tag">${d.wo_number}</span>` : ''}
+              ${d.priority ? `<span class="priority-badge ${_priClass(d.priority)}">${d.priority}</span>` : ''}
+              <span class="status-tag ${_statusClass(d.status)}">${d.status || 'planned'}</span>
+            </div>
+          </div>
+          <div class="line-card-body">
+            <div class="line-metrics">
+              <div class="metric">
+                <div class="metric-label">Product</div>
+                <div class="metric-value">${_fmt(d.product_name)}</div>
+                ${d.product_code ? `<div style="font-size:11px;color:#6b7280;">${d.product_code}</div>` : ''}
+              </div>
+              <div class="metric">
+                <div class="metric-label">Customer</div>
+                <div class="metric-value">${_fmt(d.customer_name)}</div>
+              </div>
+              <div class="metric">
+                <div class="metric-label">Due Date</div>
+                <div class="metric-value">${_fmtDate(d.due_date)}</div>
+              </div>
+              <div class="metric">
+                <div class="metric-label">Supervisor</div>
+                <div class="metric-value">${_fmt(d.supervisor_name)}</div>
+              </div>
+            </div>
+            ${orderQty > 0 ? `
+            <div class="qty-block">
+              <div class="qty-labels">
+                <span>Planned Qty: <strong>${plannedQty.toLocaleString()} units</strong></span>
+                <span>Order Qty: <strong>${orderQty.toLocaleString()} units</strong></span>
+              </div>
+              <div class="qty-bar-wrap"><div class="qty-bar-fill" style="width:${pct}%"></div></div>
+              <div class="qty-bar-pct">${pct}% of order will be fulfilled this shift</div>
+            </div>` : `
+            <div class="qty-block">
+              <div class="qty-labels"><span>Planned Qty: <strong>${plannedQty.toLocaleString()} units</strong></span></div>
+            </div>`}
+            <div class="manpower-block">
+              <span class="${mpClass}">${avail} / ${req} operators</span>
+              ${gapTag}
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+
+    container.innerHTML = summaryHtml + cardsHtml;
   } catch(e) {
     document.getElementById(`plan-detail-${shift}`).innerHTML = '<div class="empty">Could not load plan details</div>';
   }
@@ -323,11 +525,12 @@ function reGeneratePlan(shift) {
   if (!planDate) { toast('No date selected', false); return; }
   document.querySelectorAll('.shift-check').forEach(cb => { cb.checked = cb.value === shift; });
   document.getElementById('plan-date').value = planDate;
+  showPregen();
   generatePlan();
 }
 
 async function approvePlan(headerId, shift) {
-  if (!confirm(`Approve the Shift ${shift} production plan?`)) return;
+  if (!confirm(`Approve the Shift ${shift} production plan?\n\nThis will:\n• Mark all allocated work orders as 'Planned'\n• Lock this plan version as the active plan for execution`)) return;
   try {
     const resp = await fetch(`/api/v1/sandhar/plan/${headerId}/approve`, {
       method: 'POST', headers: H, body: JSON.stringify({planner_id: 'human'}),
@@ -369,7 +572,7 @@ async function loadPreSummary() {
     const ar = await fetch(`/api/v1/sandhar/attendance/summary?date=${planDate}`, {headers: H});
     const a = await ar.json();
     const present = Object.values(a.shifts || {}).reduce((s, sh) => s + (sh.present || 0), 0);
-    const total = Object.values(a.shifts || {}).reduce((s, sh) => s + (sh.present || 0) + (sh.absent || 0) + (sh.late || 0) + (sh.leave || 0), 0);
+    const total = Object.values(a.shifts || {}).reduce((s, sh) => s + (sh.present||0) + (sh.absent||0) + (sh.late||0) + (sh.leave||0), 0);
     if (present > 0) {
       const pct = total > 0 ? Math.round(present / total * 100) : 0;
       document.getElementById('pre-attendance').textContent = `${present} / ${total} (${pct}%)`;
@@ -379,7 +582,30 @@ async function loadPreSummary() {
   } catch { document.getElementById('pre-attendance').textContent = '—'; }
 }
 
-document.getElementById('plan-date').addEventListener('change', loadPreSummary);
-loadPreSummary();
+// ── Startup: read date from URL, auto-load if plan exists ──────────────────
+(async function init() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlDate = urlParams.get('date');
+  if (urlDate) {
+    document.getElementById('plan-date').value = urlDate;
+  }
+  const planDate = document.getElementById('plan-date').value;
+  currentPlanDate = planDate;
+  await loadPreSummary();
+  if (planDate) {
+    try {
+      const resp = await fetch(`/api/v1/sandhar/plan?date=${planDate}`, {headers: H});
+      if (resp.ok) {
+        const plans = await resp.json();
+        if (plans && plans.length > 0) {
+          currentPlanDate = planDate;
+          await loadPlanReview(planDate);
+          return;
+        }
+      }
+    } catch(_) {}
+  }
+  showPregen();
+})();
 </script>
 {% endblock %}

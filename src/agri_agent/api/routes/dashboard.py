@@ -3,22 +3,17 @@
 from __future__ import annotations
 
 from datetime import date
-from pathlib import Path
-
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agri_agent.api._templates import templates
 from agri_agent.config.settings import settings
 from agri_agent.db.models import Order
 from agri_agent.db.session import get_session
 
 router = APIRouter(tags=["dashboard"])
-
-_templates_dir = Path(__file__).parent.parent.parent / "templates"
-templates = Jinja2Templates(directory=str(_templates_dir))
 
 
 def _urgency_days(due: date) -> int:
