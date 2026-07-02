@@ -578,7 +578,7 @@ async def run_scenario(
 
         # Seed attendance for all employees (all present)
         await session.execute(
-            text("DELETE FROM sandhar_attendance WHERE attendance_date = :d"), {"d": today.isoformat()}
+            text("DELETE FROM sandhar_attendance WHERE attendance_date = :d"), {"d": today}
         )
         await session.flush()
         all_emp_result = await session.execute(
@@ -588,7 +588,7 @@ async def run_scenario(
             session.add(SandharAttendance(
                 employee_id=emp.id,
                 attendance_date=today,
-                shift_code=emp.shift_group,
+                shift_code=emp.shift_group or "A",
                 status="present",
                 is_manual_override=False,
             ))
@@ -621,7 +621,7 @@ async def run_scenario(
 
         await session.execute(
             text("DELETE FROM sandhar_attendance WHERE attendance_date = :d"),
-            {"d": today.isoformat()},
+            {"d": today},
         )
         await session.flush()
 
@@ -635,7 +635,7 @@ async def run_scenario(
             session.add(SandharAttendance(
                 employee_id=emp.id,
                 attendance_date=today,
-                shift_code=emp.shift_group,
+                shift_code=emp.shift_group or "A",
                 status=status,
                 is_manual_override=False,
             ))
@@ -856,7 +856,7 @@ async def run_scenario(
 
         # Seed attendance for all employees (all present)
         await session.execute(
-            text("DELETE FROM sandhar_attendance WHERE attendance_date = :d"), {"d": today.isoformat()}
+            text("DELETE FROM sandhar_attendance WHERE attendance_date = :d"), {"d": today}
         )
         await session.flush()
         all_emp_result = await session.execute(
@@ -867,7 +867,7 @@ async def run_scenario(
             session.add(SandharAttendance(
                 employee_id=emp.id,
                 attendance_date=today,
-                shift_code=emp.shift_group,
+                shift_code=emp.shift_group or "A",
                 status="present",
                 is_manual_override=False,
             ))
