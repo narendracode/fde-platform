@@ -18,9 +18,9 @@
     .btn:disabled { opacity: .5; cursor: not-allowed; }
     .btn-primary { background: #7c3aed; color: #fff; }
     .btn-danger { background: #dc2626; color: #fff; }
-    .btn-warning { background: #d97706; color: #fff; }
     .btn-success { background: #16a34a; color: #fff; }
     .btn-outline { background: #fff; color: #1a1a2e; border: 1px solid #d1d5db; }
+    .btn-sm { padding: 6px 14px; font-size: 13px; }
     .scenario-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
     .scenario-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px;
                      cursor: pointer; transition: border-color .15s, background .15s; }
@@ -34,7 +34,6 @@
                          text-transform: uppercase; letter-spacing: .4px; margin-bottom: 5px; }
     .form-group input, .form-group select { width: 100%; padding: 8px 12px;
       border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; }
-    .form-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
     .result-box { margin-top: 14px; background: #f9fafb; border-radius: 8px; padding: 14px;
                   border: 1px solid #e5e7eb; font-size: 13px; display: none; }
     .result-box.show { display: block; }
@@ -51,16 +50,50 @@
     .warning-box { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px;
                    padding: 14px; margin-bottom: 16px; color: #92400e; font-size: 13px; }
     .empty { color: #9ca3af; font-size: 13px; text-align: center; padding: 24px; }
+
+    /* ── Attendance Roster ── */
+    .roster-date-bar { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 16px; }
+    .roster-date-bar input[type=date] { padding: 8px 12px; border: 1px solid #d1d5db;
+      border-radius: 6px; font-size: 14px; }
+    .shift-section { margin-bottom: 18px; }
+    .shift-header { display: flex; align-items: center; justify-content: space-between;
+                    padding: 8px 14px; background: #f3f4f6; border-radius: 8px 8px 0 0;
+                    border: 1px solid #e5e7eb; border-bottom: none; }
+    .shift-label { font-weight: 700; font-size: 13px; }
+    .shift-summary { font-size: 12px; color: #6b7280; }
+    .shift-present { color: #16a34a; font-weight: 600; }
+    .shift-absent  { color: #dc2626; font-weight: 600; }
+    .roster-table-wrap { border: 1px solid #e5e7eb; border-radius: 0 0 8px 8px; overflow: hidden; }
+    .roster-table { width: 100%; border-collapse: collapse; }
+    .roster-table th { text-align: left; padding: 7px 12px; font-size: 10px; font-weight: 700;
+                       color: #9ca3af; text-transform: uppercase; background: #fafafa;
+                       border-bottom: 1px solid #f3f4f6; }
+    .roster-table td { padding: 8px 12px; border-bottom: 1px solid #f9fafb; font-size: 13px; }
+    .roster-table tr:last-child td { border-bottom: none; }
+    .roster-table tr.absent-row { background: #fff7f7; }
+    .absent-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer;
+                     user-select: none; font-size: 13px; }
+    .absent-toggle input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; accent-color: #dc2626; }
+    .badge-present { background: #dcfce7; color: #16a34a; padding: 2px 8px;
+                     border-radius: 10px; font-size: 11px; font-weight: 700; }
+    .badge-absent  { background: #fee2e2; color: #dc2626; padding: 2px 8px;
+                     border-radius: 10px; font-size: 11px; font-weight: 700; }
+    .badge-unset   { background: #f3f4f6; color: #9ca3af; padding: 2px 8px;
+                     border-radius: 10px; font-size: 11px; font-weight: 600; }
+    .roster-actions { display: flex; align-items: center; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
+    .roster-absent-count { font-size: 13px; color: #6b7280; }
+    #roster-content { display: none; }
   </style>
 {% endblock %}
 
 {% block content %}
 <div class="main">
   <h2>Simulation Control Panel</h2>
-  <p class="subtitle">Seed demo data, inject attendance, and test planning scenarios</p>
+  <p class="subtitle">Seed demo data, manage attendance, and test planning scenarios</p>
 
   <div class="grid-2">
     <div>
+      <!-- Seed -->
       <div class="card" style="margin-bottom:20px;">
         <div class="card-title">🌱 Seed Demo Data</div>
         <div class="card-desc">Loads 54 employees, 3 assembly lines, 7 machines, 5 products, 4 customers, 3 shifts, and 20 open work orders. Safe to run multiple times (idempotent).</div>
@@ -68,35 +101,32 @@
         <div class="result-box" id="seed-result"></div>
       </div>
 
+      <!-- Attendance Roster -->
       <div class="card" style="margin-bottom:20px;">
-        <div class="card-title">🗓 Inject Attendance</div>
-        <div class="card-desc">Loads attendance records for a given date/shift. Controls who is present — key for testing planning scenarios.</div>
-        <div class="form-group">
-          <label>Date</label>
-          <input type="date" id="att-date" value="{{ today }}">
+        <div class="card-title">🗓 Attendance Roster</div>
+        <div class="card-desc">
+          Each employee belongs to one shift. Mark specific employees as absent for a date — they will be absent for their entire assigned shift. All others are marked present.
         </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Shift</label>
-            <select id="att-shift">
-              <option value="A">Shift A</option>
-              <option value="B">Shift B</option>
-              <option value="C">Shift C</option>
-            </select>
+
+        <div class="roster-date-bar">
+          <div>
+            <label style="display:block;font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px;">Plan Date</label>
+            <input type="date" id="roster-date" value="{{ today }}">
           </div>
-          <div class="form-group">
-            <label>Absent %</label>
-            <input type="number" id="att-absent-pct" value="15" min="0" max="100">
-          </div>
-          <div class="form-group">
-            <label>Absent Count</label>
-            <input type="number" id="att-absent-count" value="" placeholder="auto">
+          <button class="btn btn-outline btn-sm" onclick="loadRoster()">Load Roster</button>
+        </div>
+
+        <div id="roster-content">
+          <div id="roster-shifts"></div>
+          <div class="roster-actions">
+            <button class="btn btn-success" onclick="saveAttendance()">💾 Save Attendance</button>
+            <span class="roster-absent-count" id="absent-count-label">0 employees marked absent</span>
           </div>
         </div>
-        <button class="btn btn-warning" onclick="runAttendance()">Inject Attendance</button>
         <div class="result-box" id="att-result"></div>
       </div>
 
+      <!-- Reset -->
       <div class="card">
         <div class="card-title">💣 Reset All Data</div>
         <div class="card-desc">Deletes all Sandhar data and re-seeds from scratch. This is irreversible within the simulation environment.</div>
@@ -106,6 +136,7 @@
       </div>
     </div>
 
+    <!-- Scenarios -->
     <div class="card">
       <div class="card-title">🎭 Test Scenarios</div>
       <div class="card-desc">Pre-built scenarios to test planning edge cases. Each scenario injects specific data conditions.</div>
@@ -120,6 +151,8 @@
 <script>
 const API_KEY = '{{ api_key }}';
 const H = {'X-API-Key': API_KEY, 'Content-Type': 'application/json'};
+
+let rosterData = null; // last loaded roster from server
 
 function toast(msg, ok=true) {
   const t = document.getElementById('toast');
@@ -136,6 +169,7 @@ function showResult(id, data, ok=true) {
     <div class="result-body">${typeof data === 'string' ? data : JSON.stringify(data, null, 2)}</div>`;
 }
 
+// ── Seed ─────────────────────────────────────────────────────────────────────
 async function runSeed() {
   const btn = document.getElementById('seed-btn');
   btn.disabled = true;
@@ -149,45 +183,145 @@ async function runSeed() {
     } else {
       showResult('seed-result', d.detail || JSON.stringify(d), false);
     }
+  } catch(e) { showResult('seed-result', e.message, false); }
+  finally { btn.disabled = false; btn.textContent = 'Seed Data'; }
+}
+
+// ── Attendance Roster ────────────────────────────────────────────────────────
+async function loadRoster() {
+  const date = document.getElementById('roster-date').value;
+  if (!date) { toast('Select a date first', false); return; }
+
+  document.getElementById('roster-shifts').innerHTML = '<div class="empty"><span class="spinner"></span> Loading roster…</div>';
+  document.getElementById('roster-content').style.display = 'block';
+
+  try {
+    const r = await fetch(`/api/v1/sandhar/simulation/attendance-roster?date=${date}`, {headers: H});
+    const d = await r.json();
+    if (!r.ok) { showResult('att-result', d.detail || JSON.stringify(d), false); return; }
+    rosterData = d;
+    renderRoster(d);
+    updateAbsentCount();
   } catch(e) {
-    showResult('seed-result', e.message, false);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Seed Data';
+    document.getElementById('roster-shifts').innerHTML = `<div class="empty">Error: ${e.message}</div>`;
   }
 }
 
-async function runAttendance() {
-  const date = document.getElementById('att-date').value;
-  const shift = document.getElementById('att-shift').value;
-  const absentPct = parseInt(document.getElementById('att-absent-pct').value) || 15;
-  const payload = {plan_date: date, shift_code: shift, absenteeism_pct: absentPct};
+function renderRoster(data) {
+  const shiftNames = {A: 'Shift A — Morning (06:00–14:00)', B: 'Shift B — Afternoon (14:00–22:00)', C: 'Shift C — Night (22:00–06:00)'};
+  let html = '';
+  for (const shift of ['A', 'B', 'C']) {
+    const emps = data.shifts[shift] || [];
+    const s = data.summary[shift] || {};
+    const loaded = data.attendance_loaded;
+    html += `
+      <div class="shift-section">
+        <div class="shift-header">
+          <span class="shift-label">${shiftNames[shift]}</span>
+          <span class="shift-summary">
+            ${loaded
+              ? `<span class="shift-present">${s.present||0} present</span> · <span class="shift-absent">${s.absent||0} absent</span>`
+              : `<span style="color:#9ca3af;">${emps.length} employees — no attendance saved yet</span>`}
+          </span>
+        </div>
+        <div class="roster-table-wrap">
+          <table class="roster-table">
+            <thead><tr><th style="width:36px;">Absent</th><th>Code</th><th>Name</th><th>Role</th><th>Grade</th><th>Status</th></tr></thead>
+            <tbody>
+              ${emps.map(emp => {
+                const isAbsent = emp.status === 'absent';
+                return `<tr class="${isAbsent ? 'absent-row' : ''}" id="row-${emp.id}">
+                  <td>
+                    <label class="absent-toggle">
+                      <input type="checkbox" id="cb-${emp.id}" data-emp-id="${emp.id}"
+                        ${isAbsent ? 'checked' : ''} onchange="onToggleAbsent(this)">
+                    </label>
+                  </td>
+                  <td><code style="font-size:11px;">${emp.employee_code}</code></td>
+                  <td style="font-weight:500;">${emp.name}</td>
+                  <td style="color:#6b7280;">${emp.designation || '—'}</td>
+                  <td style="color:#6b7280;">${emp.grade || '—'}</td>
+                  <td id="status-${emp.id}">
+                    ${emp.status === 'present' ? '<span class="badge-present">Present</span>'
+                      : emp.status === 'absent'  ? '<span class="badge-absent">Absent</span>'
+                      : '<span class="badge-unset">Not set</span>'}
+                  </td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+  document.getElementById('roster-shifts').innerHTML = html;
+}
+
+function onToggleAbsent(cb) {
+  const empId = cb.dataset.empId;
+  const row = document.getElementById(`row-${empId}`);
+  const statusEl = document.getElementById(`status-${empId}`);
+  if (cb.checked) {
+    row.classList.add('absent-row');
+    statusEl.innerHTML = '<span class="badge-absent">Absent</span>';
+  } else {
+    row.classList.remove('absent-row');
+    statusEl.innerHTML = '<span class="badge-present">Present</span>';
+  }
+  updateAbsentCount();
+}
+
+function updateAbsentCount() {
+  const checked = document.querySelectorAll('.roster-table input[type=checkbox]:checked').length;
+  document.getElementById('absent-count-label').textContent =
+    checked === 0 ? 'All employees present' : `${checked} employee${checked > 1 ? 's' : ''} marked absent`;
+}
+
+async function saveAttendance() {
+  const date = document.getElementById('roster-date').value;
+  if (!date) { toast('No date selected', false); return; }
+
+  const absentIds = [...document.querySelectorAll('.roster-table input[type=checkbox]:checked')]
+    .map(cb => cb.dataset.empId);
+
   try {
-    const r = await fetch('/api/v1/sandhar/simulation/attendance', {method: 'POST', headers: H, body: JSON.stringify(payload)});
+    const r = await fetch('/api/v1/sandhar/simulation/attendance', {
+      method: 'POST', headers: H,
+      body: JSON.stringify({plan_date: date, absent_employee_ids: absentIds}),
+    });
     const d = await r.json();
     if (r.ok) {
-      showResult('att-result', `Injected for ${date} Shift ${shift}: ${d.present} present, ${d.absent} absent (${d.created} total records)`, true);
-      toast('Attendance injected');
+      showResult('att-result',
+        `Attendance saved for ${d.date}: ${d.present} present, ${d.absent} absent (${d.created} total records)`,
+        true
+      );
+      toast('Attendance saved');
+      // Reload to refresh status badges
+      await loadRoster();
     } else {
       showResult('att-result', d.detail || JSON.stringify(d), false);
     }
   } catch(e) { showResult('att-result', e.message, false); }
 }
 
+// ── Reset ─────────────────────────────────────────────────────────────────────
 async function runReset() {
   if (!confirm('This will delete ALL Sandhar simulation data and re-seed. Are you sure?')) return;
   try {
     const r = await fetch('/api/v1/sandhar/simulation/reset', {method: 'POST', headers: H});
     const d = await r.json();
     if (r.ok) {
-      showResult('reset-result', 'All data reset and re-seeded. ' + JSON.stringify(d.seeded || {}), true);
+      showResult('reset-result', 'All data reset and re-seeded. ' + JSON.stringify(d.seed || {}), true);
       toast('Reset complete');
+      // Clear roster view
+      document.getElementById('roster-content').style.display = 'none';
+      rosterData = null;
     } else {
       showResult('reset-result', d.detail || JSON.stringify(d), false);
     }
   } catch(e) { showResult('reset-result', e.message, false); }
 }
 
+// ── Scenarios ────────────────────────────────────────────────────────────────
 async function loadScenarios() {
   try {
     const r = await fetch('/api/v1/sandhar/simulation/scenarios', {headers: H});
@@ -207,8 +341,10 @@ async function loadScenarios() {
 
 async function runScenario(id, el) {
   const today = '{{ today }}';
+  const nameEl = el.querySelector('.scenario-name');
+  const origName = nameEl.textContent;
   el.classList.add('running');
-  el.querySelector('.scenario-name').innerHTML = '<span class="spinner"></span> ' + el.querySelector('.scenario-name').textContent;
+  nameEl.innerHTML = '<span class="spinner"></span> ' + origName;
   try {
     const r = await fetch(`/api/v1/sandhar/simulation/scenario/${id}`, {
       method: 'POST', headers: H, body: JSON.stringify({plan_date: today}),
@@ -217,8 +353,12 @@ async function runScenario(id, el) {
     el.classList.remove('running');
     if (r.ok) {
       el.classList.add('done');
-      showResult('scenario-result', `✅ Scenario "${d.scenario_name || id}" applied for ${today}:\n${JSON.stringify(d.applied || {}, null, 2)}`, true);
+      showResult('scenario-result', `✅ Scenario "${d.scenario || d.scenario_name || id}" applied:\n${JSON.stringify(d, null, 2)}`, true);
       toast('Scenario applied');
+      // Refresh roster if it's visible
+      if (document.getElementById('roster-content').style.display !== 'none') {
+        await loadRoster();
+      }
     } else {
       showResult('scenario-result', d.detail || JSON.stringify(d), false);
     }
@@ -226,7 +366,7 @@ async function runScenario(id, el) {
     el.classList.remove('running');
     showResult('scenario-result', e.message, false);
   }
-  el.querySelector('.scenario-name').textContent = el.querySelector('.scenario-name').textContent.replace('  ', '');
+  nameEl.textContent = origName;
 }
 
 loadScenarios();

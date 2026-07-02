@@ -6,7 +6,7 @@ import random
 from datetime import date, datetime, timezone, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel
 from sqlalchemy import select, text, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -93,8 +93,7 @@ _PRODUCTS_BY_LINE = {
 
 class AttendanceInjectionRequest(BaseModel):
     plan_date: str
-    shift_code: str
-    absenteeism_pct: float = 0.0
+    absent_employee_ids: list[str] = []  # UUIDs of employees to mark absent; all others → present
 
 
 # ── Seed helper ────────────────────────────────────────────────────────────────
@@ -377,64 +376,118 @@ async def reset_data(
     return {"reset": True, "seed": result}
 
 
+@router.get("/simulation/attendance-roster")
+async def attendance_roster(
+    date: str = Query(...),
+    session: AsyncSession = Depends(get_session),
+    _: str = Depends(verify_api_key),
+):
+    """Return all active employees grouped by shift with their attendance status for the date.
+    status=null means no attendance record has been saved yet for that date.
+    """
+    from datetime import date as _date
+    try:
+        att_date = _date.fromisoformat(date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
+
+    emp_result = await session.execute(
+        select(SandharEmployee)
+        .where(SandharEmployee.status == "active")
+        .order_by(SandharEmployee.shift_group, SandharEmployee.employee_code)
+    )
+    employees = emp_result.scalars().all()
+
+    att_result = await session.execute(
+        select(SandharAttendance).where(SandharAttendance.attendance_date == att_date)
+    )
+    att_map = {a.employee_id: a.status for a in att_result.scalars().all()}
+
+    shifts: dict[str, list] = {"A": [], "B": [], "C": []}
+    summary = {s: {"present": 0, "absent": 0, "unset": 0} for s in ["A", "B", "C"]}
+
+    for emp in employees:
+        shift = emp.shift_group or "A"
+        if shift not in shifts:
+            continue
+        status = att_map.get(emp.id)
+        shifts[shift].append({
+            "id": str(emp.id),
+            "employee_code": emp.employee_code,
+            "name": emp.name,
+            "designation": emp.designation,
+            "grade": emp.grade,
+            "status": status,
+        })
+        key = status if status in ("present", "absent") else "unset"
+        summary[shift][key] += 1
+
+    return {
+        "date": att_date.isoformat(),
+        "shifts": shifts,
+        "summary": summary,
+        "attendance_loaded": len(att_map) > 0,
+    }
+
+
 @router.post("/simulation/attendance")
 async def inject_attendance(
     req: AttendanceInjectionRequest,
     session: AsyncSession = Depends(get_session),
     _: str = Depends(verify_api_key),
 ):
-    """Inject attendance records for employees in the given shift, with optional absenteeism."""
+    """Save attendance for all employees for a given date.
+    Employees listed in absent_employee_ids are marked absent; all others are marked present.
+    shift_code is derived from each employee's shift_group — an employee is absent for the
+    whole day (their assigned shift), not for a specific shift parameter.
+    """
     try:
         att_date = date.fromisoformat(req.plan_date)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid plan_date format, use YYYY-MM-DD")
 
-    # Get employees for this shift group
-    emp_result = await session.execute(
-        select(SandharEmployee).where(
-            and_(
-                SandharEmployee.shift_group == req.shift_code,
-                SandharEmployee.status == "active",
-            )
-        )
-    )
-    employees = emp_result.scalars().all()
+    absent_ids: set[uuid.UUID] = set()
+    for eid in req.absent_employee_ids:
+        try:
+            absent_ids.add(uuid.UUID(eid))
+        except ValueError:
+            pass
 
-    if not employees:
-        return {"created": 0, "present": 0, "absent": 0, "message": f"No active employees found for shift {req.shift_code}"}
-
-    # Delete existing records for this date + shift
+    # Wipe all attendance for this date across all shifts
     await session.execute(
-        text(
-            "DELETE FROM sandhar_attendance WHERE attendance_date = :d AND shift_code = :s"
-        ),
-        {"d": att_date, "s": req.shift_code},
+        text("DELETE FROM sandhar_attendance WHERE attendance_date = :d"),
+        {"d": att_date},
     )
     await session.flush()
 
-    created = 0
+    emp_result = await session.execute(
+        select(SandharEmployee).where(SandharEmployee.status == "active")
+    )
+    employees = emp_result.scalars().all()
+
     present_count = 0
     absent_count = 0
-    absenteeism = max(0.0, min(1.0, req.absenteeism_pct / 100.0))
-
     for emp in employees:
-        status = "absent" if random.random() < absenteeism else "present"
-        att = SandharAttendance(
+        status = "absent" if emp.id in absent_ids else "present"
+        session.add(SandharAttendance(
             employee_id=emp.id,
             attendance_date=att_date,
-            shift_code=req.shift_code,
+            shift_code=emp.shift_group,  # always from roster, never an input
             status=status,
             is_manual_override=False,
-        )
-        session.add(att)
-        created += 1
+        ))
         if status == "present":
             present_count += 1
         else:
             absent_count += 1
 
     await session.commit()
-    return {"created": created, "present": present_count, "absent": absent_count}
+    return {
+        "created": len(employees),
+        "present": present_count,
+        "absent": absent_count,
+        "date": att_date.isoformat(),
+    }
 
 
 @router.get("/simulation/scenarios")
@@ -451,7 +504,7 @@ async def list_scenarios(
         {
             "id": "s2-absenteeism",
             "name": "High Absenteeism (Shift A)",
-            "description": "Mark 20% of Shift A employees as absent for today.",
+            "description": "Mark first 4 Shift A employees absent for today (~20%). Deterministic — same 4 employees every run.",
         },
         {
             "id": "s3-breakdown",
@@ -523,26 +576,22 @@ async def run_scenario(
                 session.add(wo)
                 wo_created += 1
 
-        # Seed attendance for all shifts (all present)
-        for shift_code in ["A", "B", "C"]:
-            emp_result = await session.execute(
-                select(SandharEmployee).where(
-                    and_(SandharEmployee.shift_group == shift_code, SandharEmployee.status == "active")
-                )
-            )
-            employees = emp_result.scalars().all()
-            await session.execute(
-                text("DELETE FROM sandhar_attendance WHERE attendance_date = :d AND shift_code = :s"),
-                {"d": today.isoformat(), "s": shift_code},
-            )
-            for emp in employees:
-                session.add(SandharAttendance(
-                    employee_id=emp.id,
-                    attendance_date=today,
-                    shift_code=shift_code,
-                    status="present",
-                    is_manual_override=False,
-                ))
+        # Seed attendance for all employees (all present)
+        await session.execute(
+            text("DELETE FROM sandhar_attendance WHERE attendance_date = :d"), {"d": today.isoformat()}
+        )
+        await session.flush()
+        all_emp_result = await session.execute(
+            select(SandharEmployee).where(SandharEmployee.status == "active")
+        )
+        for emp in all_emp_result.scalars().all():
+            session.add(SandharAttendance(
+                employee_id=emp.id,
+                attendance_date=today,
+                shift_code=emp.shift_group,
+                status="present",
+                is_manual_override=False,
+            ))
 
         # Set all machines running
         machine_result = await session.execute(select(SandharMachine))
@@ -560,26 +609,33 @@ async def run_scenario(
 
     # ── s2-absenteeism ─────────────────────────────────────────────────────────
     elif scenario_id == "s2-absenteeism":
-        emp_result = await session.execute(
+        # Load Shift A employees sorted by code so absent set is deterministic
+        shift_a_result = await session.execute(
             select(SandharEmployee).where(
                 and_(SandharEmployee.shift_group == "A", SandharEmployee.status == "active")
-            )
+            ).order_by(SandharEmployee.employee_code)
         )
-        employees = emp_result.scalars().all()
+        shift_a_employees = shift_a_result.scalars().all()
+        # Mark first 4 of Shift A absent (~20% of 20)
+        absent_set = {emp.id for emp in shift_a_employees[:4]}
 
         await session.execute(
-            text("DELETE FROM sandhar_attendance WHERE attendance_date = :d AND shift_code = :s"),
-            {"d": today.isoformat(), "s": "A"},
+            text("DELETE FROM sandhar_attendance WHERE attendance_date = :d"),
+            {"d": today.isoformat()},
         )
+        await session.flush()
 
+        all_emp_result = await session.execute(
+            select(SandharEmployee).where(SandharEmployee.status == "active")
+        )
         present_count = 0
         absent_count = 0
-        for emp in employees:
-            status = "absent" if random.random() < 0.20 else "present"
+        for emp in all_emp_result.scalars().all():
+            status = "absent" if emp.id in absent_set else "present"
             session.add(SandharAttendance(
                 employee_id=emp.id,
                 attendance_date=today,
-                shift_code="A",
+                shift_code=emp.shift_group,
                 status=status,
                 is_manual_override=False,
             ))
@@ -589,7 +645,13 @@ async def run_scenario(
                 absent_count += 1
 
         await session.commit()
-        return {"scenario": "s2-absenteeism", "total": len(employees), "present": present_count, "absent": absent_count}
+        return {
+            "scenario": "s2-absenteeism",
+            "total": len(shift_a_employees),
+            "present": present_count,
+            "absent": absent_count,
+            "note": "First 4 Shift A employees marked absent (deterministic)",
+        }
 
     # ── s3-breakdown ───────────────────────────────────────────────────────────
     elif scenario_id == "s3-breakdown":
@@ -792,28 +854,24 @@ async def run_scenario(
                 session.add(wo)
                 wo_created += 1
 
-        # Seed attendance for all shifts
+        # Seed attendance for all employees (all present)
+        await session.execute(
+            text("DELETE FROM sandhar_attendance WHERE attendance_date = :d"), {"d": today.isoformat()}
+        )
+        await session.flush()
+        all_emp_result = await session.execute(
+            select(SandharEmployee).where(SandharEmployee.status == "active")
+        )
         total_att = 0
-        for shift_code in ["A", "B", "C"]:
-            emp_result = await session.execute(
-                select(SandharEmployee).where(
-                    and_(SandharEmployee.shift_group == shift_code, SandharEmployee.status == "active")
-                )
-            )
-            employees = emp_result.scalars().all()
-            await session.execute(
-                text("DELETE FROM sandhar_attendance WHERE attendance_date = :d AND shift_code = :s"),
-                {"d": today.isoformat(), "s": shift_code},
-            )
-            for emp in employees:
-                session.add(SandharAttendance(
-                    employee_id=emp.id,
-                    attendance_date=today,
-                    shift_code=shift_code,
-                    status="present",
-                    is_manual_override=False,
-                ))
-                total_att += 1
+        for emp in all_emp_result.scalars().all():
+            session.add(SandharAttendance(
+                employee_id=emp.id,
+                attendance_date=today,
+                shift_code=emp.shift_group,
+                status="present",
+                is_manual_override=False,
+            ))
+            total_att += 1
 
         await session.commit()
         return {
