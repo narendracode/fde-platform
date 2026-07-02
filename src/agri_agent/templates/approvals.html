@@ -1,49 +1,27 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Fundly — Action Inbox</title>
+{% extends "base.html" %}
+{% block title %}Actions — AI Agent Platform{% endblock %}
+
+{% block head_extra %}
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-           background: #f0f2f5; color: #1a1a2e; font-size: 14px; }
-
-    header { background: #1a1a2e; color: #fff; padding: 0 28px; height: 56px;
-             display: flex; align-items: stretch; justify-content: space-between; }
-    .header-brand { display: flex; align-items: center; gap: 10px; }
-    header h1 { font-size: 17px; font-weight: 700; }
-    nav { display: flex; align-items: stretch; }
-    nav a { display: flex; align-items: center; padding: 0 16px; color: #8899bb;
-            text-decoration: none; font-size: 13px; font-weight: 500;
-            border-bottom: 3px solid transparent; }
-    nav a:hover { color: #fff; }
-    nav a.active { color: #a5b4fc; border-bottom-color: #4f46e5; }
-
     .main { max-width: 940px; margin: 0 auto; padding: 24px 20px; }
 
-    /* ── Stale notice banner ── */
     .stale-notice { display: flex; align-items: center; gap: 10px; background: #fffbeb;
                     border: 1px solid #fde68a; border-radius: 8px; padding: 10px 14px;
                     margin-bottom: 16px; font-size: 13px; color: #78350f; }
     .stale-notice button { margin-left: auto; background: none; border: none; cursor: pointer;
                            color: #a16207; font-size: 16px; line-height: 1; padding: 0 4px; }
 
-    /* ── View tabs ── */
     .view-tab { padding: 8px 16px; font-size: 13px; font-weight: 500; color: #6b7280;
                 cursor: pointer; border: 1px solid transparent; border-bottom: none;
                 border-radius: 8px 8px 0 0; background: #e5e7eb; display: inline-block;
                 text-decoration: none; transition: background .15s, color .15s; }
     .view-tab:hover { background: #d1d5db; color: #1a1a2e; }
     .view-tab.active { background: #fff; color: #1a1a2e; font-weight: 600;
-                       border-color: #e5e7eb; position: relative; top: 1px;
-                       box-shadow: 0 -1px 3px rgba(0,0,0,.05); }
+                       border-color: #e5e7eb; position: relative; top: 1px; box-shadow: 0 -1px 3px rgba(0,0,0,.05); }
 
-    /* ── Filter bar ── */
     .filter-bar { background: #fff; border-radius: 0 10px 10px 10px; padding: 12px 18px;
                   margin-bottom: 20px; display: flex; align-items: center; gap: 14px;
-                  box-shadow: 0 1px 4px rgba(0,0,0,.07); flex-wrap: wrap;
-                  border: 1px solid #e5e7eb; }
+                  box-shadow: 0 1px 4px rgba(0,0,0,.07); flex-wrap: wrap; border: 1px solid #e5e7eb; }
     .filter-bar label { font-size: 12px; font-weight: 600; color: #666; }
     .filter-bar select { padding: 5px 10px; border: 1px solid #ddd; border-radius: 6px;
                          font-size: 13px; background: #fff; cursor: pointer; }
@@ -51,7 +29,6 @@
     .count-badge { margin-left: auto; background: #e0e7ff; color: #3730a3; font-size: 12px;
                    font-weight: 700; padding: 3px 10px; border-radius: 20px; }
 
-    /* ── Action card ── */
     .card { background: #fff; border-radius: 12px; margin-bottom: 16px;
             box-shadow: 0 1px 4px rgba(0,0,0,.07); overflow: hidden;
             border-left: 4px solid transparent; transition: box-shadow .15s; }
@@ -59,8 +36,6 @@
     .card.conf-high   { border-left-color: #16a34a; }
     .card.conf-medium { border-left-color: #d97706; }
     .card.conf-low    { border-left-color: #dc2626; }
-
-    /* history status colors */
     .card.status-approved   { border-left-color: #16a34a; }
     .card.status-rejected   { border-left-color: #dc2626; }
     .card.status-stale      { border-left-color: #94a3b8; }
@@ -96,7 +71,6 @@
     .card-title { font-size: 16px; font-weight: 700; color: #1a1a2e; margin: 0 0 4px; line-height: 1.3; }
     .card-summary { font-size: 13px; color: #64748b; margin: 0; }
 
-    /* ── Details section ── */
     .card-details { padding: 0 18px; max-height: 0; overflow: hidden; transition: max-height .25s ease; }
     .card-details.open { max-height: 1000px; }
     .section-label { font-size: 11px; font-weight: 700; text-transform: uppercase;
@@ -105,17 +79,14 @@
     .state-null { color: #94a3b8; font-style: italic; }
 
     .details-table { width: 100%; border-collapse: collapse; margin: 10px 0; }
-    .details-table td { padding: 7px 10px; font-size: 13px; border-bottom: 1px solid #f1f5f9;
-                        vertical-align: top; }
-    .details-table td:first-child { font-weight: 600; color: #475569; width: 38%;
-                                    white-space: nowrap; }
+    .details-table td { padding: 7px 10px; font-size: 13px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+    .details-table td:first-child { font-weight: 600; color: #475569; width: 38%; white-space: nowrap; }
     .details-table tr:last-child td { border-bottom: none; }
 
     .reasoning-box { background: #f8fafc; border-left: 3px solid #cbd5e1; padding: 10px 14px;
                      border-radius: 0 6px 6px 0; font-size: 12px; color: #475569;
                      line-height: 1.6; margin: 8px 0 14px; }
 
-    /* ── Drift panel ── */
     .drift-panel { display: none; margin: 0 18px 14px; background: #fdf4ff;
                    border: 1.5px solid #d8b4fe; border-radius: 10px; overflow: hidden; }
     .drift-panel.visible { display: block; }
@@ -123,8 +94,7 @@
                     font-weight: 600; color: #7e22ce; border-bottom: 1px solid #d8b4fe; }
     .drift-table { width: 100%; border-collapse: collapse; }
     .drift-table th { padding: 7px 12px; font-size: 11px; font-weight: 700; text-transform: uppercase;
-                      letter-spacing: .4px; color: #7e22ce; background: #faf5ff;
-                      border-bottom: 1px solid #ede9fe; }
+                      letter-spacing: .4px; color: #7e22ce; background: #faf5ff; border-bottom: 1px solid #ede9fe; }
     .drift-table td { padding: 7px 12px; font-size: 13px; border-bottom: 1px solid #f5f3ff; }
     .drift-table tr:last-child td { border-bottom: none; }
     .drift-expected { color: #16a34a; font-weight: 600; }
@@ -134,18 +104,15 @@
                          border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; }
     .btn-mark-drifted:hover { background: #7e22ce; }
     .btn-approve-anyway { background: #fff; color: #d97706; border: 1.5px solid #d97706;
-                          padding: 7px 14px; border-radius: 7px; font-size: 13px;
-                          font-weight: 600; cursor: pointer; }
+                          padding: 7px 14px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; }
     .btn-approve-anyway:hover { background: #d97706; color: white; }
     .btn-cancel-drift { background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0;
                         padding: 7px 14px; border-radius: 7px; font-size: 13px; cursor: pointer; }
     .btn-cancel-drift:hover { background: #e2e8f0; }
-
     .drift-info { margin: 6px 18px 14px; background: #f3e8ff; border-radius: 8px;
                   padding: 10px 14px; font-size: 12px; color: #7e22ce; }
     .drift-info strong { display: block; margin-bottom: 4px; }
 
-    /* ── Action buttons row ── */
     .card-actions { padding: 12px 18px 16px; display: flex; align-items: center; gap: 8px;
                     flex-wrap: wrap; border-top: 1px solid #f1f5f9; margin-top: 4px; }
     .btn { padding: 7px 18px; border: none; border-radius: 7px; font-size: 13px;
@@ -162,42 +129,24 @@
     .btn-details  { background: #f8fafc; color: #64748b; border: 1px solid #e2e8f0;
                     font-size: 12px; padding: 5px 12px; margin-left: auto; }
     .btn-details:hover  { background: #e2e8f0; }
-
     .note-input { flex: 1; min-width: 180px; padding: 5px 10px; border: 1px solid #e2e8f0;
                   border-radius: 5px; font-size: 12px; font-family: inherit; color: #475569; }
     .note-input::placeholder { color: #94a3b8; }
 
-    /* ── Empty / error states ── */
     .empty-state { text-align: center; padding: 60px 20px; color: #94a3b8; }
     .empty-state .icon { font-size: 48px; display: block; margin-bottom: 12px; }
     .empty-state p { font-size: 15px; }
 
     .error-banner { background: #fee2e2; border: 1px solid #fca5a5; border-radius: 8px;
-                    padding: 12px 16px; font-size: 13px; color: #991b1b; margin: 0 18px 12px;
-                    display: none; }
+                    padding: 12px 16px; font-size: 13px; color: #991b1b; margin: 0 18px 12px; display: none; }
 
     #toast { position: fixed; bottom: 24px; right: 24px; background: #1a1a2e; color: white;
              padding: 10px 18px; border-radius: 8px; font-size: 13px; display: none;
              box-shadow: 0 4px 12px rgba(0,0,0,.2); z-index: 999; max-width: 360px; }
   </style>
-</head>
-<body>
+{% endblock %}
 
-<header>
-  <div class="header-brand">
-    <h1>Fundly</h1>
-    <span style="width:1px;height:20px;background:#334;margin:0 4px;display:inline-block;"></span>
-    <span style="font-size:12px;color:#6677aa;">Agent Platform</span>
-  </div>
-  <nav>
-    <a href="/dashboard">📦 Orders</a>
-    <a href="/agents">🤖 Agents</a>
-    <a href="/runs">📋 Runs</a>
-    <a href="/approvals" class="active">🔔 Action Inbox</a>
-    <a href="/docs" target="_blank" style="color:#6677aa;">API</a>
-  </nav>
-</header>
-
+{% block content %}
 <div class="main">
 
   {% if auto_staled_count > 0 %}
@@ -214,18 +163,14 @@
       <a href="/approvals{% if selected_agent %}?agent_name={{ selected_agent }}{% endif %}"
          class="view-tab {% if view == 'active' %}active{% endif %}">
         🔔 Active
-        {% if view == 'active' %}<span style="font-size:11px;background:#e0e7ff;color:#3730a3;
-          padding:1px 6px;border-radius:10px;margin-left:4px;">{{ total }}</span>{% endif %}
+        {% if view == 'active' %}<span style="font-size:11px;background:#e0e7ff;color:#3730a3;padding:1px 6px;border-radius:10px;margin-left:4px;">{{ total }}</span>{% endif %}
       </a>
       <a href="/approvals?view=history{% if selected_agent %}&agent_name={{ selected_agent }}{% endif %}"
          class="view-tab {% if view == 'history' %}active{% endif %}">
         📋 History
       </a>
     </div>
-    <button style="padding:5px 12px;background:#f3f4f6;border:1px solid #ddd;border-radius:6px;
-                   font-size:12px;cursor:pointer;margin-bottom:1px;" onclick="location.reload()">
-      ↺ Refresh
-    </button>
+    <button style="padding:5px 12px;background:#f3f4f6;border:1px solid #ddd;border-radius:6px;font-size:12px;cursor:pointer;margin-bottom:1px;" onclick="location.reload()">↺ Refresh</button>
   </div>
 
   <div class="filter-bar">
@@ -236,7 +181,6 @@
       <option value="{{ name }}" {% if selected_agent == name %}selected{% endif %}>{{ name }}</option>
       {% endfor %}
     </select>
-
     {% if view == 'active' %}
     <label>Confidence</label>
     <select onchange="applyFilter('confidence', this.value)">
@@ -246,24 +190,20 @@
       <option value="low"    {% if selected_confidence == 'low'    %}selected{% endif %}>Low</option>
     </select>
     {% endif %}
-
     <span class="count-badge">{{ total }} {{ 'pending' if view == 'active' else 'records' }}</span>
   </div>
 
-  <!-- ── Active cards ── -->
   {% if view == 'active' %}
     {% if actions %}
       {% for action in actions %}
       <div class="card conf-{{ action.confidence }}" id="card-{{ action.id }}">
-
         <div class="card-header">
           <div style="flex:1;min-width:0;">
             <div class="card-meta" style="margin-bottom:8px;">
               <span class="agent-chip">🤖 {{ action.agent_name }}</span>
               <span class="conf-chip conf-{{ action.confidence }}">{{ action.confidence|upper }}</span>
               {% for tag in action.tags %}
-              <span style="background:#e0e7ff;color:#3730a3;font-size:10px;font-weight:600;
-                           padding:1px 6px;border-radius:10px;">{{ tag }}</span>
+              <span style="background:#e0e7ff;color:#3730a3;font-size:10px;font-weight:600;padding:1px 6px;border-radius:10px;">{{ tag }}</span>
               {% endfor %}
               <span class="time-chip">{{ action.created_at[:16].replace("T"," ") }}</span>
               <span id="stale-label-{{ action.id }}"></span>
@@ -272,12 +212,9 @@
             <p class="card-title">{{ action.title }}</p>
             <p class="card-summary">{{ action.summary }}</p>
           </div>
-          <button class="btn btn-details" onclick="toggleDetails('{{ action.id }}')">
-            Details ▾
-          </button>
+          <button class="btn btn-details" onclick="toggleDetails('{{ action.id }}')">Details ▾</button>
         </div>
 
-        <!-- Collapsible details -->
         <div class="card-details" id="details-{{ action.id }}">
           {% if action.display_data %}
           <table class="details-table">
@@ -286,24 +223,18 @@
             {% endfor %}
           </table>
           {% endif %}
-          {% if action.reasoning %}
-          <div class="reasoning-box">{{ action.reasoning }}</div>
-          {% endif %}
+          {% if action.reasoning %}<div class="reasoning-box">{{ action.reasoning }}</div>{% endif %}
           {% set state_fields = action.expected_state.items() | list | selectattr(0, 'ne', 'resource_id') | list if action.expected_state else [] %}
           {% if state_fields %}
           <div class="section-label">Resource state when proposed</div>
           <table class="details-table" style="margin-bottom:14px;">
             {% for k, v in state_fields %}
-            <tr>
-              <td>{{ k }}</td>
-              <td>{% if v is none %}<span class="state-null">null</span>{% else %}{{ v }}{% endif %}</td>
-            </tr>
+            <tr><td>{{ k }}</td><td>{% if v is none %}<span class="state-null">null</span>{% else %}{{ v }}{% endif %}</td></tr>
             {% endfor %}
           </table>
           {% endif %}
         </div>
 
-        <!-- Drift panel (shown when approve detects drift) -->
         <div class="drift-panel" id="drift-{{ action.id }}">
           <div class="drift-header">⚠ Resource state has changed since this action was proposed</div>
           <table class="drift-table">
@@ -317,23 +248,15 @@
           </div>
         </div>
 
-        <!-- Action row: Approve · Reject · Dismiss + optional note -->
         <div class="card-actions">
-          <button class="btn btn-approve" id="approve-btn-{{ action.id }}"
-                  onclick="approveAction('{{ action.id }}')">✓ Approve</button>
-          <button class="btn btn-reject" id="reject-btn-{{ action.id }}"
-                  onclick="rejectAction('{{ action.id }}')">✗ Reject</button>
-          <button class="btn btn-dismiss" id="dismiss-btn-{{ action.id }}"
-                  onclick="dismissAction('{{ action.id }}')">Dismiss</button>
-          <input class="note-input" id="note-{{ action.id }}"
-                 placeholder="Optional note…" type="text">
+          <button class="btn btn-approve" id="approve-btn-{{ action.id }}" onclick="approveAction('{{ action.id }}')">✓ Approve</button>
+          <button class="btn btn-reject" id="reject-btn-{{ action.id }}" onclick="rejectAction('{{ action.id }}')">✗ Reject</button>
+          <button class="btn btn-dismiss" id="dismiss-btn-{{ action.id }}" onclick="dismissAction('{{ action.id }}')">Dismiss</button>
+          <input class="note-input" id="note-{{ action.id }}" placeholder="Optional note…" type="text">
         </div>
-
         <div class="error-banner" id="error-{{ action.id }}"></div>
-
       </div>
       {% endfor %}
-
     {% else %}
     <div class="empty-state">
       <span class="icon">✅</span>
@@ -341,12 +264,10 @@
     </div>
     {% endif %}
 
-  <!-- ── History cards ── -->
   {% else %}
     {% if actions %}
       {% for action in actions %}
       <div class="card status-{{ action.status }}" id="card-{{ action.id }}">
-
         <div class="card-header">
           <div style="flex:1;min-width:0;">
             <div class="card-meta" style="margin-bottom:8px;">
@@ -361,8 +282,7 @@
                 {% else %}{{ action.status }}{% endif %}
               </span>
               {% if action.drift_override %}
-              <span style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:600;
-                           padding:1px 6px;border-radius:10px;">drift overridden</span>
+              <span style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:600;padding:1px 6px;border-radius:10px;">drift overridden</span>
               {% endif %}
               <span class="time-chip">{{ action.created_at[:16].replace("T"," ") }}</span>
             </div>
@@ -375,11 +295,8 @@
             </p>
             {% endif %}
           </div>
-          <button class="btn btn-details" onclick="toggleDetails('{{ action.id }}')">
-            Details ▾
-          </button>
+          <button class="btn btn-details" onclick="toggleDetails('{{ action.id }}')">Details ▾</button>
         </div>
-
         <div class="card-details" id="details-{{ action.id }}">
           {% if action.display_data %}
           <table class="details-table">
@@ -388,31 +305,21 @@
             {% endfor %}
           </table>
           {% endif %}
-          {% if action.reasoning %}
-          <div class="reasoning-box">{{ action.reasoning }}</div>
-          {% endif %}
+          {% if action.reasoning %}<div class="reasoning-box">{{ action.reasoning }}</div>{% endif %}
         </div>
-
         {% if action.drift_details %}
         <div class="drift-info">
           <strong>{% if action.status == 'drifted' %}Drift details (action discarded):{% else %}Drift detected — approved anyway:{% endif %}</strong>
           {% for field, vals in action.drift_details.items() %}
-          <span style="margin-right:12px;">
-            <strong>{{ field }}:</strong>
-            <span style="color:#16a34a;">{{ vals.expected }}</span> →
-            <span style="color:#dc2626;">{{ vals.actual }}</span>
-          </span>
+          <span style="margin-right:12px;"><strong>{{ field }}:</strong> <span style="color:#16a34a;">{{ vals.expected }}</span> → <span style="color:#dc2626;">{{ vals.actual }}</span></span>
           {% endfor %}
         </div>
         {% endif %}
-
         {% if action.approval_error %}
         <div class="error-banner" style="display:block;">{{ action.approval_error }}</div>
         {% endif %}
-
       </div>
       {% endfor %}
-
     {% else %}
     <div class="empty-state">
       <span class="icon">📋</span>
@@ -447,8 +354,6 @@ function applyFilter(param, value) {
   window.location = url.toString();
 }
 
-// ── Age chips ─────────────────────────────────────────────────────────────────
-
 function formatDurationShort(seconds) {
   if (seconds < 60) return `${Math.round(seconds)}s`;
   if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
@@ -468,15 +373,11 @@ function renderAgeChips() {
   if (VIEW !== 'active') return;
   ACTIONS.forEach(action => {
     if (!action.stale_after_seconds) return;
-
-    // Static stale window label — always shown when stale_after is configured
     const labelEl = document.getElementById(`stale-label-${action.id}`);
     if (labelEl) {
       const w = staleWindowLabel(action.stale_after_seconds);
       if (w) labelEl.innerHTML = `<span class="stale-window-chip">⏱ Stale after ${w}</span>`;
     }
-
-    // Countdown chip — shown when >50% of the window has elapsed
     const el = document.getElementById(`age-${action.id}`);
     if (!el) return;
     const ageSec = (Date.now() - new Date(action.created_at)) / 1000;
@@ -493,13 +394,9 @@ function renderAgeChips() {
 }
 renderAgeChips();
 
-// ── Details toggle ────────────────────────────────────────────────────────────
-
 function toggleDetails(id) {
   document.getElementById(`details-${id}`).classList.toggle('open');
 }
-
-// ── Drift panel ───────────────────────────────────────────────────────────────
 
 function showDriftPanel(id, driftDetails) {
   pendingDrift[id] = driftDetails;
@@ -507,9 +404,7 @@ function showDriftPanel(id, driftDetails) {
   tbody.innerHTML = '';
   Object.entries(driftDetails).forEach(([field, vals]) => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td><strong>${field}</strong></td>
-      <td class="drift-expected">${vals.expected ?? 'null'}</td>
-      <td class="drift-actual">${vals.actual ?? 'null'}</td>`;
+    tr.innerHTML = `<td><strong>${field}</strong></td><td class="drift-expected">${vals.expected ?? 'null'}</td><td class="drift-actual">${vals.actual ?? 'null'}</td>`;
     tbody.appendChild(tr);
   });
   document.getElementById(`drift-${id}`).classList.add('visible');
@@ -527,28 +422,20 @@ async function markDrifted(id) {
   if (!drift) return;
   const note = document.getElementById(`note-${id}`)?.value?.trim() || null;
   const resp = await fetch(`/api/v1/actions/${id}/mark-drifted`, {
-    method: 'POST', headers: hdrs,
-    body: JSON.stringify({ drift_details: drift, note }),
+    method: 'POST', headers: hdrs, body: JSON.stringify({ drift_details: drift, note }),
   });
-  if (resp.ok) {
-    toast('Action marked as drifted and archived');
-    removeCard(id, 1500);
-  } else {
-    toast('Failed to mark as drifted', false);
-  }
+  if (resp.ok) { toast('Action marked as drifted and archived'); removeCard(id, 1500); }
+  else { toast('Failed to mark as drifted', false); }
 }
 
 async function approveAnyway(id) {
   document.getElementById(`drift-${id}`).classList.remove('visible');
   setButtons(id, true);
   document.getElementById(`approve-btn-${id}`).textContent = '⏳ Approving…';
-
   const note = document.getElementById(`note-${id}`)?.value?.trim() || null;
   const resp = await fetch(`/api/v1/actions/${id}/approve`, {
-    method: 'POST', headers: hdrs,
-    body: JSON.stringify({ note, override_drift: true }),
+    method: 'POST', headers: hdrs, body: JSON.stringify({ note, override_drift: true }),
   });
-
   if (resp.ok) {
     toast('✓ Approved despite drift — override recorded');
     document.getElementById(`approve-btn-${id}`).textContent = '✓ Approved';
@@ -562,8 +449,6 @@ async function approveAnyway(id) {
   }
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
 function setButtons(id, disabled) {
   ['approve-btn', 'reject-btn', 'dismiss-btn'].forEach(prefix => {
     const el = document.getElementById(`${prefix}-${id}`);
@@ -572,10 +457,7 @@ function setButtons(id, disabled) {
 }
 
 function removeCard(id, delay) {
-  setTimeout(() => {
-    const card = document.getElementById(`card-${id}`);
-    if (card) card.remove();
-  }, delay);
+  setTimeout(() => { const card = document.getElementById(`card-${id}`); if (card) card.remove(); }, delay);
 }
 
 function showError(id, msg) {
@@ -584,19 +466,14 @@ function showError(id, msg) {
   el.style.display = 'block';
 }
 
-// ── Approve / Reject / Dismiss ────────────────────────────────────────────────
-
 async function approveAction(id) {
   setButtons(id, true);
   document.getElementById(`approve-btn-${id}`).textContent = '⏳ Approving…';
   document.getElementById(`error-${id}`).style.display = 'none';
-
   const note = document.getElementById(`note-${id}`)?.value?.trim() || null;
   const resp = await fetch(`/api/v1/actions/${id}/approve`, {
-    method: 'POST', headers: hdrs,
-    body: JSON.stringify({ note }),
+    method: 'POST', headers: hdrs, body: JSON.stringify({ note }),
   });
-
   if (resp.ok) {
     toast('✓ Action approved and executed');
     document.getElementById(`approve-btn-${id}`).textContent = '✓ Approved';
@@ -619,13 +496,10 @@ async function approveAction(id) {
 async function rejectAction(id) {
   setButtons(id, true);
   document.getElementById(`reject-btn-${id}`).textContent = '⏳ Rejecting…';
-
   const note = document.getElementById(`note-${id}`)?.value?.trim() || null;
   const resp = await fetch(`/api/v1/actions/${id}/reject`, {
-    method: 'POST', headers: hdrs,
-    body: JSON.stringify({ note }),
+    method: 'POST', headers: hdrs, body: JSON.stringify({ note }),
   });
-
   if (resp.ok) {
     toast('Action rejected');
     document.getElementById(`reject-btn-${id}`).textContent = '✗ Rejected';
@@ -640,13 +514,10 @@ async function rejectAction(id) {
 async function dismissAction(id) {
   setButtons(id, true);
   document.getElementById(`dismiss-btn-${id}`).textContent = '⏳ Dismissing…';
-
   const note = document.getElementById(`note-${id}`)?.value?.trim() || null;
   const resp = await fetch(`/api/v1/actions/${id}/dismiss`, {
-    method: 'POST', headers: hdrs,
-    body: JSON.stringify({ note }),
+    method: 'POST', headers: hdrs, body: JSON.stringify({ note }),
   });
-
   if (resp.ok) {
     toast('Action dismissed');
     document.getElementById(`dismiss-btn-${id}`).textContent = '— Dismissed';
@@ -658,5 +529,4 @@ async function dismissAction(id) {
   }
 }
 </script>
-</body>
-</html>
+{% endblock %}

@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}AI Agent Platform{% endblock %}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f0f2f5; color: #1a1a2e; font-size: 14px;
+      margin-left: 220px;
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      position: fixed; top: 0; left: 0; bottom: 0; width: 220px;
+      background: #111827; color: #d1d5db;
+      display: flex; flex-direction: column;
+      z-index: 100; overflow-y: auto;
+    }
+    .sidebar-brand {
+      padding: 20px 18px 16px;
+      border-bottom: 1px solid #1f2937;
+    }
+    .sidebar-brand .logo {
+      font-size: 18px; font-weight: 800; color: #fff;
+      letter-spacing: -0.5px; line-height: 1.2;
+    }
+    .sidebar-brand .tagline {
+      font-size: 10px; color: #6b7280; margin-top: 3px;
+      text-transform: uppercase; letter-spacing: 0.8px;
+    }
+    .sidebar-section {
+      padding: 20px 0 8px;
+    }
+    .sidebar-section-label {
+      padding: 0 18px 8px;
+      font-size: 10px; font-weight: 700; color: #4b5563;
+      text-transform: uppercase; letter-spacing: 1px;
+    }
+    .sidebar-link {
+      display: flex; align-items: center; gap: 9px;
+      padding: 8px 18px;
+      color: #9ca3af; text-decoration: none; font-size: 13px; font-weight: 500;
+      border-left: 3px solid transparent;
+      transition: color .15s, background .15s, border-color .15s;
+    }
+    .sidebar-link:hover { color: #fff; background: #1f2937; }
+    .sidebar-link.active { color: #a5b4fc; background: #1e1b4b; border-left-color: #6366f1; }
+    .sidebar-link .icon { width: 16px; text-align: center; font-size: 14px; flex-shrink: 0; }
+    .sidebar-link .badge {
+      margin-left: auto; background: #ef4444; color: #fff;
+      border-radius: 10px; font-size: 10px; font-weight: 700;
+      padding: 1px 5px; display: none;
+    }
+    .sidebar-divider { height: 1px; background: #1f2937; margin: 8px 0; }
+    .sidebar-footer {
+      margin-top: auto;
+      padding: 16px 18px;
+      border-top: 1px solid #1f2937;
+    }
+    .sidebar-footer a {
+      display: flex; align-items: center; gap: 8px;
+      color: #6b7280; text-decoration: none; font-size: 12px;
+      transition: color .15s;
+    }
+    .sidebar-footer a:hover { color: #d1d5db; }
+  </style>
+  {% block head_extra %}{% endblock %}
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sidebar-brand">
+    <div class="logo">⚡ AgentOS</div>
+    <div class="tagline">AI Agent Platform</div>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Platform</div>
+    <a href="/agents" class="sidebar-link {% if active_page == 'platform_agents' %}active{% endif %}">
+      <span class="icon">🤖</span> Agents
+    </a>
+    <a href="/runs" class="sidebar-link {% if active_page == 'platform_runs' %}active{% endif %}">
+      <span class="icon">📋</span> Runs
+    </a>
+    <a href="/approvals" class="sidebar-link {% if active_page == 'platform_actions' %}active{% endif %}">
+      <span class="icon">🔔</span> Actions
+      <span class="badge" id="sidebar-badge"></span>
+    </a>
+  </div>
+
+  <div class="sidebar-divider"></div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Fundly</div>
+    <a href="/dashboard" class="sidebar-link {% if active_page == 'fundly_orders' %}active{% endif %}">
+      <span class="icon">📦</span> Orders
+    </a>
+  </div>
+
+  <div class="sidebar-divider"></div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Sandhar Group</div>
+    <a href="/sandhar" class="sidebar-link {% if active_page == 'sandhar_dashboard' %}active{% endif %}">
+      <span class="icon">🏭</span> Command Centre
+    </a>
+    <a href="/sandhar/plan" class="sidebar-link {% if active_page == 'sandhar_plan' %}active{% endif %}">
+      <span class="icon">📅</span> Plan
+    </a>
+    <a href="/sandhar/floor" class="sidebar-link {% if active_page == 'sandhar_floor' %}active{% endif %}">
+      <span class="icon">👷</span> Floor View
+    </a>
+    <a href="/sandhar/master" class="sidebar-link {% if active_page == 'sandhar_master' %}active{% endif %}">
+      <span class="icon">🗂</span> Master Data
+    </a>
+    <a href="/sandhar/simulation" class="sidebar-link {% if active_page == 'sandhar_simulation' %}active{% endif %}">
+      <span class="icon">🎮</span> Simulation
+    </a>
+  </div>
+
+  <div class="sidebar-footer">
+    <a href="/docs" target="_blank">
+      <span>📖</span> API Docs
+    </a>
+  </div>
+</nav>
+
+{% block content %}{% endblock %}
+
+<script>
+  // Live pending-actions badge in sidebar
+  (function () {
+    const badge = document.getElementById('sidebar-badge');
+    if (!badge) return;
+    const key = document.cookie.split(';').map(c => c.trim())
+      .find(c => c.startsWith('api_key='))?.split('=')[1]
+      || '{{ api_key }}';
+    async function refreshBadge() {
+      try {
+        const r = await fetch('/api/v1/actions/counts', {
+          headers: { 'X-API-Key': key, 'Content-Type': 'application/json' }
+        });
+        if (!r.ok) return;
+        const d = await r.json();
+        const n = d.pending || 0;
+        if (n > 0) { badge.textContent = n; badge.style.display = 'inline'; }
+        else { badge.style.display = 'none'; }
+      } catch (_) {}
+    }
+    refreshBadge();
+    setInterval(refreshBadge, 30000);
+  })();
+</script>
+
+</body>
+</html>

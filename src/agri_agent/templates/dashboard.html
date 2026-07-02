@@ -1,26 +1,12 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Fundly — Order Dispatch Dashboard</title>
+{% extends "base.html" %}
+{% block title %}Orders — Fundly{% endblock %}
+
+{% block head_extra %}
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-           background: #f0f2f5; color: #1a1a2e; font-size: 14px; }
-
-    /* ── Layout ── */
-    header { background: #1a1a2e; color: #fff; padding: 0 28px; height: 56px;
-             display: flex; align-items: stretch; justify-content: space-between; }
-    .header-brand { display: flex; align-items: center; }
-    header h1 { font-size: 17px; font-weight: 700; letter-spacing: .2px; }
-    header .subtitle { font-size: 12px; color: #8899bb; margin-top: 2px; }
     .main { max-width: 1280px; margin: 0 auto; padding: 24px 28px; }
 
-    /* ── Tab bar ── */
-    .tab-bar { display: flex; align-items: center; justify-content: space-between;
-               margin-bottom: 0; }
+    .tab-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0; }
     .tabs { display: flex; gap: 4px; }
     .tab { display: flex; align-items: center; gap: 7px; padding: 9px 18px;
            font-size: 13px; font-weight: 500; color: #6b7280; cursor: pointer;
@@ -29,22 +15,18 @@
            transition: background .15s, color .15s; user-select: none; }
     .tab:hover { background: #d1d5db; color: #1a1a2e; }
     .tab.active { background: #fff; color: #1a1a2e; font-weight: 600;
-                  border-color: #e5e7eb; position: relative; top: 1px;
-                  box-shadow: 0 -1px 3px rgba(0,0,0,.05); }
-    .tab-count { font-size: 11px; font-weight: 700; padding: 1px 7px;
-                 border-radius: 10px; line-height: 1.6; }
+                  border-color: #e5e7eb; position: relative; top: 1px; box-shadow: 0 -1px 3px rgba(0,0,0,.05); }
+    .tab-count { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 10px; line-height: 1.6; }
     .tab-count-pending  { background: #fef3c7; color: #92400e; }
     .tab-count-ready    { background: #dcfce7; color: #14532d; }
     .tab-count-zero     { background: #f3f4f6; color: #9ca3af; }
 
-    /* ── Panel (card that sits below the tabs) ── */
     .panel { background: #fff; border-radius: 0 10px 10px 10px; padding: 0;
              box-shadow: 0 1px 4px rgba(0,0,0,.08); border: 1px solid #e5e7eb; }
     .panel-header { padding: 14px 20px; border-bottom: 1px solid #f0f0f0;
                     display: flex; align-items: center; justify-content: space-between; }
     .panel-title { font-size: 15px; font-weight: 600; }
 
-    /* ── Tables ── */
     .table-scroll { overflow-x: auto; border-radius: 0 0 10px 10px; }
     table { width: 100%; border-collapse: collapse; min-width: 700px; }
     th { text-align: left; padding: 10px 14px; font-size: 11px; font-weight: 700;
@@ -54,7 +36,6 @@
     tr:last-child td { border-bottom: none; }
     tr:hover td { background: #fafafe; }
 
-    /* ── Urgency / mode badges ── */
     .urg-critical { color: #dc2626; font-weight: 700; }
     .urg-high     { color: #d97706; font-weight: 600; }
     .urg-normal   { color: #16a34a; }
@@ -64,87 +45,43 @@
     .decided-ai   { color: #6d28d9; font-size: 11px; font-weight:600; }
     .decided-human{ color: #0369a1; font-size: 11px; font-weight:600; }
 
-    /* ── Action forms ── */
     .dispatch-form { display: flex; gap: 6px; align-items: center; }
     .mode-dropdown { padding: 5px 8px; border: 1px solid #ddd; border-radius: 5px; font-size: 12px; }
     .btn-dispatch { padding: 5px 12px; background: #1a1a2e; color: white; border: none;
                     border-radius: 5px; font-size: 12px; cursor: pointer; transition: background .15s; }
     .btn-dispatch:hover { background: #2d2d4e; }
 
-    /* ── Toast ── */
     #toast { position: fixed; bottom: 24px; right: 24px; background: #1a1a2e; color: white;
              padding: 10px 18px; border-radius: 8px; font-size: 13px; display: none;
              box-shadow: 0 4px 12px rgba(0,0,0,.2); z-index: 999; }
-
     .empty-state { padding: 40px; text-align: center; color: #aaa; font-size: 13px; }
   </style>
-</head>
-<body>
+{% endblock %}
 
-<header>
-  <div class="header-brand" style="gap:10px;">
-    <h1>Fundly</h1>
-    <span style="width:1px;height:20px;background:#334;margin:0 4px;display:inline-block;"></span>
-    <span class="subtitle">Order Dispatch</span>
-  </div>
-  <nav style="display:flex;align-items:stretch;">
-    <a href="/dashboard" style="display:flex;align-items:center;padding:0 16px;color:#a5b4fc;
-       text-decoration:none;font-size:13px;font-weight:500;border-bottom:3px solid #4f46e5;">
-      📦 Orders
-    </a>
-    <a href="/agents" style="display:flex;align-items:center;padding:0 16px;color:#8899bb;
-       text-decoration:none;font-size:13px;font-weight:500;border-bottom:3px solid transparent;">
-      🤖 Agents
-    </a>
-    <a href="/runs" style="display:flex;align-items:center;padding:0 16px;color:#8899bb;
-       text-decoration:none;font-size:13px;font-weight:500;border-bottom:3px solid transparent;">
-      📋 Runs
-    </a>
-    <a href="/approvals" id="approvals-link"
-       style="display:flex;align-items:center;gap:6px;padding:0 16px;color:#8899bb;
-              text-decoration:none;font-size:13px;font-weight:500;border-bottom:3px solid transparent;">
-      🔔 Action Inbox
-      <span id="approvals-badge" style="display:none;background:#ef4444;color:white;
-            font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;"></span>
-    </a>
-    <a href="/docs" target="_blank" style="display:flex;align-items:center;padding:0 14px;
-       color:#6677aa;text-decoration:none;font-size:13px;">API</a>
-  </nav>
-</header>
-
+{% block content %}
 <div class="main">
 
-  <!-- ── Tab bar ── -->
   <div class="tab-bar">
     <div class="tabs">
       <div class="tab active" id="tab-pending" onclick="switchTab('pending')">
         📦 Pending
-        <span class="tab-count {{ 'tab-count-pending' if pending else 'tab-count-zero' }}">
-          {{ pending|length }}
-        </span>
+        <span class="tab-count {{ 'tab-count-pending' if pending else 'tab-count-zero' }}">{{ pending|length }}</span>
       </div>
       <div class="tab" id="tab-ready" onclick="switchTab('ready')">
         ✅ Ready to Dispatch
-        <span class="tab-count {{ 'tab-count-ready' if ready else 'tab-count-zero' }}">
-          {{ ready|length }}
-        </span>
+        <span class="tab-count {{ 'tab-count-ready' if ready else 'tab-count-zero' }}">{{ ready|length }}</span>
       </div>
     </div>
     <button style="padding:5px 12px;background:#f3f4f6;border:1px solid #ddd;border-radius:6px;
                    font-size:12px;cursor:pointer;margin-bottom:1px;" onclick="location.reload()">↺ Refresh</button>
   </div>
 
-  <!-- ── Pending panel ── -->
   <div class="panel" id="panel-pending">
     {% if pending %}
     <div class="table-scroll">
     <table>
       <thead>
-        <tr>
-          <th>Ref</th><th>Retailer / Medicine</th>
-          <th>Qty</th><th>Amount</th><th>Margin</th>
-          <th>Due</th><th style="min-width:180px;">Manual Dispatch</th>
-        </tr>
+        <tr><th>Ref</th><th>Retailer / Medicine</th><th>Qty</th><th>Amount</th><th>Margin</th><th>Due</th><th style="min-width:180px;">Manual Dispatch</th></tr>
       </thead>
       <tbody>
         {% for o in pending %}
@@ -157,9 +94,7 @@
           <td>{{ o.quantity }}</td>
           <td><strong>${{ "%.0f"|format(o.order_amount_usd) }}</strong></td>
           <td>{{ o.margin_percent }}%</td>
-          <td class="{{ 'urg-critical' if o.urgency_days <= 2 else ('urg-high' if o.urgency_days <= 5 else 'urg-normal') }}">
-            {{ o.urgency_days }}d
-          </td>
+          <td class="{{ 'urg-critical' if o.urgency_days <= 2 else ('urg-high' if o.urgency_days <= 5 else 'urg-normal') }}">{{ o.urgency_days }}d</td>
           <td>
             <div class="dispatch-form">
               <select class="mode-dropdown" id="mode-{{ o.id }}">
@@ -168,10 +103,7 @@
                 <option value="train">🚂 Train</option>
                 <option value="road">🚛 Road</option>
               </select>
-              <button class="btn-dispatch"
-                onclick="dispatchOrder('{{ o.id }}', document.getElementById('mode-{{ o.id }}').value)">
-                Dispatch
-              </button>
+              <button class="btn-dispatch" onclick="dispatchOrder('{{ o.id }}', document.getElementById('mode-{{ o.id }}').value)">Dispatch</button>
             </div>
           </td>
         </tr>
@@ -184,7 +116,6 @@
     {% endif %}
   </div>
 
-  <!-- ── Ready to Dispatch panel ── -->
   <div class="panel" id="panel-ready" style="display:none;">
     {% if ready %}
     <div class="table-scroll">
@@ -217,7 +148,7 @@
     {% endif %}
   </div>
 
-</div><!-- /main -->
+</div>
 
 <div id="toast"></div>
 
@@ -243,29 +174,10 @@
   async function dispatchOrder(id, mode) {
     if (!mode) { toast('Please select a shipment mode', false); return; }
     const r = await fetch(`/api/v1/orders/${id}/dispatch`, {
-      method: 'PATCH', headers,
-      body: JSON.stringify({ mode, decided_by: 'human' })
+      method: 'PATCH', headers, body: JSON.stringify({ mode, decided_by: 'human' })
     });
     if (r.ok) { toast(`Dispatched via ${mode.toUpperCase()}`); setTimeout(() => location.reload(), 800); }
     else { const e = await r.json(); toast(e.detail || 'Error', false); }
   }
-
-  async function refreshApprovalsBadge() {
-    try {
-      const r = await fetch('/api/v1/actions/counts', { headers });
-      if (!r.ok) return;
-      const data = await r.json();
-      const badge = document.getElementById('approvals-badge');
-      if (data.total > 0) {
-        badge.textContent = data.total;
-        badge.style.display = 'inline-block';
-      } else {
-        badge.style.display = 'none';
-      }
-    } catch (_) {}
-  }
-  refreshApprovalsBadge();
-  setInterval(refreshApprovalsBadge, 10000);
 </script>
-</body>
-</html>
+{% endblock %}

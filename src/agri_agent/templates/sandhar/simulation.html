@@ -1,23 +1,8 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sandhar — Simulation</title>
+{% extends "base.html" %}
+{% block title %}Simulation — Sandhar Group{% endblock %}
+
+{% block head_extra %}
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-           background: #f0f2f5; color: #1a1a2e; font-size: 14px; }
-    header { background: #1a1a2e; color: #fff; padding: 0 28px; height: 56px;
-             display: flex; align-items: stretch; justify-content: space-between; }
-    .header-brand { display: flex; align-items: center; gap: 10px; }
-    header h1 { font-size: 17px; font-weight: 700; }
-    nav { display: flex; align-items: stretch; }
-    nav a { display: flex; align-items: center; padding: 0 14px; color: #8899bb;
-            text-decoration: none; font-size: 13px; font-weight: 500;
-            border-bottom: 3px solid transparent; }
-    nav a:hover { color: #a5b4fc; }
-    nav a.active { color: #a5b4fc; border-bottom-color: #4f46e5; }
     .main { max-width: 1100px; margin: 0 auto; padding: 24px 28px; }
     h2 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
     .subtitle { color: #6b7280; font-size: 13px; margin-bottom: 24px; }
@@ -65,32 +50,16 @@
              box-shadow: 0 4px 12px rgba(0,0,0,.2); z-index: 999; }
     .warning-box { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px;
                    padding: 14px; margin-bottom: 16px; color: #92400e; font-size: 13px; }
+    .empty { color: #9ca3af; font-size: 13px; text-align: center; padding: 24px; }
   </style>
-</head>
-<body>
-<header>
-  <div class="header-brand">
-    <h1>Sandhar Group</h1>
-    <span style="width:1px;height:20px;background:#334;"></span>
-    <span style="font-size:12px;color:#8899bb;">Smart Production Planning</span>
-  </div>
-  <nav>
-    <a href="/sandhar">🏭 Command Centre</a>
-    <a href="/sandhar/plan">📋 Plan</a>
-    <a href="/sandhar/floor">👷 Floor</a>
-    <a href="/sandhar/master">🗂 Master Data</a>
-    <a href="/sandhar/simulation" class="active">🎮 Simulation</a>
-    <span style="width:1px;height:20px;background:#334;margin:auto 4px;"></span>
-    <a href="/approvals">🔔 Approvals</a>
-  </nav>
-</header>
+{% endblock %}
 
+{% block content %}
 <div class="main">
   <h2>Simulation Control Panel</h2>
   <p class="subtitle">Seed demo data, inject attendance, and test planning scenarios</p>
 
   <div class="grid-2">
-    <!-- Seed & Reset -->
     <div>
       <div class="card" style="margin-bottom:20px;">
         <div class="card-title">🌱 Seed Demo Data</div>
@@ -137,13 +106,10 @@
       </div>
     </div>
 
-    <!-- Scenarios -->
     <div class="card">
       <div class="card-title">🎭 Test Scenarios</div>
       <div class="card-desc">Pre-built scenarios to test planning edge cases. Each scenario injects specific data conditions.</div>
-      <div id="scenarios-list">
-        <div class="empty"><span class="spinner"></span> Loading scenarios…</div>
-      </div>
+      <div id="scenarios-list"><div class="empty"><span class="spinner"></span> Loading scenarios…</div></div>
       <div class="result-box" id="scenario-result"></div>
     </div>
   </div>
@@ -178,8 +144,7 @@ async function runSeed() {
     const r = await fetch('/api/v1/sandhar/simulation/seed', {method: 'POST', headers: H});
     const d = await r.json();
     if (r.ok) {
-      const msg = `Seeded: ${d.employees||0} employees, ${d.lines||0} lines, ${d.machines||0} machines, ${d.products||0} products, ${d.work_orders||0} work orders, ${d.shifts||0} shifts`;
-      showResult('seed-result', msg, true);
+      showResult('seed-result', `Seeded: ${d.employees||0} employees, ${d.lines||0} lines, ${d.machines||0} machines, ${d.products||0} products, ${d.work_orders||0} work orders, ${d.shifts||0} shifts`, true);
       toast('Data seeded successfully!');
     } else {
       showResult('seed-result', d.detail || JSON.stringify(d), false);
@@ -196,12 +161,9 @@ async function runAttendance() {
   const date = document.getElementById('att-date').value;
   const shift = document.getElementById('att-shift').value;
   const absentPct = parseInt(document.getElementById('att-absent-pct').value) || 15;
-  const absentCount = document.getElementById('att-absent-count').value;
   const payload = {plan_date: date, shift_code: shift, absenteeism_pct: absentPct};
   try {
-    const r = await fetch('/api/v1/sandhar/simulation/attendance', {
-      method: 'POST', headers: H, body: JSON.stringify(payload),
-    });
+    const r = await fetch('/api/v1/sandhar/simulation/attendance', {method: 'POST', headers: H, body: JSON.stringify(payload)});
     const d = await r.json();
     if (r.ok) {
       showResult('att-result', `Injected for ${date} Shift ${shift}: ${d.present} present, ${d.absent} absent (${d.created} total records)`, true);
@@ -264,11 +226,9 @@ async function runScenario(id, el) {
     el.classList.remove('running');
     showResult('scenario-result', e.message, false);
   }
-  // restore scenario name (remove spinner)
   el.querySelector('.scenario-name').textContent = el.querySelector('.scenario-name').textContent.replace('  ', '');
 }
 
 loadScenarios();
 </script>
-</body>
-</html>
+{% endblock %}

@@ -21,6 +21,7 @@ async def sandhar_dashboard(request: Request):
     return templates.TemplateResponse(request, "sandhar/dashboard.html", {
         "api_key": settings.api_key,
         "today": date.today().isoformat(),
+        "active_page": "sandhar_dashboard",
     })
 
 
@@ -31,6 +32,7 @@ async def sandhar_plan(request: Request):
         "api_key": settings.api_key,
         "default_date": tomorrow,
         "today": date.today().isoformat(),
+        "active_page": "sandhar_plan",
     })
 
 
@@ -39,6 +41,7 @@ async def sandhar_floor(request: Request):
     return templates.TemplateResponse(request, "sandhar/floor.html", {
         "api_key": settings.api_key,
         "today": date.today().isoformat(),
+        "active_page": "sandhar_floor",
     })
 
 
@@ -46,6 +49,7 @@ async def sandhar_floor(request: Request):
 async def sandhar_master(request: Request):
     return templates.TemplateResponse(request, "sandhar/master.html", {
         "api_key": settings.api_key,
+        "active_page": "sandhar_master",
     })
 
 
@@ -54,4 +58,5 @@ async def sandhar_simulation(request: Request):
     return templates.TemplateResponse(request, "sandhar/simulation.html", {
         "api_key": settings.api_key,
         "today": date.today().isoformat(),
+        "active_page": "sandhar_simulation",
     })

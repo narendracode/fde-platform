@@ -1,23 +1,8 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sandhar — Supervisor Floor View</title>
+{% extends "base.html" %}
+{% block title %}Floor View — Sandhar Group{% endblock %}
+
+{% block head_extra %}
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-           background: #f0f2f5; color: #1a1a2e; font-size: 14px; }
-    header { background: #1a1a2e; color: #fff; padding: 0 28px; height: 56px;
-             display: flex; align-items: stretch; justify-content: space-between; }
-    .header-brand { display: flex; align-items: center; gap: 10px; }
-    header h1 { font-size: 17px; font-weight: 700; }
-    nav { display: flex; align-items: stretch; }
-    nav a { display: flex; align-items: center; padding: 0 14px; color: #8899bb;
-            text-decoration: none; font-size: 13px; font-weight: 500;
-            border-bottom: 3px solid transparent; }
-    nav a:hover { color: #a5b4fc; }
-    nav a.active { color: #a5b4fc; border-bottom-color: #4f46e5; }
     .main { max-width: 1200px; margin: 0 auto; padding: 24px 28px; }
     h2 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
     .subtitle { color: #6b7280; font-size: 13px; margin-bottom: 24px; }
@@ -36,8 +21,6 @@
     .btn-success { background: #16a34a; color: #fff; }
     .btn-warning { background: #d97706; color: #fff; }
     .btn-danger { background: #dc2626; color: #fff; }
-
-    /* Multi-select pills */
     .pill-group { display: flex; gap: 6px; flex-wrap: wrap; }
     .pill { display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px;
             border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer;
@@ -47,8 +30,6 @@
     .pill.active { background: #7c3aed; border-color: #7c3aed; color: #fff; }
     .pill-all { border-color: #1a1a2e; }
     .pill-all.active { background: #1a1a2e; border-color: #1a1a2e; }
-
-    /* Combination cards */
     .combo-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
     .combo-card { background: #fff; border-radius: 12px; border: 1px solid #e5e7eb;
                   box-shadow: 0 1px 4px rgba(0,0,0,.06); overflow: hidden; }
@@ -57,8 +38,6 @@
     .combo-title { font-size: 15px; font-weight: 700; }
     .combo-meta { font-size: 12px; color: #6b7280; }
     .combo-body { padding: 20px; }
-
-    /* Target card */
     .target-grid { display: grid; grid-template-columns: auto 1fr; gap: 0;
                    background: linear-gradient(135deg, #7c3aed, #4f46e5);
                    border-radius: 10px; overflow: hidden; margin-bottom: 20px; color: #fff; }
@@ -71,16 +50,12 @@
     .target-meta-key { font-size: 10px; font-weight: 700; text-transform: uppercase;
                        letter-spacing: .5px; opacity: .65; }
     .target-meta-val { font-size: 14px; font-weight: 600; }
-
     .info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
                  gap: 12px; margin-bottom: 20px; }
-    .info-item { background: #f9fafb; border-radius: 8px; padding: 12px 14px;
-                 border: 1px solid #f3f4f6; }
+    .info-item { background: #f9fafb; border-radius: 8px; padding: 12px 14px; border: 1px solid #f3f4f6; }
     .info-key { font-size: 10px; font-weight: 700; color: #9ca3af; text-transform: uppercase;
                 letter-spacing: .5px; margin-bottom: 4px; }
     .info-val { font-size: 14px; font-weight: 600; color: #1a1a2e; }
-
-    /* Table */
     table { width: 100%; border-collapse: collapse; }
     th { text-align: left; padding: 8px 12px; font-size: 10px; font-weight: 700; color: #9ca3af;
          text-transform: uppercase; letter-spacing: .4px; background: #fafafa;
@@ -88,8 +63,6 @@
     td { padding: 10px 12px; border-bottom: 1px solid #f9fafb; font-size: 13px; }
     tr:last-child td { border-bottom: none; }
     tr:hover td { background: #fafafa; }
-
-    /* Badges */
     .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
     .badge-green { background: #dcfce7; color: #16a34a; }
     .badge-yellow { background: #fef9c3; color: #854d0e; }
@@ -97,13 +70,9 @@
     .badge-purple { background: #f3e8ff; color: #7c3aed; }
     .badge-blue { background: #dbeafe; color: #1d4ed8; }
     .badge-gray { background: #f3f4f6; color: #6b7280; }
-
-    /* Skill dots */
     .skill-dots { display: flex; gap: 3px; }
     .skill-dot { width: 8px; height: 8px; border-radius: 50%; background: #e5e7eb; }
     .skill-dot.filled { background: #7c3aed; }
-
-    /* Actuals */
     .actuals-form { display: none; margin-top: 16px; }
     .actuals-form.open { display: block; }
     .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -112,12 +81,10 @@
                         font-size: 14px; width: 100%; }
     .achievement-bar { height: 8px; background: #e5e7eb; border-radius: 4px; margin-top: 8px; }
     .achievement-fill { height: 100%; border-radius: 4px; transition: width .5s; }
-
     .empty { color: #9ca3af; font-size: 13px; text-align: center; padding: 40px; }
     .no-plan { background: #fff; border-radius: 10px; border: 1px dashed #d1d5db;
                padding: 32px; text-align: center; color: #9ca3af; }
     .no-plan strong { display: block; color: #6b7280; font-size: 14px; margin-bottom: 6px; }
-
     .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 100; }
     .modal-overlay.open { display: flex; align-items: center; justify-content: center; }
     .modal { background: #fff; border-radius: 12px; padding: 28px; max-width: 460px; width: 100%; }
@@ -127,7 +94,6 @@
     .modal label { display: block; font-size: 11px; font-weight: 700; color: #6b7280;
                    text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
     .modal textarea { height: 80px; resize: vertical; }
-
     .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #e5e7eb;
                border-top-color: #7c3aed; border-radius: 50%; animation: spin .6s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -137,25 +103,9 @@
     .section-title { font-size: 14px; font-weight: 700; margin-bottom: 14px; color: #374151; }
     .actions-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
   </style>
-</head>
-<body>
-<header>
-  <div class="header-brand">
-    <h1>Sandhar Group</h1>
-    <span style="width:1px;height:20px;background:#334;"></span>
-    <span style="font-size:12px;color:#8899bb;">Smart Production Planning</span>
-  </div>
-  <nav>
-    <a href="/sandhar">Command Centre</a>
-    <a href="/sandhar/plan">Plan</a>
-    <a href="/sandhar/floor" class="active">Floor</a>
-    <a href="/sandhar/master">Master Data</a>
-    <a href="/sandhar/simulation">Simulation</a>
-    <span style="width:1px;height:20px;background:#334;margin:auto 4px;"></span>
-    <a href="/approvals">Approvals</a>
-  </nav>
-</header>
+{% endblock %}
 
+{% block content %}
 <div class="main">
   <h2>Supervisor Floor View</h2>
   <p class="subtitle">View line plans, record actuals, and report disruptions for selected lines and shifts</p>
@@ -190,7 +140,6 @@
   </div>
 </div>
 
-<!-- Disruption Modal -->
 <div class="modal-overlay" id="disruption-modal">
   <div class="modal">
     <div class="modal-title">Report Disruption</div>
@@ -227,10 +176,8 @@ let allLines = [];
 let activeDisruptionLine = null;
 let activeDisruptionDate = null;
 let activeDisruptionShift = null;
-// Track plan detail IDs per combo key for actuals submission
 const planDetailIds = {};
 
-// ── URL state ─────────────────────────────────────────────────────────────────
 function getParams() {
   const p = new URLSearchParams(location.search);
   return {
@@ -251,7 +198,6 @@ function pushParams() {
   history.pushState({}, '', url.toString());
 }
 
-// ── Pill multi-select ─────────────────────────────────────────────────────────
 function getSelectedPills(group) {
   const container = group === 'line' ? document.getElementById('line-pills')
                                      : document.querySelector('.pill-group:not(#line-pills)');
@@ -269,14 +215,12 @@ function togglePill(el, group) {
     const allPill = container.querySelector('[data-value="all"]');
     if (allPill) allPill.classList.remove('active');
     el.classList.toggle('active');
-    // If none selected, fall back to All
     const anyActive = [...container.querySelectorAll('.pill:not([data-value="all"])')].some(p => p.classList.contains('active'));
     if (!anyActive && allPill) allPill.classList.add('active');
   }
 }
 
 function applyParamsToPills(lines, shifts) {
-  // Shifts
   const shiftContainer = document.querySelector('.pill-group:not(#line-pills)');
   shiftContainer.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
   if (shifts.includes('all')) {
@@ -289,7 +233,6 @@ function applyParamsToPills(lines, shifts) {
   }
 }
 
-// ── Load lines into pill selector ────────────────────────────────────────────
 async function loadLines() {
   const resp = await fetch('/api/v1/sandhar/lines', {headers: H});
   allLines = await resp.json();
@@ -303,13 +246,9 @@ async function loadLines() {
     pill.onclick = function() { togglePill(this, 'line'); };
     container.appendChild(pill);
   }
-
-  // Apply URL params after lines are loaded
   const params = getParams();
   document.getElementById('floor-date').value = params.date;
   applyParamsToPills(params.lines, params.shifts);
-
-  // Apply line pills
   if (!params.lines.includes('all')) {
     container.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
     params.lines.forEach(code => {
@@ -317,20 +256,15 @@ async function loadLines() {
       if (p) p.classList.add('active');
     });
   }
-
-  // Auto-load if params are present
   if (location.search) loadAll();
 }
 
-// ── Main load ─────────────────────────────────────────────────────────────────
 function resolveSelections() {
   const date = document.getElementById('floor-date').value;
   let selectedLines = getSelectedPills('line');
   let selectedShifts = getSelectedPills('shift');
-
   if (selectedLines.includes('all')) selectedLines = allLines.map(l => l.id);
   if (selectedShifts.includes('all')) selectedShifts = ['A', 'B', 'C'];
-
   return { date, selectedLines, selectedShifts };
 }
 
@@ -338,17 +272,13 @@ async function loadAll() {
   pushParams();
   const { date, selectedLines, selectedShifts } = resolveSelections();
   if (!date) { toast('Please select a date', false); return; }
-
-  document.getElementById('floor-content').innerHTML =
-    '<div class="empty"><span class="spinner"></span> Loading floor plans…</div>';
-
+  document.getElementById('floor-content').innerHTML = '<div class="empty"><span class="spinner"></span> Loading floor plans…</div>';
   const combos = [];
   for (const lid of selectedLines) {
     for (const shift of selectedShifts) {
       combos.push({ lid, shift });
     }
   }
-
   const results = await Promise.all(combos.map(async ({ lid, shift }) => {
     try {
       const resp = await fetch(
@@ -362,44 +292,30 @@ async function loadAll() {
       return { lid, shift, data: null, line: allLines.find(l => l.id === lid) || {}, ok: false };
     }
   }));
-
-  const hasData = results.some(r => r.ok && r.data?.details?.length > 0);
   const container = document.createElement('div');
   container.className = 'combo-grid';
-
   for (const r of results) {
     container.appendChild(buildComboCard(r));
   }
-
   document.getElementById('floor-content').innerHTML = '';
   document.getElementById('floor-content').appendChild(container);
 }
 
-// ── Build one combo card ──────────────────────────────────────────────────────
 function buildComboCard({ lid, shift, data, line, ok }) {
   const wrap = document.createElement('div');
   wrap.className = 'combo-card';
   const lineName = line.line_name || line.line_code || lid.substring(0,8);
   const lineCode = line.line_code || '';
-
   const shiftLabel = { A: 'Shift A (06:00–14:00)', B: 'Shift B (14:00–22:00)', C: 'Shift C (22:00–06:00)' }[shift] || shift;
   const confidenceBadge = (c) => ({
     high: '<span class="badge badge-green">High confidence</span>',
     medium: '<span class="badge badge-yellow">Medium confidence</span>',
     low: '<span class="badge badge-red">Low confidence</span>',
   }[c] || '');
-
   if (!ok || !data) {
-    wrap.innerHTML = `
-      <div class="combo-header">
-        <div><div class="combo-title">${lineCode} — ${lineName}</div><div class="combo-meta">${shiftLabel}</div></div>
-      </div>
-      <div class="combo-body">
-        <div class="no-plan"><strong>Unable to load plan</strong>Check that the API is reachable.</div>
-      </div>`;
+    wrap.innerHTML = `<div class="combo-header"><div><div class="combo-title">${lineCode} — ${lineName}</div><div class="combo-meta">${shiftLabel}</div></div></div><div class="combo-body"><div class="no-plan"><strong>Unable to load plan</strong>Check that the API is reachable.</div></div>`;
     return wrap;
   }
-
   const header = data.header;
   const details = data.details || [];
   const operators = data.operators || [];
@@ -407,7 +323,6 @@ function buildComboCard({ lid, shift, data, line, ok }) {
   const comboKey = `${lid}-${shift}`;
   if (det?.id) planDetailIds[comboKey] = det.id;
 
-  // Header section
   let headerHtml = `
     <div class="combo-header">
       <div>
@@ -421,18 +336,10 @@ function buildComboCard({ lid, shift, data, line, ok }) {
     </div>`;
 
   if (!det) {
-    wrap.innerHTML = headerHtml + `
-      <div class="combo-body">
-        <div class="no-plan">
-          <strong>No allocation for this line in ${shiftLabel}</strong>
-          The plan for this date only assigns each line to one shift.
-          Check the other shifts for ${lineCode}.
-        </div>
-      </div>`;
+    wrap.innerHTML = headerHtml + `<div class="combo-body"><div class="no-plan"><strong>No allocation for this line in ${shiftLabel}</strong>The plan for this date only assigns each line to one shift. Check the other shifts for ${lineCode}.</div></div>`;
     return wrap;
   }
 
-  // Production target section
   const qty = det.planned_qty;
   const rate = det.target_rate_per_hour;
   const targetHtml = `
@@ -444,89 +351,44 @@ function buildComboCard({ lid, shift, data, line, ok }) {
         ${rate ? `<div class="target-label" style="margin-top:8px;opacity:.9;">Target rate: ${rate} units / hour</div>` : ''}
       </div>
       <div class="target-meta">
-        ${det.wo_number ? `<div class="target-meta-row">
-          <div class="target-meta-key">Work Order</div>
-          <div class="target-meta-val">${det.wo_number}
-            <span class="badge badge-${det.priority === 'high' ? 'red' : det.priority === 'medium' ? 'yellow' : 'gray'}" style="margin-left:6px;">${det.priority || ''}</span>
-          </div>
-        </div>` : ''}
-        ${det.product_name ? `<div class="target-meta-row">
-          <div class="target-meta-key">Product</div>
-          <div class="target-meta-val">${det.product_name} <span style="opacity:.7;font-size:12px;">(${det.product_code})</span></div>
-        </div>` : ''}
-        ${det.customer_name ? `<div class="target-meta-row">
-          <div class="target-meta-key">Customer</div>
-          <div class="target-meta-val">${det.customer_name}
-            ${det.customer_priority ? `<span class="badge badge-purple" style="margin-left:6px;">${det.customer_priority}</span>` : ''}
-          </div>
-        </div>` : ''}
-        ${det.due_date ? `<div class="target-meta-row">
-          <div class="target-meta-key">Due Date</div>
-          <div class="target-meta-val">${det.due_date}</div>
-        </div>` : ''}
-        ${det.standard_cycle_time ? `<div class="target-meta-row">
-          <div class="target-meta-key">Cycle Time</div>
-          <div class="target-meta-val">${det.standard_cycle_time} min / unit</div>
-        </div>` : ''}
-        ${det.supervisor_name ? `<div class="target-meta-row">
-          <div class="target-meta-key">Supervisor</div>
-          <div class="target-meta-val">${det.supervisor_name} <span style="opacity:.7;font-size:12px;">(${det.supervisor_code})</span></div>
-        </div>` : ''}
+        ${det.wo_number ? `<div class="target-meta-row"><div class="target-meta-key">Work Order</div><div class="target-meta-val">${det.wo_number}<span class="badge badge-${det.priority === 'high' ? 'red' : det.priority === 'medium' ? 'yellow' : 'gray'}" style="margin-left:6px;">${det.priority || ''}</span></div></div>` : ''}
+        ${det.product_name ? `<div class="target-meta-row"><div class="target-meta-key">Product</div><div class="target-meta-val">${det.product_name} <span style="opacity:.7;font-size:12px;">(${det.product_code})</span></div></div>` : ''}
+        ${det.customer_name ? `<div class="target-meta-row"><div class="target-meta-key">Customer</div><div class="target-meta-val">${det.customer_name}${det.customer_priority ? `<span class="badge badge-purple" style="margin-left:6px;">${det.customer_priority}</span>` : ''}</div></div>` : ''}
+        ${det.due_date ? `<div class="target-meta-row"><div class="target-meta-key">Due Date</div><div class="target-meta-val">${det.due_date}</div></div>` : ''}
+        ${det.standard_cycle_time ? `<div class="target-meta-row"><div class="target-meta-key">Cycle Time</div><div class="target-meta-val">${det.standard_cycle_time} min / unit</div></div>` : ''}
+        ${det.supervisor_name ? `<div class="target-meta-row"><div class="target-meta-key">Supervisor</div><div class="target-meta-val">${det.supervisor_name} <span style="opacity:.7;font-size:12px;">(${det.supervisor_code})</span></div></div>` : ''}
       </div>
     </div>`;
 
-  // Manpower summary
   const gap = (det.standard_manpower || 0) - (det.planned_manpower || 0);
   const manpowerHtml = `
     <div class="info-grid">
-      <div class="info-item">
-        <div class="info-key">Planned Manpower</div>
-        <div class="info-val">${det.planned_manpower ?? '—'}</div>
-      </div>
-      <div class="info-item">
-        <div class="info-key">Standard Manpower</div>
-        <div class="info-val">${det.standard_manpower ?? '—'}</div>
-      </div>
-      <div class="info-item">
-        <div class="info-key">Manpower Gap</div>
-        <div class="info-val" style="color:${gap > 0 ? '#dc2626' : '#16a34a'};">${gap > 0 ? '-' + gap + ' short' : 'Fully staffed'}</div>
-      </div>
-      <div class="info-item">
-        <div class="info-key">Order Qty</div>
-        <div class="info-val">${det.order_qty?.toLocaleString() ?? '—'}</div>
-      </div>
+      <div class="info-item"><div class="info-key">Planned Manpower</div><div class="info-val">${det.planned_manpower ?? '—'}</div></div>
+      <div class="info-item"><div class="info-key">Standard Manpower</div><div class="info-val">${det.standard_manpower ?? '—'}</div></div>
+      <div class="info-item"><div class="info-key">Manpower Gap</div><div class="info-val" style="color:${gap > 0 ? '#dc2626' : '#16a34a'};">${gap > 0 ? '-' + gap + ' short' : 'Fully staffed'}</div></div>
+      <div class="info-item"><div class="info-key">Order Qty</div><div class="info-val">${det.order_qty?.toLocaleString() ?? '—'}</div></div>
     </div>`;
 
-  // Skill level helper
   const skillDots = (level) => {
     const max = 4; const labels = ['','Trainee','Basic','Skilled','Expert'];
     return `<div class="skill-dots" title="${labels[level] || ''}">${Array.from({length: max}, (_,i) =>
       `<div class="skill-dot${i < (level||0) ? ' filled' : ''}"></div>`).join('')}</div>`;
   };
 
-  // Operator table
   const operators_html = operators.length > 0 ? `
     <table>
-      <thead>
-        <tr>
-          <th>Code</th><th>Name</th><th>Designation</th><th>Grade</th>
-          <th>Home Shift</th><th>Skill Level</th><th>Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${operators.map(o => `<tr>
-          <td style="font-family:monospace;font-size:12px;">${o.employee_code || '—'}</td>
-          <td style="font-weight:600;">${o.name || '—'}</td>
-          <td>${o.designation || '—'}</td>
-          <td>${o.grade || '—'}</td>
-          <td>${o.shift_group ? 'Shift ' + o.shift_group : '—'}</td>
-          <td>${skillDots(o.skill_level)}</td>
-          <td><span class="badge badge-green">${o.allocation_status || 'Allocated'}</span></td>
-        </tr>`).join('')}
-      </tbody>
+      <thead><tr><th>Code</th><th>Name</th><th>Designation</th><th>Grade</th><th>Home Shift</th><th>Skill Level</th><th>Status</th></tr></thead>
+      <tbody>${operators.map(o => `<tr>
+        <td style="font-family:monospace;font-size:12px;">${o.employee_code || '—'}</td>
+        <td style="font-weight:600;">${o.name || '—'}</td>
+        <td>${o.designation || '—'}</td>
+        <td>${o.grade || '—'}</td>
+        <td>${o.shift_group ? 'Shift ' + o.shift_group : '—'}</td>
+        <td>${skillDots(o.skill_level)}</td>
+        <td><span class="badge badge-green">${o.allocation_status || 'Allocated'}</span></td>
+      </tr>`).join('')}</tbody>
     </table>` : '<div class="empty" style="padding:20px;">No operators allocated to this line</div>';
 
-  const comboKey2 = `${lid}-${shift}`;
   const bodyHtml = `
     <div class="combo-body">
       ${targetHtml}
@@ -535,20 +397,20 @@ function buildComboCard({ lid, shift, data, line, ok }) {
       ${operators_html}
       <div style="margin-top:20px;padding-top:16px;border-top:1px solid #f3f4f6;">
         <div class="actions-row">
-          <button class="btn btn-success" onclick="toggleActuals('${comboKey2}')">Enter Actuals</button>
+          <button class="btn btn-success" onclick="toggleActuals('${comboKey}')">Enter Actuals</button>
           <button class="btn btn-warning" onclick="openDisruption('${lid}','${data.plan_date}','${shift}')">Report Disruption</button>
         </div>
-        <div class="actuals-form" id="actuals-${comboKey2}">
+        <div class="actuals-form" id="actuals-${comboKey}">
           <div class="form-grid">
-            <div class="form-group"><label>Produced Qty</label><input type="number" id="act-produced-${comboKey2}" min="0" placeholder="${qty || 0}"></div>
-            <div class="form-group"><label>Rejected Qty</label><input type="number" id="act-rejected-${comboKey2}" min="0" value="0"></div>
-            <div class="form-group"><label>Rework Qty</label><input type="number" id="act-rework-${comboKey2}" min="0" value="0"></div>
-            <div class="form-group"><label>Downtime (min)</label><input type="number" id="act-downtime-${comboKey2}" min="0" value="0"></div>
-            <div class="form-group"><label>Submitted By</label><input type="text" id="act-by-${comboKey2}" value="Supervisor" placeholder="Your name"></div>
+            <div class="form-group"><label>Produced Qty</label><input type="number" id="act-produced-${comboKey}" min="0" placeholder="${qty || 0}"></div>
+            <div class="form-group"><label>Rejected Qty</label><input type="number" id="act-rejected-${comboKey}" min="0" value="0"></div>
+            <div class="form-group"><label>Rework Qty</label><input type="number" id="act-rework-${comboKey}" min="0" value="0"></div>
+            <div class="form-group"><label>Downtime (min)</label><input type="number" id="act-downtime-${comboKey}" min="0" value="0"></div>
+            <div class="form-group"><label>Submitted By</label><input type="text" id="act-by-${comboKey}" value="Supervisor" placeholder="Your name"></div>
           </div>
-          <button class="btn btn-primary" onclick="submitActuals('${comboKey2}')">Submit Actuals</button>
+          <button class="btn btn-primary" onclick="submitActuals('${comboKey}')">Submit Actuals</button>
         </div>
-        <div id="actuals-result-${comboKey2}" style="margin-top:12px;"></div>
+        <div id="actuals-result-${comboKey}" style="margin-top:12px;"></div>
       </div>
     </div>`;
 
@@ -556,7 +418,6 @@ function buildComboCard({ lid, shift, data, line, ok }) {
   return wrap;
 }
 
-// ── Actuals ───────────────────────────────────────────────────────────────────
 function toggleActuals(key) {
   document.getElementById('actuals-' + key).classList.toggle('open');
 }
@@ -592,7 +453,6 @@ async function submitActuals(key) {
   }
 }
 
-// ── Disruption ────────────────────────────────────────────────────────────────
 function openDisruption(lineId, planDate, shift) {
   activeDisruptionLine = lineId;
   activeDisruptionDate = planDate;
@@ -625,7 +485,6 @@ async function submitDisruption() {
   }
 }
 
-// ── Toast ─────────────────────────────────────────────────────────────────────
 function toast(msg, ok=true) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -634,8 +493,6 @@ function toast(msg, ok=true) {
   setTimeout(() => t.style.display = 'none', 3200);
 }
 
-// ── Init ──────────────────────────────────────────────────────────────────────
 loadLines();
 </script>
-</body>
-</html>
+{% endblock %}

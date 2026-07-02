@@ -67,5 +67,6 @@ async def dashboard(
             "pending": [_enrich(o) for o in pending_q.scalars().all()],
             "ready": [_enrich(o) for o in ready_q.scalars().all()],
             "api_key": settings.api_key,
+            "active_page": "fundly_orders",
         },
     )

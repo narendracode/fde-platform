@@ -78,7 +78,7 @@ async def agents_page(
     return templates.TemplateResponse(
         request,
         "agents.html",
-        {"agents": agents, "api_key": settings.api_key},
+        {"agents": agents, "api_key": settings.api_key, "active_page": "platform_agents"},
     )
 
 
@@ -138,5 +138,6 @@ async def runs_page(
             "selected_agent": agent_name or "",
             "selected_status": status or "",
             "api_key": settings.api_key,
+            "active_page": "platform_runs",
         },
     )

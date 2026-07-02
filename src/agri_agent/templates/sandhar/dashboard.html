@@ -1,24 +1,9 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sandhar — Command Centre</title>
+{% extends "base.html" %}
+{% block title %}Command Centre — Sandhar Group{% endblock %}
+
+{% block head_extra %}
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-           background: #f0f2f5; color: #1a1a2e; font-size: 14px; }
-    header { background: #1a1a2e; color: #fff; padding: 0 28px; height: 56px;
-             display: flex; align-items: stretch; justify-content: space-between; }
-    .header-brand { display: flex; align-items: center; gap: 10px; }
-    header h1 { font-size: 17px; font-weight: 700; }
     .main { max-width: 1280px; margin: 0 auto; padding: 24px 28px; }
-    nav a { display: flex; align-items: center; padding: 0 14px; color: #8899bb;
-            text-decoration: none; font-size: 13px; font-weight: 500;
-            border-bottom: 3px solid transparent; }
-    nav a:hover { color: #a5b4fc; }
-    nav a.active { color: #a5b4fc; border-bottom-color: #4f46e5; }
-    nav { display: flex; align-items: stretch; }
     h2 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
     .subtitle { color: #6b7280; font-size: 13px; margin-bottom: 24px; }
     .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
@@ -41,8 +26,7 @@
          border-bottom: 1px solid #eee; }
     td { padding: 10px 12px; border-bottom: 1px solid #f5f5f5; }
     tr:last-child td { border-bottom: none; }
-    .badge { display: inline-block; padding: 2px 8px; border-radius: 10px;
-             font-size: 11px; font-weight: 700; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
     .badge-critical { background: #fee2e2; color: #991b1b; }
     .badge-high { background: #fef3c7; color: #92400e; }
     .badge-medium { background: #dbeafe; color: #1e40af; }
@@ -67,33 +51,13 @@
              padding: 10px 18px; border-radius: 8px; font-size: 13px; display: none;
              box-shadow: 0 4px 12px rgba(0,0,0,.2); z-index: 999; }
   </style>
-</head>
-<body>
+{% endblock %}
 
-<header>
-  <div class="header-brand">
-    <h1>Sandhar Group</h1>
-    <span style="width:1px;height:20px;background:#334;"></span>
-    <span style="font-size:12px;color:#8899bb;">Smart Production Planning</span>
-  </div>
-  <nav>
-    <a href="/sandhar" class="active">🏭 Command Centre</a>
-    <a href="/sandhar/plan">📋 Plan</a>
-    <a href="/sandhar/floor">👷 Floor</a>
-    <a href="/sandhar/master">🗂 Master Data</a>
-    <a href="/sandhar/simulation">🎮 Simulation</a>
-    <span style="width:1px;height:20px;background:#334;margin:auto 4px;"></span>
-    <a href="/approvals">🔔 Approvals</a>
-    <a href="/agents" style="color:#6677aa;">Agents</a>
-    <a href="/runs" style="color:#6677aa;">Runs</a>
-  </nav>
-</header>
-
+{% block content %}
 <div class="main">
   <h2>Command Centre</h2>
   <p class="subtitle">Assembly Shop Floor · Real-time Overview · <span id="today-date">{{ today }}</span></p>
 
-  <!-- KPI Cards -->
   <div class="kpi-grid">
     <div class="kpi-card">
       <div class="kpi-label">Today's Plan Achievement</div>
@@ -118,7 +82,6 @@
   </div>
 
   <div class="grid-2">
-    <!-- Active Alerts -->
     <div class="section">
       <div class="section-title">
         🚨 Active Alerts
@@ -126,8 +89,6 @@
       </div>
       <div id="alerts-table"><div class="empty"><span class="spinner"></span> Loading alerts…</div></div>
     </div>
-
-    <!-- Quick Actions -->
     <div class="section">
       <div class="section-title">⚡ Quick Actions</div>
       <div class="quick-actions" style="margin-bottom:20px;">
@@ -141,7 +102,6 @@
     </div>
   </div>
 
-  <!-- Recent Runs -->
   <div class="section">
     <div class="section-title">
       🤖 Recent Agent Runs
@@ -176,24 +136,15 @@ async function loadKpis() {
     document.getElementById('kpi-achievement').textContent = pct + '%';
     document.getElementById('kpi-achievement').className = 'kpi-value ' + (pct >= 85 ? 'kpi-green' : pct >= 70 ? 'kpi-yellow' : 'kpi-red');
     document.getElementById('kpi-achievement-sub').textContent = `${totalProduced.toLocaleString()} of ${totalPlanned.toLocaleString()} units`;
-
-    // KPI table
     if (rows.length === 0) {
       document.getElementById('kpi-table').innerHTML = '<div class="empty">No KPI data for today. Generate and complete a plan first.</div>';
     } else {
       let html = '<table><thead><tr><th>Shift</th><th>Achievement</th><th>Manpower Util.</th><th>Rejection Rate</th></tr></thead><tbody>';
       for (const row of rows) {
-        html += `<tr>
-          <td><strong>Shift ${row.shift_code}</strong></td>
-          <td>${(row.plan_achievement_pct || 0).toFixed(1)}%</td>
-          <td>${(row.manpower_utilization_pct || 0).toFixed(1)}%</td>
-          <td>${(row.rejection_rate_pct || 0).toFixed(1)}%</td>
-        </tr>`;
+        html += `<tr><td><strong>Shift ${row.shift_code}</strong></td><td>${(row.plan_achievement_pct || 0).toFixed(1)}%</td><td>${(row.manpower_utilization_pct || 0).toFixed(1)}%</td><td>${(row.rejection_rate_pct || 0).toFixed(1)}%</td></tr>`;
       }
       document.getElementById('kpi-table').innerHTML = html + '</tbody></table>';
     }
-
-    // Shifts approved
     const phR = await fetch(`/api/v1/sandhar/plan?date=${TODAY}`, {headers: H});
     const plans = await phR.json();
     const approved = (plans || []).filter(p => p.status === 'approved').length;
@@ -209,9 +160,7 @@ async function loadAlerts() {
     const r = await fetch(`/api/v1/sandhar/alerts/active-count`, {headers: H});
     const counts = await r.json();
     document.getElementById('kpi-alerts').textContent = counts.total || 0;
-    document.getElementById('kpi-alerts-sub').textContent =
-      `${counts.critical || 0} critical, ${counts.high || 0} high`;
-
+    document.getElementById('kpi-alerts-sub').textContent = `${counts.critical || 0} critical, ${counts.high || 0} high`;
     const ar = await fetch(`/api/v1/sandhar/alerts?status=active&limit=10`, {headers: H});
     const alerts = await ar.json();
     if (!alerts || alerts.length === 0) {
@@ -221,13 +170,7 @@ async function loadAlerts() {
     let html = '<table><thead><tr><th>Type</th><th>Severity</th><th>Date</th><th>Shift</th><th>Message</th></tr></thead><tbody>';
     for (const a of alerts) {
       const sev = a.severity || 'low';
-      html += `<tr>
-        <td><code style="font-size:11px;">${a.alert_type || '—'}</code></td>
-        <td><span class="badge badge-${sev}">${sev}</span></td>
-        <td>${a.plan_date || '—'}</td>
-        <td>${a.shift_code || '—'}</td>
-        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${a.alert_message || '—'}</td>
-      </tr>`;
+      html += `<tr><td><code style="font-size:11px;">${a.alert_type || '—'}</code></td><td><span class="badge badge-${sev}">${sev}</span></td><td>${a.plan_date || '—'}</td><td>${a.shift_code || '—'}</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${a.alert_message || '—'}</td></tr>`;
     }
     document.getElementById('alerts-table').innerHTML = html + '</tbody></table>';
   } catch(e) {
@@ -241,16 +184,14 @@ async function loadWoCount() {
     const r = await fetch('/api/v1/sandhar/work-orders?status=open&limit=200', {headers: H});
     const items = await r.json();
     document.getElementById('kpi-wo').textContent = items.length;
-  } catch(e) {
-    document.getElementById('kpi-wo').textContent = '—';
-  }
+  } catch(e) { document.getElementById('kpi-wo').textContent = '—'; }
 }
 
 async function loadRuns() {
   try {
     const r = await fetch('/api/v1/runs?limit=8', {headers: H});
     const runs = await r.json();
-    const sandharRuns = runs.filter(r => (r.agent_id || '') || true).slice(0, 5);
+    const sandharRuns = runs.slice(0, 5);
     if (sandharRuns.length === 0) {
       document.getElementById('runs-table').innerHTML = '<div class="empty">No recent runs</div>';
       return;
@@ -262,13 +203,7 @@ async function loadRuns() {
       const started = run.started_at ? new Date(run.started_at).toLocaleString() : '—';
       const tokens = (run.input_tokens || 0) + (run.output_tokens || 0);
       const cost = run.cost_usd ? '$' + run.cost_usd.toFixed(4) : '—';
-      html += `<tr>
-        <td><code style="font-size:11px;">${run.id.substring(0,8)}…</code></td>
-        <td><span style="color:${color};font-weight:600;">${run.status}</span></td>
-        <td>${tokens.toLocaleString()}</td>
-        <td>${cost}</td>
-        <td style="color:#6b7280;">${started}</td>
-      </tr>`;
+      html += `<tr><td><code style="font-size:11px;">${run.id.substring(0,8)}…</code></td><td><span style="color:${color};font-weight:600;">${run.status}</span></td><td>${tokens.toLocaleString()}</td><td>${cost}</td><td style="color:#6b7280;">${started}</td></tr>`;
     }
     document.getElementById('runs-table').innerHTML = html + '</tbody></table>';
   } catch(e) {
@@ -276,8 +211,6 @@ async function loadRuns() {
   }
 }
 
-// Load everything on page load
 Promise.all([loadKpis(), loadAlerts(), loadWoCount(), loadRuns()]);
 </script>
-</body>
-</html>
+{% endblock %}

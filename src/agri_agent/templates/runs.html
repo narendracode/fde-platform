@@ -1,36 +1,11 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Fundly — Agent Runs</title>
+{% extends "base.html" %}
+{% block title %}Runs — AI Agent Platform{% endblock %}
+
+{% block head_extra %}
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-           background: #f0f2f5; color: #1a1a2e; font-size: 14px; }
-
-    /* ── Header ── */
-    header { background: #1a1a2e; color: #fff; padding: 0 28px;
-             display: flex; align-items: stretch; justify-content: space-between;
-             height: 56px; }
-    .header-brand { display: flex; align-items: center; gap: 10px; }
-    .header-brand h1 { font-size: 17px; font-weight: 700; letter-spacing: .2px; }
-    .header-brand .divider { width: 1px; height: 20px; background: #334; margin: 0 4px; }
-    .header-brand .subtitle { font-size: 12px; color: #6677aa; }
-    nav { display: flex; align-items: stretch; }
-    nav a { display: flex; align-items: center; gap: 5px; padding: 0 16px;
-            color: #8899bb; text-decoration: none; font-size: 13px; font-weight: 500;
-            border-bottom: 3px solid transparent; transition: color .15s, border-color .15s; }
-    nav a:hover { color: #fff; }
-    nav a.active { color: #a5b4fc; border-bottom-color: #4f46e5; }
-    .inbox-badge { background: #ef4444; color: #fff; border-radius: 10px;
-                   font-size: 10px; font-weight: 700; padding: 1px 5px; display: none; }
-
-    /* ── Layout ── */
     .main { max-width: 1280px; margin: 0 auto; padding: 28px 24px; }
 
-    /* ── Filter bar ── */
     .filter-bar { background: #fff; border-radius: 10px; padding: 14px 20px;
                   margin-bottom: 20px; display: flex; align-items: center; gap: 16px;
                   box-shadow: 0 1px 4px rgba(0,0,0,.08); flex-wrap: wrap; }
@@ -46,7 +21,6 @@
     .total-badge { background: #e0e7ff; color: #3730a3; font-size: 12px;
                    font-weight: 700; padding: 3px 10px; border-radius: 20px; }
 
-    /* ── Table ── */
     .table-wrap { background: #fff; border-radius: 12px;
                   box-shadow: 0 1px 4px rgba(0,0,0,.08); overflow: hidden; }
     table { width: 100%; border-collapse: collapse; }
@@ -58,7 +32,6 @@
     .run-row:hover td { background: #f9fafb; }
     .run-row.expanded td { background: #f5f7ff; }
 
-    /* ── Status pills ── */
     .status-pill { display: inline-block; padding: 3px 9px; border-radius: 20px;
                    font-size: 11px; font-weight: 700; }
     .s-pending   { background: #fef9c3; color: #854d0e; }
@@ -67,24 +40,18 @@
     .s-failed    { background: #fee2e2; color: #991b1b; }
     .s-blocked   { background: #f3e8ff; color: #6b21a8; }
 
-    /* ── Agent chip ── */
     .agent-chip { display: inline-block; background: #f0f4ff; color: #3730a3;
                   padding: 3px 9px; border-radius: 5px; font-size: 11px; font-weight: 600;
                   font-family: monospace; }
 
-    /* ── Input summary tags ── */
     .input-tags { display: flex; flex-wrap: wrap; gap: 4px; max-width: 240px; }
     .input-tag { background: #f3f4f6; color: #374151; padding: 2px 7px;
                  border-radius: 4px; font-size: 11px; }
 
-    /* ── Metrics ── */
     .metric { font-size: 12px; color: #555; }
     .metric-highlight { font-weight: 600; color: #1a1a2e; }
-
-    /* ── Expand arrow ── */
     .expand-arrow { color: #9ca3af; font-size: 11px; }
 
-    /* ── Detail panel ── */
     .detail-row { display: none; }
     .detail-row.open { display: table-row; }
     .detail-panel { padding: 16px 20px 20px; background: #f8faff;
@@ -92,7 +59,6 @@
     .detail-label { font-size: 11px; font-weight: 700; text-transform: uppercase;
                     letter-spacing: .5px; color: #6b7280; margin-bottom: 8px; }
 
-    /* Trace pill buttons */
     .trace-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
                  margin-bottom: 14px; }
     .trace-pill { display: inline-flex; align-items: center; gap: 5px; padding: 5px 12px;
@@ -105,22 +71,14 @@
     .trace-filter { background: #f3f4f6; color: #374151; border-color: #d1d5db; }
     .trace-filter:hover { background: #e5e7eb; }
 
-    /* Output area */
     .output-wrap { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px;
                    max-height: 420px; overflow-y: auto; }
-
-    /* Plain / pre-wrap fallback */
     .output-wrap.plain { padding: 12px 14px; font-size: 12px; line-height: 1.6;
                          color: #374151; white-space: pre-wrap; font-family: inherit; }
-
-    /* Pretty JSON */
     .output-wrap .json-pre { margin: 0; padding: 12px 14px; font-size: 12px;
                               font-family: 'SF Mono', 'Fira Code', monospace;
                               color: #1a1a2e; white-space: pre; overflow-x: auto; }
-
-    /* Markdown prose */
-    .output-wrap.md-body { padding: 14px 18px; font-size: 13px; line-height: 1.7;
-                           color: #374151; }
+    .output-wrap.md-body { padding: 14px 18px; font-size: 13px; line-height: 1.7; color: #374151; }
     .output-wrap.md-body h1,.output-wrap.md-body h2,.output-wrap.md-body h3 {
       font-weight: 700; margin: 14px 0 6px; color: #1a1a2e; }
     .output-wrap.md-body h1 { font-size: 17px; }
@@ -134,8 +92,7 @@
     .output-wrap.md-body pre { background: #f3f4f6; border-radius: 6px; padding: 10px 12px;
                                overflow-x: auto; margin: 8px 0; }
     .output-wrap.md-body pre code { background: none; padding: 0; }
-    .output-wrap.md-body table { border-collapse: collapse; width: 100%; margin: 10px 0;
-                                  font-size: 12px; }
+    .output-wrap.md-body table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 12px; }
     .output-wrap.md-body th { background: #f9fafb; font-weight: 700; text-align: left;
                                padding: 6px 10px; border: 1px solid #e5e7eb; }
     .output-wrap.md-body td { padding: 6px 10px; border: 1px solid #e5e7eb; }
@@ -144,45 +101,23 @@
     .output-wrap.md-body blockquote { border-left: 3px solid #c7d2fe; margin: 8px 0;
                                        padding: 4px 12px; color: #6b7280; }
 
-    /* ── Empty state ── */
     .empty-state { text-align: center; padding: 48px 24px; color: #9ca3af; font-size: 14px; }
     .empty-icon  { font-size: 36px; margin-bottom: 10px; }
 
-    /* ── Spinner ── */
     .spinner { width: 12px; height: 12px; border: 2px solid #c7d2fe;
                border-top-color: #4f46e5; border-radius: 50%;
                animation: spin .7s linear infinite; display: inline-block; }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* ── Toast ── */
     #toast { position: fixed; bottom: 24px; right: 24px; padding: 10px 18px;
              background: #1a1a2e; color: white; border-radius: 8px; font-size: 13px;
              display: none; z-index: 2000; box-shadow: 0 4px 14px rgba(0,0,0,.2); }
   </style>
-</head>
-<body>
+{% endblock %}
 
-<header>
-  <div class="header-brand">
-    <h1>Fundly</h1>
-    <div class="divider"></div>
-    <span class="subtitle">Agent Platform</span>
-  </div>
-  <nav>
-    <a href="/dashboard">📦 Orders</a>
-    <a href="/agents">🤖 Agents</a>
-    <a href="/runs" class="active">📋 Runs</a>
-    <a href="/approvals">
-      🔔 Action Inbox
-      <span class="inbox-badge" id="approvals-badge"></span>
-    </a>
-    <a href="/docs" target="_blank" style="color:#6677aa;">API</a>
-  </nav>
-</header>
-
+{% block content %}
 <div class="main">
 
-  <!-- ── Filter bar ── -->
   <div class="filter-bar">
     <label>Agent</label>
     <select class="filter-select" id="filter-agent" onchange="applyFilters()">
@@ -207,7 +142,6 @@
     <button class="btn-refresh" onclick="location.reload()">↺ Refresh</button>
   </div>
 
-  <!-- ── Runs table ── -->
   {% if runs %}
   <div class="table-wrap">
     <table id="runs-table">
@@ -228,9 +162,7 @@
         {% for run in runs %}
         <tr class="run-row" id="row-{{ run.id }}" onclick="toggleDetail('{{ run.id }}')">
           <td><span class="expand-arrow">▶</span></td>
-          <td>
-            <code style="font-size:11px;color:#6b7280;">{{ run.id[:8] }}…</code>
-          </td>
+          <td><code style="font-size:11px;color:#6b7280;">{{ run.id[:8] }}…</code></td>
           <td><span class="agent-chip">{{ run.agent_name }}</span></td>
           <td>
             <span class="status-pill s-{{ run.status }}" id="status-{{ run.id }}">
@@ -255,9 +187,7 @@
             <span style="font-size:10px;color:#aaa;"> ({{ run.input_tokens }}↑ {{ run.output_tokens }}↓)</span>
           </td>
           <td class="metric">
-            {% if run.cost_usd > 0 %}
-            ${{ "%.4f"|format(run.cost_usd) }}
-            {% else %}—{% endif %}
+            {% if run.cost_usd > 0 %}${{ "%.4f"|format(run.cost_usd) }}{% else %}—{% endif %}
           </td>
           <td class="metric" id="dur-{{ run.id }}">
             {% if run.elapsed %}{{ run.elapsed }}s{% else %}—{% endif %}
@@ -272,9 +202,7 @@
                 <span style="font-size:10px;color:#9ca3af;font-weight:600;width:46px;display:inline-block;">Started</span>
                 {% if run.started_at %}
                 <span class="ts-rel" data-ts="{{ run.started_at }}" title="{{ run.started_at }}">—</span>
-                {% else %}
-                <span style="color:#d1d5db;">—</span>
-                {% endif %}
+                {% else %}<span style="color:#d1d5db;">—</span>{% endif %}
               </div>
             </div>
           </td>
@@ -282,35 +210,19 @@
         <tr class="detail-row" id="detail-{{ run.id }}">
           <td colspan="9" style="padding:0;">
             <div class="detail-panel">
-
-              <!-- Trace links + filter — always at the top -->
               <div class="trace-bar">
-                <a class="trace-pill trace-filter" href="/runs?agent_name={{ run.agent_name }}">
-                  Filter by agent →
-                </a>
+                <a class="trace-pill trace-filter" href="/runs?agent_name={{ run.agent_name }}">Filter by agent →</a>
                 {% if run.langsmith_trace_url %}
-                <a class="trace-pill trace-langsmith" href="{{ run.langsmith_trace_url }}" target="_blank">
-                  📊 LangSmith ↗
-                </a>
+                <a class="trace-pill trace-langsmith" href="{{ run.langsmith_trace_url }}" target="_blank">📊 LangSmith ↗</a>
                 {% endif %}
                 {% if run.otel_trace_url %}
-                <a class="trace-pill trace-otel" href="{{ run.otel_trace_url }}" target="_blank">
-                  🔍 OTEL trace ↗
-                </a>
+                <a class="trace-pill trace-otel" href="{{ run.otel_trace_url }}" target="_blank">🔍 OTEL trace ↗</a>
                 {% elif run.otel_trace_id %}
-                <a class="trace-pill trace-otel"
-                   href="http://localhost:16686/trace/{{ run.otel_trace_id }}" target="_blank">
-                  🔍 OTEL trace ↗
-                </a>
+                <a class="trace-pill trace-otel" href="http://localhost:16686/trace/{{ run.otel_trace_id }}" target="_blank">🔍 OTEL trace ↗</a>
                 {% endif %}
               </div>
-
-              <!-- Output — rendered client-side as JSON or Markdown -->
               <div class="detail-label">Output</div>
-              <div class="output-wrap"
-                   id="output-{{ run.id }}"
-                   data-raw='{{ run.output_text | tojson }}'></div>
-
+              <div class="output-wrap" id="output-{{ run.id }}" data-raw='{{ run.output_text | tojson }}'></div>
             </div>
           </td>
         </tr>
@@ -337,21 +249,6 @@
   const API_KEY = "{{ api_key }}";
   const headers = { "X-API-Key": API_KEY };
 
-  // ── Approvals badge ────────────────────────────────────────────────────────
-  async function refreshBadge() {
-    try {
-      const r = await fetch('/api/v1/actions/counts', { headers: { ...headers, "Content-Type": "application/json" } });
-      if (!r.ok) return;
-      const d = await r.json();
-      const el = document.getElementById('approvals-badge');
-      if (d.total > 0) { el.textContent = d.total; el.style.display = 'inline-block'; }
-      else { el.style.display = 'none'; }
-    } catch (_) {}
-  }
-  refreshBadge();
-  setInterval(refreshBadge, 10000);
-
-  // ── Relative timestamps ────────────────────────────────────────────────────
   function timeAgo(isoString) {
     if (!isoString) return '—';
     const diff = (Date.now() - new Date(isoString)) / 1000;
@@ -360,52 +257,39 @@
     if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
     return new Date(isoString).toLocaleDateString();
   }
-
   document.querySelectorAll('.ts-rel[data-ts]').forEach(el => {
     el.textContent = timeAgo(el.getAttribute('data-ts'));
   });
 
-  // ── Output rendering (JSON or Markdown) ───────────────────────────────────
   const rendered = new Set();
-
   function escHtml(s) {
     return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
-
   function renderOutput(id) {
     if (rendered.has(id)) return;
     rendered.add(id);
-
     const container = document.getElementById(`output-${id}`);
     if (!container) return;
-
-    // data-raw holds a JSON-encoded string (Jinja2 tojson filter)
     let raw;
     try { raw = JSON.parse(container.dataset.raw); } catch { raw = null; }
-
     if (!raw) {
       container.classList.add('plain');
       container.textContent = 'No output yet — run may still be in progress.';
       return;
     }
-
-    // Try to parse as JSON
     let parsed;
-    try { parsed = JSON.parse(raw); } catch { /* not JSON */ }
-
+    try { parsed = JSON.parse(raw); } catch { }
     if (parsed !== undefined) {
       const pre = document.createElement('pre');
       pre.className = 'json-pre';
       pre.textContent = JSON.stringify(parsed, null, 2);
       container.appendChild(pre);
     } else {
-      // Render as Markdown
       container.classList.add('md-body');
       container.innerHTML = marked.parse(raw);
     }
   }
 
-  // ── Toggle detail row ──────────────────────────────────────────────────────
   function toggleDetail(id) {
     const row    = document.getElementById(`row-${id}`);
     const detail = document.getElementById(`detail-${id}`);
@@ -416,7 +300,6 @@
     if (open) renderOutput(id);
   }
 
-  // ── Filter navigation ──────────────────────────────────────────────────────
   function applyFilters() {
     const agent  = document.getElementById('filter-agent').value;
     const status = document.getElementById('filter-status').value;
@@ -426,11 +309,9 @@
     window.location.href = '/runs' + (params.toString() ? '?' + params.toString() : '');
   }
 
-  // ── Auto-poll running/pending rows ─────────────────────────────────────────
   const liveRows = [...document.querySelectorAll('.s-running, .s-pending')]
     .map(el => el.closest('tr')?.id?.replace('row-', ''))
     .filter(Boolean);
-
   if (liveRows.length > 0) {
     const pollLive = setInterval(async () => {
       let anyStillLive = false;
@@ -459,5 +340,4 @@
     }, 5000);
   }
 </script>
-</body>
-</html>
+{% endblock %}

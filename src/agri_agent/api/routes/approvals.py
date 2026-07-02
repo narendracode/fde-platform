@@ -104,5 +104,6 @@ async def approvals_inbox(
             "api_key": settings.api_key,
             "view": view,
             "auto_staled_count": auto_staled_count,
+            "active_page": "platform_actions",
         },
     )

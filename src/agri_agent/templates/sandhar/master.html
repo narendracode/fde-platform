@@ -1,23 +1,8 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sandhar — Master Data</title>
+{% extends "base.html" %}
+{% block title %}Master Data — Sandhar Group{% endblock %}
+
+{% block head_extra %}
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-           background: #f0f2f5; color: #1a1a2e; font-size: 14px; }
-    header { background: #1a1a2e; color: #fff; padding: 0 28px; height: 56px;
-             display: flex; align-items: stretch; justify-content: space-between; }
-    .header-brand { display: flex; align-items: center; gap: 10px; }
-    header h1 { font-size: 17px; font-weight: 700; }
-    nav { display: flex; align-items: stretch; }
-    nav a { display: flex; align-items: center; padding: 0 14px; color: #8899bb;
-            text-decoration: none; font-size: 13px; font-weight: 500;
-            border-bottom: 3px solid transparent; }
-    nav a:hover { color: #a5b4fc; }
-    nav a.active { color: #a5b4fc; border-bottom-color: #4f46e5; }
     .main { max-width: 1200px; margin: 0 auto; padding: 24px 28px; }
     h2 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
     .subtitle { color: #6b7280; font-size: 13px; margin-bottom: 24px; }
@@ -29,8 +14,7 @@
     .panel { display: none; background: #fff; border: 1px solid #e5e7eb;
              border-radius: 0 10px 10px 10px; padding: 20px; }
     .panel.active { display: block; }
-    .panel-header { display: flex; justify-content: space-between; align-items: center;
-                    margin-bottom: 16px; }
+    .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
     .panel-title { font-size: 15px; font-weight: 600; }
     table { width: 100%; border-collapse: collapse; }
     th { text-align: left; padding: 8px 12px; font-size: 11px; font-weight: 700; color: #888;
@@ -72,25 +56,9 @@
     .skill-2 { background: #fef3c7; color: #92400e; }
     .skill-1 { background: #fee2e2; color: #991b1b; }
   </style>
-</head>
-<body>
-<header>
-  <div class="header-brand">
-    <h1>Sandhar Group</h1>
-    <span style="width:1px;height:20px;background:#334;"></span>
-    <span style="font-size:12px;color:#8899bb;">Smart Production Planning</span>
-  </div>
-  <nav>
-    <a href="/sandhar">🏭 Command Centre</a>
-    <a href="/sandhar/plan">📋 Plan</a>
-    <a href="/sandhar/floor">👷 Floor</a>
-    <a href="/sandhar/master" class="active">🗂 Master Data</a>
-    <a href="/sandhar/simulation">🎮 Simulation</a>
-    <span style="width:1px;height:20px;background:#334;margin:auto 4px;"></span>
-    <a href="/approvals">🔔 Approvals</a>
-  </nav>
-</header>
+{% endblock %}
 
+{% block content %}
 <div class="main">
   <h2>Master Data</h2>
   <p class="subtitle">Employees, Lines, Machines, Products, Skills &amp; Shifts</p>
@@ -105,7 +73,6 @@
     <div class="tab" onclick="switchTab('workorders')">📋 Work Orders</div>
   </div>
 
-  <!-- Employees -->
   <div class="panel active" id="panel-employees">
     <div class="panel-header">
       <span class="panel-title">Employees</span>
@@ -114,7 +81,6 @@
     <div id="emp-table"><div class="empty"><span class="spinner"></span></div></div>
   </div>
 
-  <!-- Lines -->
   <div class="panel" id="panel-lines">
     <div class="panel-header">
       <span class="panel-title">Assembly Lines</span>
@@ -123,7 +89,6 @@
     <div id="lines-table"><div class="empty"><span class="spinner"></span></div></div>
   </div>
 
-  <!-- Machines -->
   <div class="panel" id="panel-machines">
     <div class="panel-header">
       <span class="panel-title">Machines</span>
@@ -132,7 +97,6 @@
     <div id="machines-table"><div class="empty"><span class="spinner"></span></div></div>
   </div>
 
-  <!-- Products -->
   <div class="panel" id="panel-products">
     <div class="panel-header">
       <span class="panel-title">Products</span>
@@ -141,7 +105,6 @@
     <div id="products-table"><div class="empty"><span class="spinner"></span></div></div>
   </div>
 
-  <!-- Skills -->
   <div class="panel" id="panel-skills">
     <div class="panel-header">
       <span class="panel-title">Skill Matrix</span>
@@ -153,7 +116,6 @@
     <div id="skills-table"><div class="empty"><span class="spinner"></span></div></div>
   </div>
 
-  <!-- Shifts -->
   <div class="panel" id="panel-shifts">
     <div class="panel-header">
       <span class="panel-title">Shifts</span>
@@ -162,7 +124,6 @@
     <div id="shifts-table"><div class="empty"><span class="spinner"></span></div></div>
   </div>
 
-  <!-- Work Orders -->
   <div class="panel" id="panel-workorders">
     <div class="panel-header">
       <span class="panel-title">Work Orders</span>
@@ -216,14 +177,7 @@ async function loadEmployees() {
     if (!rows.length) { document.getElementById('emp-table').innerHTML = '<div class="empty">No employees. Run simulation seed first.</div>'; return; }
     let html = '<table><thead><tr><th>Code</th><th>Name</th><th>Designation</th><th>Grade</th><th>Shift Group</th><th>Status</th></tr></thead><tbody>';
     for (const e of rows) {
-      html += `<tr>
-        <td><code>${e.employee_code}</code></td>
-        <td>${e.name}</td>
-        <td>${e.designation || '—'}</td>
-        <td>${e.grade || '—'}</td>
-        <td>${e.shift_group || '—'}</td>
-        <td><span class="badge ${e.status === 'active' ? 'badge-green' : 'badge-red'}">${e.status || 'unknown'}</span></td>
-      </tr>`;
+      html += `<tr><td><code>${e.employee_code}</code></td><td>${e.name}</td><td>${e.designation || '—'}</td><td>${e.grade || '—'}</td><td>${e.shift_group || '—'}</td><td><span class="badge ${e.status === 'active' ? 'badge-green' : 'badge-red'}">${e.status || 'unknown'}</span></td></tr>`;
     }
     document.getElementById('emp-table').innerHTML = html + '</tbody></table>';
   } catch(e) { document.getElementById('emp-table').innerHTML = '<div class="empty">Could not load employees</div>'; }
@@ -238,13 +192,7 @@ async function loadLines() {
     document.getElementById('line-count').textContent = rows.length + ' lines';
     let html = '<table><thead><tr><th>Code</th><th>Name</th><th>Capacity/Shift</th><th>Area</th><th>Status</th></tr></thead><tbody>';
     for (const l of rows) {
-      html += `<tr>
-        <td><code>${l.line_code}</code></td>
-        <td>${l.line_name}</td>
-        <td>${l.capacity_per_shift || '—'}</td>
-        <td>${l.area || '—'}</td>
-        <td><span class="badge ${l.status === 'active' ? 'badge-green' : 'badge-gray'}">${l.status || 'unknown'}</span></td>
-      </tr>`;
+      html += `<tr><td><code>${l.line_code}</code></td><td>${l.line_name}</td><td>${l.capacity_per_shift || '—'}</td><td>${l.area || '—'}</td><td><span class="badge ${l.status === 'active' ? 'badge-green' : 'badge-gray'}">${l.status || 'unknown'}</span></td></tr>`;
     }
     document.getElementById('lines-table').innerHTML = html + '</tbody></table>';
   } catch(e) { document.getElementById('lines-table').innerHTML = '<div class="empty">Error loading lines</div>'; }
@@ -259,13 +207,7 @@ async function loadMachines() {
     document.getElementById('machine-count').textContent = rows.length + ' machines';
     let html = '<table><thead><tr><th>Code</th><th>Name</th><th>Type</th><th>Line</th><th>Status</th></tr></thead><tbody>';
     for (const m of rows) {
-      html += `<tr>
-        <td><code>${m.machine_code}</code></td>
-        <td>${m.machine_name}</td>
-        <td>${m.machine_type || '—'}</td>
-        <td>${m.line_id ? m.line_id.substring(0,8)+'…' : '—'}</td>
-        <td><span class="badge ${m.status === 'active' ? 'badge-green' : 'badge-red'}">${m.status === 'active' ? 'Operational' : (m.status || 'unknown')}</span></td>
-      </tr>`;
+      html += `<tr><td><code>${m.machine_code}</code></td><td>${m.machine_name}</td><td>${m.machine_type || '—'}</td><td>${m.line_id ? m.line_id.substring(0,8)+'…' : '—'}</td><td><span class="badge ${m.status === 'active' ? 'badge-green' : 'badge-red'}">${m.status === 'active' ? 'Operational' : (m.status || 'unknown')}</span></td></tr>`;
     }
     document.getElementById('machines-table').innerHTML = html + '</tbody></table>';
   } catch(e) { document.getElementById('machines-table').innerHTML = '<div class="empty">Error loading machines</div>'; }
@@ -280,12 +222,7 @@ async function loadProducts() {
     document.getElementById('product-count').textContent = rows.length + ' products';
     let html = '<table><thead><tr><th>Code</th><th>Name</th><th>Cycle Time</th><th>Min Manpower</th></tr></thead><tbody>';
     for (const p of rows) {
-      html += `<tr>
-        <td><code>${p.product_code}</code></td>
-        <td>${p.product_name}</td>
-        <td>${p.standard_cycle_time || '—'} min</td>
-        <td>${p.standard_manpower || '—'}</td>
-      </tr>`;
+      html += `<tr><td><code>${p.product_code}</code></td><td>${p.product_name}</td><td>${p.standard_cycle_time || '—'} min</td><td>${p.standard_manpower || '—'}</td></tr>`;
     }
     document.getElementById('products-table').innerHTML = html + '</tbody></table>';
   } catch(e) { document.getElementById('products-table').innerHTML = '<div class="empty">Error loading products</div>'; }
@@ -302,13 +239,7 @@ async function loadSkills() {
     for (const s of rows) {
       const expiry = s.certification_expiry || '—';
       const isExpiring = expiry !== '—' && new Date(expiry) < new Date(Date.now() + 30*86400000);
-      html += `<tr>
-        <td>${s.employee_id ? s.employee_id.substring(0,8)+'…' : '—'}</td>
-        <td>${s.product_id ? s.product_id.substring(0,8)+'…' : '—'}</td>
-        <td><span class="skill-level skill-${s.skill_level}">${s.skill_level}</span></td>
-        <td><span class="badge ${s.is_certified ? 'badge-green' : 'badge-gray'}">${s.is_certified ? 'Yes' : 'No'}</span></td>
-        <td style="${isExpiring ? 'color:#d97706;font-weight:600;' : ''}">${expiry}</td>
-      </tr>`;
+      html += `<tr><td>${s.employee_id ? s.employee_id.substring(0,8)+'…' : '—'}</td><td>${s.product_id ? s.product_id.substring(0,8)+'…' : '—'}</td><td><span class="skill-level skill-${s.skill_level}">${s.skill_level}</span></td><td><span class="badge ${s.is_certified ? 'badge-green' : 'badge-gray'}">${s.is_certified ? 'Yes' : 'No'}</span></td><td style="${isExpiring ? 'color:#d97706;font-weight:600;' : ''}">${expiry}</td></tr>`;
     }
     document.getElementById('skills-table').innerHTML = html + '</tbody></table>';
   } catch(e) { document.getElementById('skills-table').innerHTML = '<div class="empty">Error loading skills</div>'; }
@@ -323,14 +254,7 @@ async function loadShifts() {
     document.getElementById('shift-count').textContent = rows.length + ' shifts';
     let html = '<table><thead><tr><th>Code</th><th>Name</th><th>Start</th><th>End</th><th>Duration</th><th>Status</th></tr></thead><tbody>';
     for (const s of rows) {
-      html += `<tr>
-        <td><strong>${s.shift_code}</strong></td>
-        <td>${s.shift_name}</td>
-        <td>${s.start_time}</td>
-        <td>${s.end_time}</td>
-        <td>${s.working_hours}h</td>
-        <td><span class="badge badge-green">Active</span></td>
-      </tr>`;
+      html += `<tr><td><strong>${s.shift_code}</strong></td><td>${s.shift_name}</td><td>${s.start_time}</td><td>${s.end_time}</td><td>${s.working_hours}h</td><td><span class="badge badge-green">Active</span></td></tr>`;
     }
     document.getElementById('shifts-table').innerHTML = html + '</tbody></table>';
   } catch(e) { document.getElementById('shifts-table').innerHTML = '<div class="empty">Error loading shifts</div>'; }
@@ -352,7 +276,6 @@ async function loadWorkOrders(force=false) {
   const status = document.getElementById('wo-filter-status').value;
   const qs = status ? `?status=${status}&limit=200` : '?limit=200';
   try {
-    // Fetch WOs and lookup data in parallel
     const [woResp, prodResp, custResp] = await Promise.all([
       fetch('/api/v1/sandhar/work-orders' + qs, {headers: H}),
       fetch('/api/v1/sandhar/products', {headers: H}),
@@ -361,11 +284,8 @@ async function loadWorkOrders(force=false) {
     const rows = await woResp.json();
     const products = await prodResp.json();
     const customers = await custResp.json();
-
-    // Build lookup maps
     const prodMap = Object.fromEntries((products || []).map(p => [p.id, p.product_name + ' (' + p.product_code + ')']));
     const custMap = Object.fromEntries((customers || []).map(c => [c.id, c.customer_name]));
-
     document.getElementById('wo-count').textContent = rows.length + ' work orders';
     if (!rows.length) {
       document.getElementById('wo-table').innerHTML = '<div class="empty">No work orders found. Run simulation seed first.</div>';
@@ -379,16 +299,7 @@ async function loadWorkOrders(force=false) {
       const st = wo.status || 'open';
       const prodName = prodMap[wo.product_id] || (wo.product_id ? wo.product_id.substring(0,8)+'…' : '—');
       const custName = custMap[wo.customer_id] || (wo.customer_id ? wo.customer_id.substring(0,8)+'…' : '—');
-      html += `<tr>
-        <td><code style="font-size:12px;">${wo.wo_number}</code></td>
-        <td>${prodName}</td>
-        <td>${custName}</td>
-        <td style="font-weight:600;">${(wo.order_qty || 0).toLocaleString()}</td>
-        <td>${wo.due_date || '—'}</td>
-        <td><span class="badge ${priorityClass[pri] || 'badge-gray'}">${pri}</span></td>
-        <td><span class="badge ${statusClass[st] || 'badge-gray'}">${st}</span></td>
-        <td>${wo.quality_hold ? '<span class="badge badge-red">Hold</span>' : '—'}</td>
-      </tr>`;
+      html += `<tr><td><code style="font-size:12px;">${wo.wo_number}</code></td><td>${prodName}</td><td>${custName}</td><td style="font-weight:600;">${(wo.order_qty || 0).toLocaleString()}</td><td>${wo.due_date || '—'}</td><td><span class="badge ${priorityClass[pri] || 'badge-gray'}">${pri}</span></td><td><span class="badge ${statusClass[st] || 'badge-gray'}">${st}</span></td><td>${wo.quality_hold ? '<span class="badge badge-red">Hold</span>' : '—'}</td></tr>`;
     }
     document.getElementById('wo-table').innerHTML = html + '</tbody></table>';
   } catch(e) {
@@ -408,5 +319,4 @@ const loaders = {
 
 loadEmployees();
 </script>
-</body>
-</html>
+{% endblock %}
