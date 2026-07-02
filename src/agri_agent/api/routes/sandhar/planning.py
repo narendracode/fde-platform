@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select, and_, desc
+from sqlalchemy import select, and_, desc, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agri_agent.api.dependencies import verify_api_key
@@ -188,7 +188,24 @@ async def generate_plan(
             detail=f"No attendance records found for {req.plan_date}. Upload attendance data first.",
         )
 
-    # 3. Lookup planning agent
+    # 3. Block if a generation run is already in progress for this date
+    in_progress = await session.execute(
+        select(AgentRun)
+        .where(
+            and_(
+                AgentRun.status.in_(["pending", "running"]),
+                AgentRun.input["plan_date"].astext == req.plan_date,
+            )
+        )
+        .limit(1)
+    )
+    if in_progress.scalar_one_or_none():
+        raise HTTPException(
+            status_code=409,
+            detail=f"A plan generation is already in progress for {req.plan_date}. Wait for it to complete.",
+        )
+
+    # 4. Lookup planning agent
     agent_result = await session.execute(
         select(Agent).where(Agent.name == "sandhar-planning-supervisor")
     )
@@ -296,10 +313,14 @@ async def get_plan_detail(
 @router.get("/plan")
 async def list_plans(
     date: str = Query(...),
+    all_versions: bool = Query(False, description="Return all versions; default returns latest per shift"),
     session: AsyncSession = Depends(get_session),
     _: str = Depends(verify_api_key),
 ):
-    """List plan headers for a given date."""
+    """List plan headers for a given date.
+    By default returns one entry per shift (the latest version) with version history embedded.
+    Pass all_versions=true to get the raw flat list.
+    """
     try:
         from datetime import date as _date
         plan_date = _date.fromisoformat(date)
@@ -311,7 +332,29 @@ async def list_plans(
         .where(SandharPlanHeader.plan_date == plan_date)
         .order_by(SandharPlanHeader.shift_code, desc(SandharPlanHeader.version))
     )
-    return [_header_out(h) for h in rows.scalars().all()]
+    all_headers = rows.scalars().all()
+
+    if all_versions:
+        return [_header_out(h) for h in all_headers]
+
+    # Group by shift: return the latest version per shift as the primary entry,
+    # with older versions embedded in a `history` field.
+    from collections import defaultdict
+    by_shift: dict[str, list] = defaultdict(list)
+    for h in all_headers:
+        by_shift[h.shift_code].append(h)  # already sorted desc by version
+
+    result = []
+    for shift in sorted(by_shift.keys()):
+        versions = by_shift[shift]
+        latest = versions[0]
+        entry = _header_out(latest)
+        entry["history"] = [
+            {**_header_out(h), "is_superseded": True}
+            for h in versions[1:]
+        ]
+        result.append(entry)
+    return result
 
 
 @router.post("/plan/{header_id}/approve")
@@ -410,7 +453,11 @@ async def create_plan_header(
     )
     existing = existing_result.scalar_one_or_none()
 
-    # Idempotency: return the existing draft rather than creating a duplicate version
+    # Idempotency: reuse the existing draft — same header_id so allocate_line writes to the right header.
+    # Do NOT wipe here: the supervisor agent calls sandhar_save_plan_header a second time (to get
+    # header IDs for propose_plan_for_review) AFTER allocate_line has already written the allocations.
+    # Wiping here would erase all that work. allocate_line already upserts (delete+insert per line),
+    # so stale data from a previous run is cleaned up there, not here.
     if existing and existing.status == "draft":
         return _header_out(existing)
 
@@ -467,6 +514,24 @@ async def allocate_line(
             operator_uuids.append(uuid.UUID(op_id))
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid operator_id format: {op_id}")
+
+    # Remove any existing detail+allocations for this header+line (idempotent upsert)
+    await session.execute(
+        delete(SandharResourceAllocation).where(
+            and_(
+                SandharResourceAllocation.plan_header_id == hid,
+                SandharResourceAllocation.line_id == line_id,
+            )
+        )
+    )
+    await session.execute(
+        delete(SandharPlanDetail).where(
+            and_(
+                SandharPlanDetail.plan_header_id == hid,
+                SandharPlanDetail.line_id == line_id,
+            )
+        )
+    )
 
     # 1. Create plan detail row
     manpower_count = len(operator_uuids)

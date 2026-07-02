@@ -345,23 +345,50 @@ function renderShiftPlan(shift, plan, planDate) {
     panel.innerHTML = `<div class="empty">No plan generated for Shift ${shift}</div>`;
     return;
   }
+
   const confClass = plan.confidence === 'high' ? 'badge-high' : plan.confidence === 'medium' ? 'badge-medium' : 'badge-low';
-  const statusBadge = plan.status === 'approved' ? '<span style="color:#16a34a;font-weight:700;">✅ Approved</span>' : `<span style="color:#d97706;font-weight:700;">${plan.status}</span>`;
+  const isApproved = plan.status === 'approved';
+  const statusBadge = isApproved
+    ? '<span style="color:#16a34a;font-weight:700;">✅ Active Plan</span>'
+    : `<span style="color:#d97706;font-weight:700;">⏳ ${plan.status}</span>`;
+
+  const history = plan.history || [];
+  let historyHtml = '';
+  if (history.length > 0) {
+    historyHtml = `
+      <details style="margin-top:14px;">
+        <summary style="font-size:12px;color:#6b7280;cursor:pointer;user-select:none;">
+          ${history.length} earlier version${history.length > 1 ? 's' : ''} (superseded)
+        </summary>
+        <div style="margin-top:8px;padding:10px 14px;background:#f9fafb;border-radius:8px;border:1px solid #f3f4f6;">
+          ${history.map(h => `
+            <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f0f0f0;font-size:12px;">
+              <span>v${h.version} &nbsp;·&nbsp; <span style="color:#6b7280;">${h.status}</span> &nbsp;·&nbsp; confidence: ${h.confidence || '—'}</span>
+              <span style="color:#9ca3af;">Created ${new Date(h.created_at).toLocaleString()}</span>
+            </div>`).join('')}
+        </div>
+      </details>`;
+  }
 
   panel.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
       <div>
         <span class="badge ${confClass}" style="margin-right:8px;">Confidence: ${plan.confidence || '—'}</span>
         ${statusBadge}
-        <span style="color:#6b7280;font-size:12px;margin-left:8px;">v${plan.version || 1}</span>
+        <span style="color:#9ca3af;font-size:12px;margin-left:8px;">Version ${plan.version}</span>
+        ${isApproved && plan.approved_at ? `<span style="color:#9ca3af;font-size:12px;margin-left:8px;">· Approved ${new Date(plan.approved_at).toLocaleString()}</span>` : ''}
       </div>
-      ${plan.status !== 'approved' ? `
+      ${!isApproved ? `
       <div class="plan-actions">
         <button class="btn btn-success" onclick="approvePlan('${plan.id}', '${shift}')">✅ Approve Plan</button>
         <button class="btn btn-danger" onclick="rejectPlan('${plan.id}', '${shift}')">✗ Reject</button>
-      </div>` : ''}
+      </div>` : `
+      <div class="plan-actions">
+        <button class="btn btn-outline" onclick="reGeneratePlan('${shift}')">↺ Re-generate Shift ${shift}</button>
+      </div>`}
     </div>
     <div id="plan-detail-${shift}"><div class="empty"><span class="spinner"></span> Loading details…</div></div>
+    ${historyHtml}
   `;
   loadPlanDetails(plan.id, shift);
 }
@@ -372,23 +399,40 @@ async function loadPlanDetails(headerId, shift) {
     const data = await resp.json();
     const details = data.details || [];
     if (details.length === 0) {
-      document.getElementById(`plan-detail-${shift}`).innerHTML = '<div class="empty">No line allocations in this plan yet</div>';
+      document.getElementById(`plan-detail-${shift}`).innerHTML =
+        '<div class="empty">No line allocations saved in this plan — agent may not have called sandhar_allocate_line</div>';
       return;
     }
-    let html = '<table><thead><tr><th>Line</th><th>Work Order</th><th>Planned Qty</th><th>Operators</th><th>Status</th></tr></thead><tbody>';
+    let html = `<table><thead><tr>
+      <th>Line</th><th>Work Order</th><th>Product</th>
+      <th>Planned Qty</th><th>Operators</th><th>Status</th>
+    </tr></thead><tbody>`;
     for (const d of details) {
       html += `<tr>
-        <td>${d.line_id ? d.line_id.substring(0,8)+'…' : '—'}</td>
-        <td>${d.wo_id ? d.wo_id.substring(0,8)+'…' : '—'}</td>
-        <td>${d.planned_qty || '—'}</td>
-        <td>${d.available_manpower || '—'}</td>
-        <td><span style="color:#d97706;">${d.status}</span></td>
+        <td style="font-family:monospace;font-size:12px;">${d.line_id ? d.line_id.substring(0,8)+'…' : '—'}</td>
+        <td style="font-family:monospace;font-size:12px;">${d.wo_id ? d.wo_id.substring(0,8)+'…' : '—'}</td>
+        <td>—</td>
+        <td style="font-weight:600;">${d.planned_qty?.toLocaleString() ?? '—'}</td>
+        <td>${d.available_manpower ?? '—'} / ${d.planned_manpower ?? '—'}</td>
+        <td><span style="color:#d97706;font-size:12px;">${d.status}</span></td>
       </tr>`;
     }
     document.getElementById(`plan-detail-${shift}`).innerHTML = html + '</tbody></table>';
   } catch(e) {
     document.getElementById(`plan-detail-${shift}`).innerHTML = '<div class="empty">Could not load plan details</div>';
   }
+}
+
+function reGeneratePlan(shift) {
+  if (!confirm(`Re-generate the Shift ${shift} plan? The existing approved plan will remain until the new one is approved.`)) return;
+  const planDate = document.getElementById('plan-date').value || currentPlanDate;
+  if (!planDate) { toast('No date selected', false); return; }
+  // Switch to pre-generate state and set only this shift
+  document.querySelectorAll('.shift-check').forEach(cb => {
+    cb.checked = cb.value === shift;
+  });
+  document.getElementById('plan-date').value = planDate;
+  generatePlan();
 }
 
 async function approvePlan(headerId, shift) {
