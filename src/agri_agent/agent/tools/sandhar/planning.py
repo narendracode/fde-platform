@@ -20,40 +20,35 @@ def _client() -> httpx.Client:
 @tool
 def sandhar_calculate_planned_qty(
     line_id: str,
-    product_id: str,
-    available_manpower: int,
     shift_code: str,
+    available_manpower: int,
+    standard_manpower: int,
+    cycle_time_minutes: float,
 ) -> str:
-    """Calculate the planned production quantity for a line based on available manpower.
-    Uses product standard cycle time and manpower to compute achievable output for the shift.
+    """Calculate planned production quantity for a line+shift — pure calculation, no API call.
+    All inputs come directly from the work order data returned by sandhar_get_open_work_orders.
+    DO NOT pass wo_number or product_id here — pass the numeric fields from the work order.
     Args:
-        line_id: UUID of the production line
-        product_id: UUID of the product to be produced
-        available_manpower: Number of operators available for this line+shift
-        shift_code: Shift code (A, B, or C) - each shift has 7 productive hours
+        line_id: line_code or UUID of the production line (e.g. 'L001') — for context only
+        shift_code: Shift code (A, B, or C)
+        available_manpower: Number of operators confirmed present for this line+shift
+        standard_manpower: From work order field 'standard_manpower' (e.g. 20)
+        cycle_time_minutes: From work order field 'standard_cycle_time' in minutes (e.g. 2.5)
     """
-    with _client() as c:
-        resp = c.get(f"/api/v1/sandhar/products/{product_id}")
-        if resp.status_code != 200:
-            return json.dumps({"error": f"Product {product_id} not found"})
-        product = resp.json()
+    shift_hours = 7  # 7 productive hours per shift (8h minus 1h break)
 
-    standard_cycle_time = product.get("standard_cycle_time") or 0
-    standard_manpower = product.get("standard_manpower") or 1
-    shift_hours = 7  # 7 productive hours per shift (8h - 1h break)
-
-    if standard_cycle_time <= 0 or standard_manpower <= 0:
-        return json.dumps({"planned_qty": 0, "basis": "Missing product cycle time or manpower data"})
+    if cycle_time_minutes <= 0 or standard_manpower <= 0:
+        return json.dumps({"planned_qty": 0, "basis": "Missing cycle time or manpower data"})
 
     manpower_ratio = available_manpower / standard_manpower
-    units_per_hour = 60.0 / standard_cycle_time
+    units_per_hour = 60.0 / cycle_time_minutes
     planned_qty = int(manpower_ratio * shift_hours * units_per_hour)
 
     return json.dumps({
         "planned_qty": planned_qty,
-        "product_code": product.get("product_code"),
         "available_manpower": available_manpower,
         "standard_manpower": standard_manpower,
+        "cycle_time_minutes": cycle_time_minutes,
         "shift_hours": shift_hours,
         "basis": f"{available_manpower}/{standard_manpower} operators × {shift_hours}h × {units_per_hour:.1f} units/hr = {planned_qty} units",
     }, indent=2)

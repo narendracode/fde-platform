@@ -35,8 +35,11 @@ def sandhar_list_lines() -> str:
 def sandhar_get_open_work_orders(plan_date: str) -> str:
     """Get all open work orders eligible for production planning.
     Returns WOs sorted by priority (high first) then due date (soonest first).
-    Excludes WOs on quality hold. Each WO includes product_code, line_code,
-    and line_id — use these values directly for sandhar_find_qualified_operators.
+    Excludes WOs on quality hold. Each WO includes:
+      - line_id, line_code: use for sandhar_find_qualified_operators
+      - standard_manpower: pass directly to sandhar_calculate_planned_qty as standard_manpower
+      - standard_cycle_time: pass directly to sandhar_calculate_planned_qty as cycle_time_minutes
+    Do NOT pass wo_number or id to sandhar_calculate_planned_qty — pass the numeric fields above.
     Args:
         plan_date: Planning date in YYYY-MM-DD format (used for context)
     """
