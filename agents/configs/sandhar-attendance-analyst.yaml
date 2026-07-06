@@ -4,6 +4,7 @@ agent:
     Analyses shift-wise attendance for a planning date. Maps present operators
     to their skills. Raises certification expiry alerts.
   version: "1.0.0"
+  companies: [sandhar]
 
   inputs:
     plan_date:

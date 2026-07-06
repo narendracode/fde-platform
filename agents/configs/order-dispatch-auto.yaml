@@ -5,6 +5,7 @@ agent:
     without any human review step. Use this agent once the team has validated
     the AI's decisions through the review phase and trusts full automation.
   version: "1.0.0"
+  companies: [fundly]
 
   # ── Feature flags ────────────────────────────────────────────────────────────
   # human_in_the_loop: false → agent calls dispatch_order directly (Mode 3)

@@ -4,6 +4,7 @@ agent:
     Assembles the final shift-wise production plan. Calculates planned quantities
     and submits the plan for human planner review via the HITL approval inbox.
   version: "1.0.0"
+  companies: [sandhar]
 
   feature_flags:
     human_in_the_loop: true

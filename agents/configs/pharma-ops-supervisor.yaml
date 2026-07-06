@@ -5,6 +5,7 @@ agent:
     order dispatch analysis and retailer outreach. Decides which workers to call
     and in what order based on the user's task, then synthesises their results.
   version: "1.0.0"
+  companies: [fundly]
 
   # ── Agent type ────────────────────────────────────────────────────────────────
   # "supervisor" enables the orchestrator-worker graph in supervisor_agent.py.

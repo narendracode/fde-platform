@@ -14,7 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agri_agent.agent.react_agent import run_agent
 from agri_agent.agent.tools import list_available_tools, list_tools_with_descriptions
 from agri_agent.api.dependencies import verify_api_key
-from agri_agent.config.loader import list_agent_configs, load_agent_config
+from agri_agent.config.loader import agent_is_visible, list_agent_configs, load_agent_config
+from agri_agent.config.settings import settings
 from agri_agent.db.models import Agent, AgentRun
 from agri_agent.db.session import get_session
 
@@ -56,9 +57,11 @@ async def list_agents(
     session: AsyncSession = Depends(get_session),
     _: str = Depends(verify_api_key),
 ):
-    """List all registered agents with their activation status."""
+    """List registered agents visible for the active company configuration."""
+    active = [c.strip().lower() for c in settings.companies_to_show.split(",") if c.strip()]
+    cfg_map = {c.name: c for c in list_agent_configs()}
+
     rows = await session.execute(select(Agent))
-    agents = rows.scalars().all()
     return [
         {
             "id": str(a.id),
@@ -68,14 +71,16 @@ async def list_agents(
             "is_active": a.is_active,
             "created_at": a.created_at.isoformat(),
         }
-        for a in agents
+        for a in rows.scalars().all()
+        if (agent_is_visible(cfg_map[a.name], active) if a.name in cfg_map else True)
     ]
 
 
 @router.get("/configs")
 async def list_configs(_: str = Depends(verify_api_key)):
-    """List all YAML agent config files available on disk."""
-    configs = list_agent_configs()
+    """List YAML agent configs visible for the active company configuration."""
+    active = [c.strip().lower() for c in settings.companies_to_show.split(",") if c.strip()]
+    configs = [c for c in list_agent_configs() if agent_is_visible(c, active)]
     return [
         {
             "name": c.name,

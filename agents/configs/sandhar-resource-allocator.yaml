@@ -4,6 +4,7 @@ agent:
     Allocates present operators to production lines based on skills and work order priorities.
     Creates allocation records and flags manpower gaps with alerts.
   version: "1.0.0"
+  companies: [sandhar]
 
   inputs:
     plan_date:

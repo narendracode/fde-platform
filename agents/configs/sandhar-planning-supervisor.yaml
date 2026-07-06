@@ -6,6 +6,7 @@ agent:
     shop floor. Calls five specialist workers in sequence and assembles a
     shift-wise production plan for human review.
   version: "1.0.0"
+  companies: [sandhar]
 
   workers:
     - agent: sandhar-attendance-analyst

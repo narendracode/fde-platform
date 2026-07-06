@@ -95,6 +95,9 @@ class AgentConfig(BaseModel):
     # Supervisor-only fields (ignored for react agents)
     workers: list[WorkerRef] = []
     routing: RoutingConfig = RoutingConfig()
+    # Visibility scoping — empty list means platform agent (always shown).
+    # Populate with company slugs matching COMPANIES_TO_SHOW values.
+    companies: list[str] = []
 
     @field_validator("name")
     @classmethod
@@ -166,6 +169,18 @@ def load_agent_config(name: str) -> AgentConfig:
         if agent_raw.get("name") == name:
             return AgentConfig.model_validate(agent_raw)
     raise FileNotFoundError(f"Agent config '{name}' not found in {config_dir}")
+
+
+def agent_is_visible(cfg: AgentConfig, active_companies: list[str]) -> bool:
+    """Return True if an agent should be shown given the active company list.
+
+    An empty `companies` list means the agent is platform-wide (always visible).
+    Otherwise the agent is visible only if at least one of its declared companies
+    is in `active_companies`.
+    """
+    if not cfg.companies:
+        return True
+    return bool(set(cfg.companies) & set(active_companies))
 
 
 def list_agent_configs() -> list[AgentConfig]:

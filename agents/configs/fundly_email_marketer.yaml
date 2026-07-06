@@ -3,6 +3,7 @@ agent:
   description: >
     Automated pharma retail outreach agent that identifies high-revenue retailers in New Delhi, filters prospects, and sends marketing emails to them.
   version: "1.0.0"
+  companies: [fundly]
 
   model:
     provider: anthropic

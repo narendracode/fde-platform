@@ -8,7 +8,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agri_agent.api._templates import templates
-from agri_agent.config.loader import list_agent_configs
+from agri_agent.config.loader import agent_is_visible, list_agent_configs
 from agri_agent.config.settings import settings
 from agri_agent.db.models import Agent, AgentRun
 from agri_agent.db.session import get_session
@@ -21,7 +21,12 @@ async def agents_page(
     request: Request,
     session: AsyncSession = Depends(get_session),
 ):
-    yaml_configs = {cfg.name: cfg for cfg in list_agent_configs()}
+    active_companies = [c.strip().lower() for c in settings.companies_to_show.split(",") if c.strip()]
+    yaml_configs = {
+        cfg.name: cfg
+        for cfg in list_agent_configs()
+        if agent_is_visible(cfg, active_companies)
+    }
 
     rows = await session.execute(select(Agent))
     db_agents = {a.name: a for a in rows.scalars().all()}
@@ -47,6 +52,8 @@ async def agents_page(
     agents = []
     for a in sorted(db_agents.values(), key=lambda x: x.name):
         cfg = yaml_configs.get(a.name)
+        if cfg is None:
+            continue  # agent exists in DB but is not visible for current COMPANIES_TO_SHOW
         agents.append({
             "id": str(a.id),
             "name": a.name,

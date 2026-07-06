@@ -4,6 +4,7 @@ agent:
     Validates all production constraints for a planning date: machine availability,
     material stock, and quality holds. Creates alerts for each constraint found.
   version: "1.0.0"
+  companies: [sandhar]
 
   inputs:
     plan_date:

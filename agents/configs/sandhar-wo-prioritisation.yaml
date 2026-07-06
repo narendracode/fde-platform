@@ -4,6 +4,7 @@ agent:
     Imports and ranks open work orders for a planning date. Identifies WOs
     under quality hold. Returns prioritised WO list for planning.
   version: "1.0.0"
+  companies: [sandhar]
 
   inputs:
     plan_date:
