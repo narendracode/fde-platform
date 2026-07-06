@@ -116,6 +116,30 @@
              display: none; z-index: 2000; box-shadow: 0 4px 14px rgba(0,0,0,.2); }
     #toast.error { background: #dc2626; }
     #toast.ok    { background: #15803d; }
+
+    .btn-config { background: #f0f4ff; color: #3730a3; border: 1px solid #c7d2fe; }
+    .btn-config:hover { background: #e0e7ff; }
+
+    #yaml-modal .modal { max-width: 780px; }
+    #yaml-modal .modal-body { padding: 0; background: #0f172a; border-radius: 0 0 14px 14px; overflow: hidden; }
+    .yaml-toolbar { display: flex; align-items: center; justify-content: space-between;
+                    padding: 10px 16px; background: #1e293b; border-bottom: 1px solid #334155; }
+    .yaml-filename { font-family: 'SF Mono', monospace; font-size: 12px; color: #94a3b8; }
+    .btn-copy-yaml { background: #334155; color: #94a3b8; border: 1px solid #475569;
+                     padding: 4px 12px; border-radius: 5px; font-size: 11px; font-weight: 600;
+                     cursor: pointer; transition: background .15s; }
+    .btn-copy-yaml:hover { background: #475569; color: #e2e8f0; }
+    .btn-copy-yaml.copied { background: #166534; color: #86efac; border-color: #166534; }
+    .yaml-pre { margin: 0; padding: 20px 24px; font-family: 'SF Mono', 'Fira Code', monospace;
+                font-size: 12.5px; line-height: 1.7; color: #e2e8f0; white-space: pre;
+                background: transparent; max-height: 68vh; overflow-y: auto; overflow-x: auto; }
+    .y-key  { color: #7dd3fc; }
+    .y-str  { color: #86efac; }
+    .y-num  { color: #fda4af; }
+    .y-bool { color: #fbbf24; }
+    .y-null { color: #f472b6; }
+    .y-cmt  { color: #475569; font-style: italic; }
+    .y-pipe { color: #a78bfa; }
   </style>
 {% endblock %}
 
@@ -192,6 +216,7 @@
         {% endif %}
         <a href="/runs?agent_name={{ a.name }}" class="btn btn-runs" style="text-decoration:none;">📋 Runs</a>
         {% if a.has_yaml %}
+        <button class="btn btn-config" onclick="openYamlModal('{{ a.name }}')">⚙ Config</button>
         <button class="btn btn-run" onclick="openRunModal('{{ a.name }}')"
                 {% if not a.is_active %}title="Activate agent first"{% endif %}>▶ Run</button>
         {% else %}
@@ -200,6 +225,22 @@
       </div>
     </div>
     {% endfor %}
+  </div>
+</div>
+
+<div class="modal-overlay" id="yaml-modal" onclick="closeYamlOnOverlay(event)">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="yaml-modal-title">Agent Config</h3>
+      <button class="modal-close" onclick="closeYamlModal()">×</button>
+    </div>
+    <div class="modal-body" id="yaml-modal-body">
+      <div class="yaml-toolbar">
+        <span class="yaml-filename" id="yaml-filename"></span>
+        <button class="btn-copy-yaml" id="yaml-copy-btn" onclick="copyYaml()">Copy</button>
+      </div>
+      <pre class="yaml-pre" id="yaml-pre"></pre>
+    </div>
   </div>
 </div>
 
@@ -355,7 +396,83 @@
 
   function closeRunModal() { document.getElementById('run-modal').classList.remove('open'); currentAgent = null; }
   function closeModalOnOverlay(e) { if (e.target === document.getElementById('run-modal')) closeRunModal(); }
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeRunModal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeRunModal(); closeYamlModal(); } });
+
+  // ── YAML Config Viewer ─────────────────────────────────────────────────────
+  let _rawYaml = '';
+
+  function _highlightYaml(text) {
+    return text
+      .split('\n')
+      .map(line => {
+        // Comments
+        if (/^\s*#/.test(line)) return `<span class="y-cmt">${_esc(line)}</span>`;
+        // Block scalar indicator (|, >, |-) — treat whole line as pipe token
+        if (/^\s+[|>][+-]?\s*$/.test(line)) return `<span class="y-pipe">${_esc(line)}</span>`;
+        // Key: value pairs
+        const m = line.match(/^(\s*)([\w-]+)(\s*:\s*)(.*)$/);
+        if (m) {
+          const [, indent, key, sep, val] = m;
+          const inlineComment = val.match(/(.*?)\s*(#.*)$/);
+          let valHtml;
+          if (inlineComment && !inlineComment[1].includes('"') && !inlineComment[1].includes("'")) {
+            valHtml = _colorVal(inlineComment[1]) + `<span class="y-cmt"> ${_esc(inlineComment[2])}</span>`;
+          } else {
+            valHtml = _colorVal(val);
+          }
+          return `${_esc(indent)}<span class="y-key">${_esc(key)}</span>${_esc(sep)}${valHtml}`;
+        }
+        // List items
+        const li = line.match(/^(\s*-\s+)(.*)$/);
+        if (li) return `${_esc(li[1])}${_colorVal(li[2])}`;
+        return _esc(line);
+      })
+      .join('\n');
+  }
+
+  function _colorVal(v) {
+    const t = v.trim();
+    if (t === '') return '';
+    if (t === 'true' || t === 'false') return `<span class="y-bool">${_esc(v)}</span>`;
+    if (t === 'null' || t === '~') return `<span class="y-null">${_esc(v)}</span>`;
+    if (/^-?\d+(\.\d+)?$/.test(t)) return `<span class="y-num">${_esc(v)}</span>`;
+    if (/^[|>]/.test(t)) return `<span class="y-pipe">${_esc(v)}</span>`;
+    return `<span class="y-str">${_esc(v)}</span>`;
+  }
+
+  function _esc(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  async function openYamlModal(name) {
+    document.getElementById('yaml-modal-title').textContent = name;
+    document.getElementById('yaml-filename').textContent = `${name}.yaml`;
+    document.getElementById('yaml-pre').innerHTML = '<span style="color:#475569">Loading…</span>';
+    document.getElementById('yaml-copy-btn').textContent = 'Copy';
+    document.getElementById('yaml-copy-btn').className = 'btn-copy-yaml';
+    document.getElementById('yaml-modal').classList.add('open');
+    try {
+      const r = await fetch(`/api/v1/agents/${name}/yaml`, { headers });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      _rawYaml = await r.text();
+      document.getElementById('yaml-pre').innerHTML = _highlightYaml(_rawYaml);
+    } catch (e) {
+      document.getElementById('yaml-pre').innerHTML = `<span style="color:#f87171">Failed to load: ${e.message}</span>`;
+    }
+  }
+
+  function closeYamlModal() { document.getElementById('yaml-modal').classList.remove('open'); _rawYaml = ''; }
+  function closeYamlOnOverlay(e) { if (e.target === document.getElementById('yaml-modal')) closeYamlModal(); }
+
+  function copyYaml() {
+    if (!_rawYaml) return;
+    navigator.clipboard.writeText(_rawYaml).then(() => {
+      const btn = document.getElementById('yaml-copy-btn');
+      btn.textContent = '✓ Copied';
+      btn.className = 'btn-copy-yaml copied';
+      setTimeout(() => { btn.textContent = 'Copy'; btn.className = 'btn-copy-yaml'; }, 2000);
+    });
+  }
 
   function toast(msg, type = '') {
     const el = document.getElementById('toast');

@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import uuid
+import yaml
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -169,6 +172,25 @@ async def deactivate_agent(
     agent.is_active = False
     await session.commit()
     return {"name": agent.name, "is_active": False}
+
+
+@router.get("/{agent_name}/yaml", response_class=PlainTextResponse)
+async def get_agent_yaml(
+    agent_name: str,
+    _: str = Depends(verify_api_key),
+):
+    """Return the raw YAML config file for an agent as plain text."""
+    config_dir = Path(settings.agents_config_dir)
+    for candidate in (f"{agent_name}.yaml", f"{agent_name.replace('-', '_')}.yaml"):
+        path = config_dir / candidate
+        if path.exists():
+            return PlainTextResponse(path.read_text())
+    for path in config_dir.glob("*.yaml"):
+        raw = yaml.safe_load(path.read_text())
+        agent_raw = raw.get("agent", raw)
+        if agent_raw.get("name") == agent_name:
+            return PlainTextResponse(path.read_text())
+    raise HTTPException(status_code=404, detail=f"YAML config for '{agent_name}' not found")
 
 
 @router.get("/{agent_name}")
