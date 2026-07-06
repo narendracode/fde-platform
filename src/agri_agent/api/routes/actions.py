@@ -145,18 +145,40 @@ def _message_out(m: AgentRefineMessage) -> dict[str, Any]:
 # ── Agent feature-flag helpers ────────────────────────────────────────────────
 
 async def _agent_flags(session: AsyncSession, agent_name: str) -> dict:
-    """Return feature_flags dict for a named agent; empty dict if not found."""
+    """Return feature_flags for a named agent.
+
+    Prefers the YAML (source of truth) so that flag changes take effect without
+    a DB record update. Falls back to the DB snapshot when the YAML is absent.
+    """
+    try:
+        cfg = load_agent_config(agent_name)
+        if cfg.feature_flags:
+            return cfg.feature_flags
+    except Exception:
+        pass
     row = await session.execute(select(Agent).where(Agent.name == agent_name))
     agent = row.scalar_one_or_none()
     return (agent.config.get("feature_flags", {}) if agent else {})
 
 
 async def _agents_flags(session: AsyncSession, agent_names: set[str]) -> dict[str, dict]:
-    """Batch-fetch feature_flags for a set of agent names."""
+    """Batch-fetch feature_flags for a set of agent names.
+
+    Merges YAML flags (source of truth) over DB snapshots so that flag changes
+    take effect immediately without a DB record update.
+    """
     if not agent_names:
         return {}
     rows = await session.execute(select(Agent).where(Agent.name.in_(agent_names)))
-    return {a.name: a.config.get("feature_flags", {}) for a in rows.scalars().all()}
+    db_map = {a.name: a.config.get("feature_flags", {}) for a in rows.scalars().all()}
+    result: dict[str, dict] = {}
+    for name in agent_names:
+        try:
+            cfg = load_agent_config(name)
+            result[name] = cfg.feature_flags if cfg.feature_flags else db_map.get(name, {})
+        except Exception:
+            result[name] = db_map.get(name, {})
+    return result
 
 
 async def _ensure_agent_active(session: AsyncSession, agent_name: str) -> None:

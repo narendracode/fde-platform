@@ -1,0 +1,68 @@
+{# Preview partial: current plan state for the "Refine with AI" canvas.
+   Rendered server-side by GET /sandhar/plan/{header_id}/refine-preview
+   and injected into the canvas preview pane after each agent tool call. #}
+<div style="padding: 16px; height: 100%; overflow-y: auto; font-size: 13px;">
+  <div style="margin-bottom: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+    <span style="font-weight: 700; color: #111827;">Shift {{ plan.shift_code or '—' }}</span>
+    <span style="font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 700;
+                 background: {{ {'high':'#dcfce7','medium':'#fef3c7','low':'#fee2e2'}.get(plan.confidence, '#f3f4f6') }};
+                 color: {{ {'high':'#14532d','medium':'#92400e','low':'#991b1b'}.get(plan.confidence, '#374151') }};">
+      {{ (plan.confidence or 'unknown') | upper }}
+    </span>
+    <span style="color: #6b7280; font-size: 12px;">{{ plan.plan_date }}</span>
+  </div>
+
+  {% if not details %}
+  <div style="color: #9ca3af; text-align: center; padding: 24px; font-size: 13px;">No line allocations yet</div>
+  {% else %}
+  <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 14px;
+              background: #f8f9fb; border-radius: 8px; padding: 10px 12px; border: 1px solid #e5e7eb;">
+    <div>
+      <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: #9ca3af;">Lines</div>
+      <div style="font-size: 18px; font-weight: 700;">{{ details | length }}</div>
+    </div>
+    <div>
+      <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: #9ca3af;">Total Units</div>
+      <div style="font-size: 18px; font-weight: 700;">{{ total_qty }}</div>
+    </div>
+  </div>
+
+  {% for d in details %}
+  <div style="border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 10px; overflow: hidden;">
+    <div style="background: #f8f9fb; padding: 8px 12px; display: flex; justify-content: space-between;
+                align-items: center; border-bottom: 1px solid #e5e7eb;">
+      <span style="font-weight: 700; font-size: 13px; color: #111827;">{{ d.line_code or d.line_id or '?' }}</span>
+      <div style="display: flex; gap: 6px; align-items: center;">
+        {% if d.wo_number %}
+        <span style="font-size: 11px; font-family: monospace; background: #f3f4f6; border: 1px solid #e5e7eb;
+                     border-radius: 4px; padding: 2px 7px; color: #374151; font-weight: 600;">{{ d.wo_number }}</span>
+        {% endif %}
+        {% if d.detail_id in changed_ids %}
+        <span style="font-size: 10px; background: #fef3c7; color: #92400e; border-radius: 4px; padding: 2px 6px; font-weight: 700;">CHANGED</span>
+        {% endif %}
+      </div>
+    </div>
+    <div style="padding: 10px 12px;">
+      <div style="display: flex; justify-content: space-between; font-size: 12px; color: #374151; margin-bottom: 6px;">
+        <span>Planned Qty</span>
+        <strong>{{ d.planned_qty or 0 }} units</strong>
+      </div>
+      <div style="background: #f3f4f6; border-radius: 4px; height: 6px; overflow: hidden; margin-bottom: 6px;">
+        {% set _qty = d.planned_qty or 0 %}
+        {% set _ord = d.order_qty if d.order_qty and d.order_qty > 0 else 1 %}
+        {% set _raw = (_qty * 100) // _ord %}
+        {% set pct = [_raw, 100] | min if _raw > 0 else 0 %}
+        <div style="width: {{ pct }}%; height: 100%; background: #7c3aed; border-radius: 4px;"></div>
+      </div>
+      <div style="font-size: 11px; color: #6b7280;">
+        {{ d.available_manpower or 0 }} / {{ d.planned_manpower or 0 }} operators
+        {% if d.manpower_gap and d.manpower_gap < 0 %}
+        <span style="background: #fee2e2; color: #991b1b; border-radius: 4px; padding: 1px 5px;
+                     font-weight: 700; margin-left: 4px;">{{ d.manpower_gap }} ops</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+  {% endif %}
+</div>

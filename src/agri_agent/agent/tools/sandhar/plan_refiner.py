@@ -68,35 +68,59 @@ def sandhar_refine_get_plan(plan_header_id: str) -> str:
 
 
 @tool
-def sandhar_refine_update_qty(plan_header_id: str, detail_id: str, new_qty: int) -> str:
-    """Update the planned quantity for a specific plan detail row.
+def sandhar_refine_update_qty(
+    plan_header_id: str,
+    detail_id: str,
+    new_qty: int | None = None,
+    new_planned_manpower: int | None = None,
+) -> str:
+    """Update the planned quantity and/or planned operator count for a plan detail row.
 
-    Use this when the planner wants to change how many units are planned on a line.
-    planned_qty must be greater than 0.
+    Use this when the planner wants to change how many units are planned on a line,
+    or how many operators are allocated to it. At least one of new_qty or
+    new_planned_manpower must be provided.
 
     Args:
         plan_header_id: UUID of the SandharPlanHeader being refined
         detail_id: UUID of the SandharPlanDetail row to update (from sandhar_refine_get_plan)
-        new_qty: New planned quantity (must be > 0)
+        new_qty: New planned quantity (must be > 0 if provided)
+        new_planned_manpower: New number of planned operators (must be >= 0 if provided)
     """
-    if new_qty <= 0:
+    if new_qty is None and new_planned_manpower is None:
+        return json.dumps({"error": "Provide at least one of new_qty or new_planned_manpower"})
+    if new_qty is not None and new_qty <= 0:
         return json.dumps({"error": "planned_qty must be greater than 0"})
+    if new_planned_manpower is not None and new_planned_manpower < 0:
+        return json.dumps({"error": "planned_manpower must be >= 0"})
+
+    payload: dict = {}
+    if new_qty is not None:
+        payload["planned_qty"] = new_qty
+    if new_planned_manpower is not None:
+        payload["planned_manpower"] = new_planned_manpower
+
     with _client() as c:
         resp = c.patch(
             f"/api/v1/sandhar/plan/{plan_header_id}/details/{detail_id}",
-            json={"planned_qty": new_qty},
+            json=payload,
         )
         if resp.status_code == 404:
             return json.dumps({"error": f"Plan detail '{detail_id}' not found in plan '{plan_header_id}'"})
         if resp.status_code != 200:
-            return json.dumps({"error": f"Failed to update quantity: {resp.text}"})
+            return json.dumps({"error": f"Failed to update detail: {resp.text}"})
         d = resp.json()
+        changes = []
+        if new_qty is not None:
+            changes.append(f"planned_qty → {new_qty}")
+        if new_planned_manpower is not None:
+            changes.append(f"planned_manpower → {new_planned_manpower}")
         return json.dumps({
             "success": True,
             "detail_id": d.get("id"),
             "line_id": d.get("line_id"),
             "planned_qty": d.get("planned_qty"),
-            "message": f"Updated planned quantity to {new_qty} units",
+            "planned_manpower": d.get("planned_manpower"),
+            "message": "Updated: " + ", ".join(changes),
         }, indent=2)
 
 

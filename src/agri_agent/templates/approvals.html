@@ -143,6 +143,102 @@
     #toast { position: fixed; bottom: 24px; right: 24px; background: #1a1a2e; color: white;
              padding: 10px 18px; border-radius: 8px; font-size: 13px; display: none;
              box-shadow: 0 4px 12px rgba(0,0,0,.2); z-index: 999; max-width: 360px; }
+
+    /* ── Refine with AI button ── */
+    .btn-refine { background: #ede9fe; color: #5b21b6; border: 1.5px solid #c4b5fd; }
+    .btn-refine:hover { background: #ddd6fe; }
+    .btn-refine:disabled { opacity: .5; cursor: not-allowed; }
+
+    /* ── Refine canvas overlay ── */
+    #refine-overlay {
+      position: fixed; inset: 0; z-index: 500; display: none;
+      background: rgba(17,24,39,.45); backdrop-filter: blur(2px);
+    }
+    #refine-overlay.open { display: flex; }
+    #refine-preview-pane {
+      width: 42%; height: 100%; background: #f8f9fb; border-right: 1px solid #e5e7eb;
+      overflow: hidden; display: flex; flex-direction: column;
+    }
+    #refine-preview-header {
+      padding: 14px 16px; background: #fff; border-bottom: 1px solid #e5e7eb;
+      font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+      color: #6b7280; flex-shrink: 0;
+    }
+    #refine-preview-body { flex: 1; overflow: hidden; }
+    #refine-preview-body iframe {
+      width: 100%; height: 100%; border: none;
+    }
+    #refine-chat-pane {
+      width: 58%; height: 100%; background: #fff;
+      display: flex; flex-direction: column;
+    }
+    #refine-chat-header {
+      padding: 14px 18px; border-bottom: 1px solid #e5e7eb; flex-shrink: 0;
+      display: flex; align-items: center; gap: 10px;
+    }
+    #refine-chat-title { flex: 1; font-size: 14px; font-weight: 700; color: #1a1a2e; min-width: 0;
+                         overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #refine-approve-btn {
+      background: #16a34a; color: #fff; border: none; padding: 7px 14px;
+      border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+    }
+    #refine-approve-btn:hover { background: #15803d; }
+    #refine-approve-btn:disabled { background: #86efac; cursor: not-allowed; }
+    #refine-close-btn {
+      background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb;
+      padding: 7px 12px; border-radius: 7px; font-size: 13px; cursor: pointer;
+    }
+    #refine-close-btn:hover { background: #e5e7eb; }
+    #refine-messages {
+      flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px;
+    }
+    .refine-msg { max-width: 88%; display: flex; flex-direction: column; gap: 4px; }
+    .refine-msg.user { align-self: flex-end; align-items: flex-end; }
+    .refine-msg.assistant { align-self: flex-start; align-items: flex-start; }
+    .refine-bubble {
+      padding: 10px 14px; border-radius: 14px; font-size: 13px; line-height: 1.55;
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .refine-msg.user .refine-bubble { background: #ede9fe; color: #1e1b4b; border-radius: 14px 14px 4px 14px; }
+    .refine-msg.assistant .refine-bubble { background: #f1f5f9; color: #1a1a2e; border-radius: 14px 14px 14px 4px; }
+    .refine-msg.locked .refine-bubble { opacity: .6; }
+    .refine-role { font-size: 11px; font-weight: 600; color: #94a3b8; padding: 0 4px; }
+    .tool-badge {
+      display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 7px;
+      border-radius: 20px; background: #fef3c7; color: #92400e; margin: 2px 2px 0 0;
+      font-family: monospace; border: 1px solid #fde68a;
+    }
+    .tool-badges { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 4px; }
+    .thinking-dot {
+      display: inline-block; width: 6px; height: 6px; background: #94a3b8;
+      border-radius: 50%; margin: 0 1px;
+      animation: blink 1.2s infinite;
+    }
+    .thinking-dot:nth-child(2) { animation-delay: .2s; }
+    .thinking-dot:nth-child(3) { animation-delay: .4s; }
+    @keyframes blink { 0%,80%,100% { opacity:.2; } 40% { opacity:1; } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #refine-locked-banner {
+      padding: 10px 16px; background: #dcfce7; border-top: 1px solid #bbf7d0;
+      font-size: 13px; color: #15803d; font-weight: 600; text-align: center;
+      display: none; flex-shrink: 0;
+    }
+    #refine-input-area {
+      padding: 14px 18px; border-top: 1px solid #e5e7eb; flex-shrink: 0;
+    }
+    #refine-input-row { display: flex; gap: 8px; align-items: flex-end; }
+    #refine-input {
+      flex: 1; padding: 9px 12px; border: 1px solid #d1d5db; border-radius: 8px;
+      font-size: 13px; font-family: inherit; resize: none; outline: none;
+      min-height: 40px; max-height: 120px; overflow-y: auto; line-height: 1.5;
+    }
+    #refine-input:focus { border-color: #7c3aed; box-shadow: 0 0 0 2px rgba(124,58,237,.12); }
+    #refine-send-btn {
+      background: #7c3aed; color: #fff; border: none; padding: 9px 16px;
+      border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+    }
+    #refine-send-btn:hover { background: #6d28d9; }
+    #refine-send-btn:disabled { background: #c4b5fd; cursor: not-allowed; }
   </style>
 {% endblock %}
 
@@ -252,6 +348,9 @@
           <button class="btn btn-approve" id="approve-btn-{{ action.id }}" onclick="approveAction('{{ action.id }}')">✓ Approve</button>
           <button class="btn btn-reject" id="reject-btn-{{ action.id }}" onclick="rejectAction('{{ action.id }}')">✗ Reject</button>
           <button class="btn btn-dismiss" id="dismiss-btn-{{ action.id }}" onclick="dismissAction('{{ action.id }}')">Dismiss</button>
+          {% if action.enable_refinement %}
+          <button class="btn btn-refine" id="refine-btn-{{ action.id }}" onclick="openRefineCanvas('{{ action.id }}')">✦ Refine with AI</button>
+          {% endif %}
           <input class="note-input" id="note-{{ action.id }}" placeholder="Optional note…" type="text">
         </div>
         <div class="error-banner" id="error-{{ action.id }}"></div>
@@ -328,6 +427,36 @@
     {% endif %}
   {% endif %}
 
+</div>
+
+<!-- ── Refine with AI canvas overlay ── -->
+<div id="refine-overlay" aria-modal="true" role="dialog">
+  <div id="refine-preview-pane">
+    <div id="refine-preview-header">Live Plan Preview</div>
+    <div id="refine-preview-body">
+      <div id="refine-preview-loading" style="padding:32px 24px;text-align:center;color:#94a3b8;font-size:13px;">
+        <div style="display:inline-block;width:16px;height:16px;border:2px solid #e5e7eb;border-top-color:#7c3aed;border-radius:50%;animation:spin .6s linear infinite;margin-bottom:10px;"></div><br>Loading preview…
+      </div>
+    </div>
+  </div>
+  <div id="refine-chat-pane">
+    <div id="refine-chat-header">
+      <span id="refine-chat-title">Refine with AI</span>
+      <button id="refine-approve-btn" onclick="approveFromCanvas()">✓ Approve</button>
+      <button id="refine-close-btn" onclick="closeCanvas()">✕ Close</button>
+    </div>
+    <div id="refine-messages"></div>
+    <div id="refine-locked-banner">✓ Plan approved — this session is now read-only</div>
+    <div id="refine-input-area">
+      <div id="refine-input-row">
+        <textarea id="refine-input" rows="1"
+                  placeholder="Ask the AI to adjust the plan…"
+                  onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendRefineMessage();}"></textarea>
+        <button id="refine-send-btn" onclick="sendRefineMessage()">Send →</button>
+      </div>
+      <div style="font-size:11px;color:#94a3b8;margin-top:6px;">Enter to send · Shift+Enter for new line</div>
+    </div>
+  </div>
 </div>
 
 <div id="toast"></div>
@@ -450,7 +579,7 @@ async function approveAnyway(id) {
 }
 
 function setButtons(id, disabled) {
-  ['approve-btn', 'reject-btn', 'dismiss-btn'].forEach(prefix => {
+  ['approve-btn', 'reject-btn', 'dismiss-btn', 'refine-btn'].forEach(prefix => {
     const el = document.getElementById(`${prefix}-${id}`);
     if (el) el.disabled = disabled;
   });
@@ -526,6 +655,285 @@ async function dismissAction(id) {
     setButtons(id, false);
     document.getElementById(`dismiss-btn-${id}`).textContent = '— Dismiss';
     toast('Dismiss failed', false);
+  }
+}
+
+// ── Refine with AI canvas ──────────────────────────────────────────────────
+
+const _canvas = {
+  actionId: null, sessionId: null, planHeaderId: null,
+  refinementPreview: null, agentName: null, title: null,
+  streaming: false, locked: false,
+};
+
+async function openRefineCanvas(actionId) {
+  const action = ACTIONS.find(a => a.id === actionId);
+  if (!action || !action.enable_refinement) return;
+
+  const planHeaderId = action.approval_action?.url_params?.plan_header_id || null;
+  Object.assign(_canvas, {
+    actionId, sessionId: null, planHeaderId,
+    refinementPreview: action.refinement_preview,
+    agentName: action.refinement_agent,
+    title: action.title,
+    streaming: false, locked: false,
+  });
+
+  document.getElementById('refine-chat-title').textContent = action.title;
+  document.getElementById('refine-locked-banner').style.display = 'none';
+  document.getElementById('refine-input-area').style.display = 'block';
+  const approveBtn = document.getElementById('refine-approve-btn');
+  approveBtn.disabled = false;
+  approveBtn.textContent = '✓ Approve';
+
+  document.getElementById('refine-overlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+
+  const refineBtn = document.getElementById(`refine-btn-${actionId}`);
+  if (refineBtn) refineBtn.disabled = true;
+
+  const msgsEl = document.getElementById('refine-messages');
+  msgsEl.innerHTML = '';
+
+  try {
+    const startResp = await fetch(`/api/v1/actions/${actionId}/refine/start`, {
+      method: 'POST', headers: hdrs, body: JSON.stringify({}),
+    });
+    if (!startResp.ok) throw new Error('Failed to start session');
+    const session = await startResp.json();
+    _canvas.sessionId = session.session_id;
+
+    const msgsResp = await fetch(`/api/v1/actions/${actionId}/refine/messages`, { headers: hdrs });
+    if (msgsResp.ok) {
+      const { messages: msgs } = await msgsResp.json();
+      if (msgs.length === 0) {
+        _appendMsg('assistant', `Hello! I can help you refine the plan for "${action.title}". What would you like to change?`);
+      } else {
+        msgs.forEach(m => {
+          const el = _appendMsg(m.role, m.content);
+          if (m.role === 'assistant' && m.tool_calls?.length) {
+            const badges = document.createElement('div');
+            badges.className = 'tool-badges';
+            m.tool_calls.forEach(tc => {
+              const b = document.createElement('span');
+              b.className = 'tool-badge';
+              b.textContent = (tc.tool || tc.name || '').replace('sandhar_refine_', '');
+              badges.appendChild(b);
+            });
+            el.appendChild(badges);
+          }
+        });
+      }
+      await refreshPreview();
+    }
+    document.getElementById('refine-input').focus();
+  } catch (e) {
+    _appendMsg('assistant', 'Failed to start session. Please try again.');
+    console.error(e);
+  }
+}
+
+function _appendMsg(role, text, isStreaming = false) {
+  const msgsEl = document.getElementById('refine-messages');
+  const wrapper = document.createElement('div');
+  wrapper.className = `refine-msg ${role}`;
+
+  const roleLabel = document.createElement('div');
+  roleLabel.className = 'refine-role';
+  roleLabel.textContent = role === 'user' ? 'You' : 'AI Assistant';
+
+  const bubble = document.createElement('div');
+  bubble.className = 'refine-bubble';
+  if (isStreaming) {
+    bubble.innerHTML = '<span class="thinking-dot"></span><span class="thinking-dot"></span><span class="thinking-dot"></span>';
+  } else {
+    bubble.textContent = text;
+  }
+
+  if (role === 'user') {
+    wrapper.appendChild(bubble);
+    wrapper.appendChild(roleLabel);
+  } else {
+    wrapper.appendChild(roleLabel);
+    wrapper.appendChild(bubble);
+  }
+
+  msgsEl.appendChild(wrapper);
+  msgsEl.scrollTop = msgsEl.scrollHeight;
+  return wrapper;
+}
+
+async function sendRefineMessage() {
+  const input = document.getElementById('refine-input');
+  const content = input.value.trim();
+  if (!content || _canvas.streaming || _canvas.locked) return;
+
+  input.value = '';
+  input.style.height = 'auto';
+  _canvas.streaming = true;
+  document.getElementById('refine-send-btn').disabled = true;
+  input.disabled = true;
+
+  _appendMsg('user', content);
+  const assistantEl = _appendMsg('assistant', '', true);
+  const bubble = assistantEl.querySelector('.refine-bubble');
+  const toolBadgesEl = document.createElement('div');
+  toolBadgesEl.className = 'tool-badges';
+
+  try {
+    const resp = await fetch(`/api/v1/actions/${_canvas.actionId}/refine/message`, {
+      method: 'POST', headers: hdrs, body: JSON.stringify({ content }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      bubble.innerHTML = '';
+      bubble.textContent = `Error: ${err.detail || 'Unknown error'}`;
+      return;
+    }
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let responseText = '';
+    let hadTools = false;
+
+    bubble.innerHTML = '';
+
+    const handleSseEvent = async (evt) => {
+      if (evt.type === 'token') {
+        responseText += evt.content;
+        bubble.textContent = responseText;
+        document.getElementById('refine-messages').scrollTop = 99999;
+      } else if (evt.type === 'tool_use') {
+        hadTools = true;
+        if (!assistantEl.contains(toolBadgesEl)) assistantEl.appendChild(toolBadgesEl);
+        const badge = document.createElement('span');
+        badge.className = 'tool-badge';
+        badge.textContent = (evt.tool || '').replace('sandhar_refine_', '');
+        toolBadgesEl.appendChild(badge);
+      } else if (evt.type === 'done') {
+        await refreshPreview();
+      } else if (evt.type === 'error') {
+        bubble.textContent = `Error: ${evt.message || 'Unknown error'}`;
+      }
+    };
+
+    const processBuffer = async (flush = false) => {
+      const parts = buffer.split('\n\n');
+      buffer = flush ? '' : parts.pop();
+      for (const part of parts) {
+        for (const line of part.split('\n')) {
+          if (!line.startsWith('data: ')) continue;
+          let evt;
+          try { evt = JSON.parse(line.slice(6)); } catch { continue; }
+          await handleSseEvent(evt);
+        }
+      }
+    };
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) { await processBuffer(true); break; }
+      buffer += decoder.decode(value, { stream: true });
+      await processBuffer();
+    }
+
+    if (!responseText && hadTools) bubble.textContent = 'Done.';
+  } catch (e) {
+    bubble.innerHTML = '';
+    bubble.textContent = 'Connection error. Please try again.';
+    console.error(e);
+  } finally {
+    _canvas.streaming = false;
+    document.getElementById('refine-send-btn').disabled = _canvas.locked;
+    input.disabled = _canvas.locked;
+    if (!_canvas.locked) input.focus();
+  }
+}
+
+async function refreshPreview() {
+  if (!_canvas.planHeaderId) return;
+  const previewBody = document.getElementById('refine-preview-body');
+  if (_canvas.refinementPreview === 'sandhar-plan') {
+    try {
+      const resp = await fetch(`/sandhar/plan/${_canvas.planHeaderId}/refine-preview`, { headers: hdrs });
+      if (resp.ok) previewBody.innerHTML = await resp.text();
+    } catch (e) { console.error('Preview refresh failed:', e); }
+  } else {
+    try {
+      const resp = await fetch(`/api/v1/actions/${_canvas.actionId}`, { headers: hdrs });
+      if (resp.ok) {
+        const data = await resp.json();
+        previewBody.innerHTML = `<pre style="font-size:11px;padding:16px;overflow-x:auto;white-space:pre-wrap;">${JSON.stringify(data.display_data, null, 2)}</pre>`;
+      }
+    } catch (e) { console.error('Preview refresh failed:', e); }
+  }
+}
+
+async function closeCanvas() {
+  if (_canvas.streaming) { toast('Please wait for the AI to finish', false); return; }
+  if (_canvas.sessionId && _canvas.actionId) {
+    try {
+      await fetch(`/api/v1/actions/${_canvas.actionId}/refine/close`, {
+        method: 'POST', headers: hdrs, body: JSON.stringify({ outcome: 'abandoned' }),
+      });
+    } catch (e) { console.error('Close session failed:', e); }
+  }
+  _closeCanvasUI();
+}
+
+function _closeCanvasUI() {
+  document.getElementById('refine-overlay').classList.remove('open');
+  document.body.style.overflow = '';
+  if (_canvas.actionId) {
+    const btn = document.getElementById(`refine-btn-${_canvas.actionId}`);
+    if (btn) btn.disabled = false;
+  }
+  Object.assign(_canvas, { actionId: null, sessionId: null, planHeaderId: null, streaming: false, locked: false });
+}
+
+async function approveFromCanvas() {
+  if (!_canvas.actionId || _canvas.locked) return;
+  const approveBtn = document.getElementById('refine-approve-btn');
+  approveBtn.disabled = true;
+  approveBtn.textContent = '⏳ Approving…';
+
+  try {
+    if (_canvas.sessionId) {
+      await fetch(`/api/v1/actions/${_canvas.actionId}/refine/close`, {
+        method: 'POST', headers: hdrs, body: JSON.stringify({ outcome: 'approved' }),
+      }).catch(() => {});
+    }
+
+    const note = document.getElementById(`note-${_canvas.actionId}`)?.value?.trim() || null;
+    const resp = await fetch(`/api/v1/actions/${_canvas.actionId}/approve`, {
+      method: 'POST', headers: hdrs, body: JSON.stringify({ note }),
+    });
+
+    if (resp.ok) {
+      approveBtn.textContent = '✓ Approved';
+      _canvas.locked = true;
+      document.getElementById('refine-locked-banner').style.display = 'block';
+      document.getElementById('refine-input-area').style.display = 'none';
+      toast('✓ Plan approved from canvas');
+      const card = document.getElementById(`card-${_canvas.actionId}`);
+      if (card) card.querySelector('.card-title')?.style?.setProperty('text-decoration', 'line-through');
+      setTimeout(() => { if (card) card.remove(); _closeCanvasUI(); }, 2200);
+    } else {
+      const err = await resp.json().catch(() => ({}));
+      if (err.detail?.conflict === 'state_drift') {
+        toast('⚠ State drift — close canvas and approve manually', false);
+      } else {
+        toast(err.detail?.error || err.detail?.message || 'Approval failed', false);
+      }
+      approveBtn.disabled = false;
+      approveBtn.textContent = '✓ Approve';
+    }
+  } catch (e) {
+    approveBtn.disabled = false;
+    approveBtn.textContent = '✓ Approve';
+    toast('Approval failed', false);
+    console.error(e);
   }
 }
 </script>

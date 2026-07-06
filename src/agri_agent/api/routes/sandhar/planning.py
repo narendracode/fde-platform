@@ -154,6 +154,7 @@ class CreateAlertRequest(BaseModel):
 class UpdatePlanDetailRequest(BaseModel):
     planned_qty: int | None = None
     line_id: str | None = None
+    planned_manpower: int | None = None
 
 
 class AddPlanDetailRequest(BaseModel):
@@ -481,6 +482,8 @@ async def update_plan_detail(
 
     if req.planned_qty is not None:
         detail.planned_qty = req.planned_qty
+    if req.planned_manpower is not None:
+        detail.planned_manpower = req.planned_manpower
     if req.line_id is not None:
         try:
             new_line = uuid.UUID(req.line_id)
@@ -611,11 +614,24 @@ async def list_plans(
     for h in all_headers:
         by_shift[h.shift_code].append(h)  # already sorted desc by version
 
+    # Batch-load pending_review actions to enrich each plan header with action_id
+    pending_actions = (await session.execute(
+        select(AgentAction)
+        .where(AgentAction.status == "pending_review")
+        .where(AgentAction.agent_name == "sandhar-plan-generator")
+    )).scalars().all()
+    action_map: dict[str, str] = {
+        (a.approval_action or {}).get("url_params", {}).get("plan_header_id"): str(a.id)
+        for a in pending_actions
+        if (a.approval_action or {}).get("url_params", {}).get("plan_header_id")
+    }
+
     result = []
     for shift in sorted(by_shift.keys()):
         versions = by_shift[shift]
         latest = versions[0]
         entry = _header_out(latest)
+        entry["action_id"] = action_map.get(str(latest.id))
         entry["history"] = [
             {**_header_out(h), "is_superseded": True}
             for h in versions[1:]

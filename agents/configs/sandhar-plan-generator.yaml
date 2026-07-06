@@ -71,3 +71,8 @@ agent:
     log_inputs: true
     log_outputs: true
     log_tool_calls: true
+
+  feature_flags:
+    enable_refinement: true
+    refinement_agent: "sandhar-plan-refiner"
+    refinement_preview: "sandhar-plan"
