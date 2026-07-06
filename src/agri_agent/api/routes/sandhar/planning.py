@@ -14,6 +14,7 @@ from agri_agent.api.dependencies import verify_api_key
 from agri_agent.db.models import (
     Agent,
     AgentAction,
+    AgentRefineSession,
     AgentRun,
     SandharAlert,
     SandharAttendance,
@@ -150,6 +151,18 @@ class CreateAlertRequest(BaseModel):
     related_machine_id: str | None = None
 
 
+class UpdatePlanDetailRequest(BaseModel):
+    planned_qty: int | None = None
+    line_id: str | None = None
+
+
+class AddPlanDetailRequest(BaseModel):
+    wo_id: str
+    line_id: str
+    planned_qty: int
+    planned_manpower: int | None = None
+
+
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 
 @router.post("/plan/generate")
@@ -191,7 +204,36 @@ async def generate_plan(
             detail=f"No attendance records found for {req.plan_date}. Upload attendance data first.",
         )
 
-    # 3. Block if a generation run is already in progress for this date
+    # 3a. Block if an active refinement session exists for any plan on this date
+    header_ids_on_date = {
+        str(h) for h in (await session.execute(
+            select(SandharPlanHeader.id).where(SandharPlanHeader.plan_date == plan_date)
+        )).scalars().all()
+    }
+    if header_ids_on_date:
+        pending_plan_actions = (await session.execute(
+            select(AgentAction)
+            .where(AgentAction.status == "pending_review")
+            .where(AgentAction.agent_name == "sandhar-plan-generator")
+        )).scalars().all()
+        matching_ids = [
+            a.id for a in pending_plan_actions
+            if (a.approval_action or {}).get("url_params", {}).get("plan_header_id") in header_ids_on_date
+        ]
+        if matching_ids:
+            active_refine = (await session.execute(
+                select(AgentRefineSession)
+                .where(AgentRefineSession.action_id.in_(matching_ids))
+                .where(AgentRefineSession.status == "active")
+                .limit(1)
+            )).scalar_one_or_none()
+            if active_refine:
+                raise HTTPException(
+                    status_code=422,
+                    detail="A refinement session is active for this plan date. Close or approve it before re-generating.",
+                )
+
+    # 3b. Block if a generation run is already in progress for this date
     in_progress = await session.execute(
         select(AgentRun)
         .where(
@@ -410,6 +452,129 @@ async def get_plan_detail(
         "details": enriched_details,
         "allocations": allocations,
     }
+
+
+@router.patch("/plan/{header_id}/details/{detail_id}")
+async def update_plan_detail(
+    header_id: str,
+    detail_id: str,
+    req: UpdatePlanDetailRequest,
+    session: AsyncSession = Depends(get_session),
+    _: str = Depends(verify_api_key),
+):
+    """Update planned_qty and/or line_id on a single plan detail row. Used by refiner tools."""
+    try:
+        hid = uuid.UUID(header_id)
+        did = uuid.UUID(detail_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid UUID format")
+
+    result = await session.execute(
+        select(SandharPlanDetail).where(
+            SandharPlanDetail.id == did,
+            SandharPlanDetail.plan_header_id == hid,
+        )
+    )
+    detail = result.scalar_one_or_none()
+    if not detail:
+        raise HTTPException(status_code=404, detail="Plan detail not found")
+
+    if req.planned_qty is not None:
+        detail.planned_qty = req.planned_qty
+    if req.line_id is not None:
+        try:
+            new_line = uuid.UUID(req.line_id)
+        except ValueError:
+            # Try looking up by line_code
+            lc = await session.execute(select(SandharLine).where(SandharLine.line_code == req.line_id))
+            line = lc.scalar_one_or_none()
+            if not line:
+                raise HTTPException(status_code=404, detail=f"Line '{req.line_id}' not found")
+            new_line = line.id
+        detail.line_id = new_line
+
+    await session.commit()
+    await session.refresh(detail)
+    return _detail_out(detail)
+
+
+@router.delete("/plan/{header_id}/details/{detail_id}", status_code=204)
+async def remove_plan_detail(
+    header_id: str,
+    detail_id: str,
+    session: AsyncSession = Depends(get_session),
+    _: str = Depends(verify_api_key),
+):
+    """Remove a plan detail row (WO returns to unplanned). Used by refiner tools."""
+    try:
+        hid = uuid.UUID(header_id)
+        did = uuid.UUID(detail_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid UUID format")
+
+    result = await session.execute(
+        select(SandharPlanDetail).where(
+            SandharPlanDetail.id == did,
+            SandharPlanDetail.plan_header_id == hid,
+        )
+    )
+    detail = result.scalar_one_or_none()
+    if not detail:
+        raise HTTPException(status_code=404, detail="Plan detail not found")
+
+    await session.delete(detail)
+    await session.commit()
+
+
+@router.post("/plan/{header_id}/details", status_code=201)
+async def add_plan_detail(
+    header_id: str,
+    req: AddPlanDetailRequest,
+    session: AsyncSession = Depends(get_session),
+    _: str = Depends(verify_api_key),
+):
+    """Add an open WO as a new plan detail row. Used by refiner tools."""
+    try:
+        hid = uuid.UUID(header_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid header_id format")
+
+    header = (await session.execute(select(SandharPlanHeader).where(SandharPlanHeader.id == hid))).scalar_one_or_none()
+    if not header:
+        raise HTTPException(status_code=404, detail="Plan header not found")
+
+    # Resolve wo_id
+    try:
+        wo_id = uuid.UUID(req.wo_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid wo_id format")
+
+    # Resolve line_id (accept UUID or line_code)
+    try:
+        line_id = uuid.UUID(req.line_id)
+    except ValueError:
+        lc = await session.execute(select(SandharLine).where(SandharLine.line_code == req.line_id))
+        line = lc.scalar_one_or_none()
+        if not line:
+            raise HTTPException(status_code=404, detail=f"Line '{req.line_id}' not found")
+        line_id = line.id
+
+    wo_row = (await session.execute(select(SandharWorkOrder).where(SandharWorkOrder.id == wo_id))).scalar_one_or_none()
+    product_id = wo_row.product_id if wo_row else None
+
+    detail = SandharPlanDetail(
+        plan_header_id=hid,
+        wo_id=wo_id,
+        product_id=product_id,
+        line_id=line_id,
+        planned_qty=req.planned_qty,
+        planned_manpower=req.planned_manpower,
+        status="planned",
+    )
+    session.add(detail)
+    await session.commit()
+    await session.refresh(detail)
+    return _detail_out(detail)
 
 
 @router.get("/plan")

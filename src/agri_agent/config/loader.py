@@ -98,6 +98,9 @@ class AgentConfig(BaseModel):
     # Visibility scoping — empty list means platform agent (always shown).
     # Populate with company slugs matching COMPANIES_TO_SHOW values.
     companies: list[str] = []
+    # Optional LangSmith Context Hub slugs — pulled at runtime when present.
+    # e.g. {"system_prompt": "sandhar/plan-refiner-system:latest"}
+    context_hub: dict[str, Any] = {}
 
     @field_validator("name")
     @classmethod

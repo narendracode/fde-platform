@@ -8,21 +8,29 @@ approval_action HTTP call — no domain-specific code needed here.
 
 from __future__ import annotations
 
+import json
+import logging
 import re
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, AsyncGenerator
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
+from langchain_core.messages import HumanMessage
+from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agri_agent.api.dependencies import verify_api_key
+from agri_agent.config.loader import load_agent_config
 from agri_agent.config.settings import settings
 from agri_agent.db.models import Agent, AgentAction, AgentRefineMessage, AgentRefineSession
-from agri_agent.db.session import get_session
+from agri_agent.db.session import AsyncSessionLocal, get_session
+
+_log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/actions", tags=["actions"])
 
@@ -64,6 +72,10 @@ class DismissRequest(BaseModel):
 class MarkDriftedRequest(BaseModel):
     drift_details: dict[str, Any]
     note: str | None = None
+
+
+class RefineMessageRequest(BaseModel):
+    content: str
 
 
 # ── Serialiser ────────────────────────────────────────────────────────────────
@@ -724,6 +736,206 @@ async def get_refine_messages(
     }
 
 
+@router.post("/{action_id}/refine/message")
+async def refine_message(
+    action_id: str,
+    body: RefineMessageRequest,
+    session: AsyncSession = Depends(get_session),
+    _: str = Depends(verify_api_key),
+):
+    """Send a user message and receive a streaming AI response.
+
+    Response is `text/event-stream`. Three event types:
+      data: {"type": "token",    "content": "..."}
+      data: {"type": "tool_use", "tool": "...", "args": {...}}
+      data: {"type": "done",     "session_id": "...", "message_id": "..."}
+
+    Validates that an active refinement session exists.
+    Persists both the user message and the assistant reply to agent_refine_message.
+    """
+    action = await _get_or_404(session, action_id)
+    if action.status != "pending_review":
+        raise HTTPException(422, detail="Action is not in pending_review status")
+
+    sess_row = await session.execute(
+        select(AgentRefineSession)
+        .where(AgentRefineSession.action_id == action.id)
+        .where(AgentRefineSession.status == "active")
+    )
+    refine_session = sess_row.scalar_one_or_none()
+    if not refine_session:
+        raise HTTPException(404, detail="No active refinement session. Call /refine/start first.")
+
+    # Persist user message
+    user_msg = AgentRefineMessage(
+        session_id=refine_session.id,
+        role="user",
+        content=body.content,
+    )
+    session.add(user_msg)
+    await session.commit()
+    await session.refresh(user_msg)
+
+    # Load previous messages for history
+    history_rows = await session.execute(
+        select(AgentRefineMessage)
+        .where(AgentRefineMessage.session_id == refine_session.id)
+        .where(AgentRefineMessage.id != user_msg.id)
+        .order_by(AgentRefineMessage.created_at)
+    )
+    prior_messages = history_rows.scalars().all()
+    turn_index = len([m for m in prior_messages if m.role == "user"]) + 1
+
+    # Load agent config
+    try:
+        agent_config = load_agent_config(refine_session.refinement_agent)
+    except FileNotFoundError:
+        raise HTTPException(500, detail=f"Refinement agent config '{refine_session.refinement_agent}' not found")
+
+    # Extract plan_header_id from action
+    plan_header_id = (action.approval_action or {}).get("url_params", {}).get("plan_header_id", "")
+
+    # Build conversation history text
+    history_parts = []
+    for m in prior_messages:
+        role_label = "Planner" if m.role == "user" else "Assistant"
+        history_parts.append(f"{role_label}: {m.content}")
+    history_text = "\n\n".join(history_parts) if history_parts else "(none — this is the first message)"
+
+    # Build full message with context injection
+    context_lines = f"  plan_header_id: {plan_header_id}" if plan_header_id else ""
+    full_user_message = (
+        f"[Runtime context]\n{context_lines}\n\n"
+        f"[Conversation history so far]\n{history_text}\n\n"
+        f"[Task]\n{body.content}"
+    )
+
+    # Capture these for the generator closure
+    session_id = refine_session.id
+    refinement_agent_name = refine_session.refinement_agent
+    user_msg_id = user_msg.id
+
+    async def event_generator() -> AsyncGenerator[str, None]:
+        from agri_agent.agent import build_agent
+        from agri_agent.agent.react_agent import _langsmith_url
+
+        ls_run_id = uuid.uuid4()
+        runnable_config = RunnableConfig(
+            run_id=ls_run_id,
+            recursion_limit=agent_config.guardrails.max_iterations,
+            tags=[
+                "feature:refine",
+                f"refinement_agent:{refinement_agent_name}",
+                f"session_id:{str(session_id)}",
+                f"turn_index:{turn_index}",
+            ],
+            metadata={
+                "session_id": str(session_id),
+                "turn_index": turn_index,
+                "plan_header_id": plan_header_id,
+            },
+        )
+
+        agent = build_agent(agent_config)
+        collected = ""
+        tool_calls: list[dict] = []
+        in_tok = out_tok = 0
+
+        try:
+            async for ev in agent.astream_events(
+                {"messages": [HumanMessage(content=full_user_message)]},
+                config=runnable_config,
+                version="v2",
+            ):
+                kind = ev["event"]
+
+                if kind == "on_chat_model_stream":
+                    chunk = ev["data"].get("chunk")
+                    if chunk:
+                        content = chunk.content
+                        token = ""
+                        if isinstance(content, str):
+                            token = content
+                        elif isinstance(content, list):
+                            for block in content:
+                                if isinstance(block, dict) and block.get("type") == "text":
+                                    token += block.get("text", "")
+                        if token:
+                            collected += token
+                            yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
+
+                elif kind == "on_tool_start":
+                    tool_name = ev.get("name", "")
+                    tool_input = ev["data"].get("input", {})
+                    tool_calls.append({"tool": tool_name, "args": tool_input})
+                    yield f"data: {json.dumps({'type': 'tool_use', 'tool': tool_name, 'args': tool_input})}\n\n"
+
+                elif kind == "on_tool_end":
+                    tool_name = ev.get("name", "")
+                    output = ev["data"].get("output", "")
+                    for tc in reversed(tool_calls):
+                        if tc.get("tool") == tool_name and "result" not in tc:
+                            tc["result"] = output if isinstance(output, str) else str(output)
+                            break
+
+                elif kind == "on_chat_model_end":
+                    out = ev["data"].get("output")
+                    if out and hasattr(out, "usage_metadata") and out.usage_metadata:
+                        meta = out.usage_metadata
+                        in_tok += meta.get("input_tokens", 0)
+                        out_tok += meta.get("output_tokens", 0)
+
+        except Exception as exc:
+            _log.exception("Error during refine agent streaming for session %s", session_id)
+            yield f"data: {json.dumps({'type': 'error', 'detail': str(exc)})}\n\n"
+            return
+
+        # Persist assistant message with plan snapshot
+        ls_url: str | None = None
+        try:
+            ls_url = _langsmith_url(str(ls_run_id))
+        except Exception:
+            pass
+
+        async with AsyncSessionLocal() as new_session:
+            # Capture current plan state as context_snapshot for LLMOps
+            context_snapshot: dict | None = None
+            if plan_header_id:
+                try:
+                    import httpx as _httpx
+                    base = settings.api_base_url if hasattr(settings, "api_base_url") else "http://localhost:8000"
+                    async with _httpx.AsyncClient(
+                        base_url=base,
+                        headers={"X-API-Key": settings.api_key},
+                        timeout=10.0,
+                    ) as hc:
+                        r = await hc.get(f"/api/v1/sandhar/plan/{plan_header_id}")
+                        if r.status_code == 200:
+                            context_snapshot = r.json()
+                except Exception:
+                    pass
+
+            asst = AgentRefineMessage(
+                session_id=session_id,
+                role="assistant",
+                content=collected,
+                tool_calls=tool_calls or None,
+                context_snapshot=context_snapshot,
+                input_tokens=in_tok or None,
+                output_tokens=out_tok or None,
+                langsmith_run_id=str(ls_run_id),
+                langsmith_trace_url=ls_url,
+            )
+            new_session.add(asst)
+            await new_session.commit()
+            await new_session.refresh(asst)
+            asst_id = asst.id
+
+        yield f"data: {json.dumps({'type': 'done', 'session_id': str(session_id), 'message_id': str(asst_id)})}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
 @router.post("/{action_id}/refine/close")
 async def close_refine_session(
     action_id: str,
@@ -732,8 +944,10 @@ async def close_refine_session(
 ):
     """Close the active refinement session without approving.
 
+    Detects reversed turns (planner undid an AI change) by diffing consecutive
+    context_snapshots and retroactively tags affected LangSmith runs with
+    outcome=reversed. Sessions closed without any assistant message get outcome=abandoned.
     The action remains pending_review — Approve and Reject still available.
-    Returns 404 if there is no active session to close.
     """
     action = await _get_or_404(session, action_id)
 
@@ -746,12 +960,95 @@ async def close_refine_session(
     if not refine_session:
         raise HTTPException(404, detail="No active refinement session for this action")
 
+    # Fetch all assistant messages with snapshots for reversal detection
+    msg_rows = await session.execute(
+        select(AgentRefineMessage)
+        .where(AgentRefineMessage.session_id == refine_session.id)
+        .where(AgentRefineMessage.role == "assistant")
+        .order_by(AgentRefineMessage.created_at)
+    )
+    asst_messages = msg_rows.scalars().all()
+
+    # Outcome: approved if action is approved, abandoned if no AI messages, else closed
+    if action.status == "approved":
+        outcome = "approved"
+    elif not asst_messages:
+        outcome = "abandoned"
+    else:
+        outcome = "closed"
+
+    # Reversal detection: compare consecutive context_snapshots
+    # A reversal is detected when the total planned_qty drops between consecutive turns
+    # (simplest proxy for "planner undid an AI change")
+    reversed_run_ids: list[str] = []
+    if len(asst_messages) >= 2:
+        for i in range(1, len(asst_messages)):
+            prev = asst_messages[i - 1]
+            curr = asst_messages[i]
+            if prev.context_snapshot and curr.context_snapshot:
+                prev_qty = _total_planned_qty(prev.context_snapshot)
+                curr_qty = _total_planned_qty(curr.context_snapshot)
+                if curr_qty < prev_qty and prev.langsmith_run_id:
+                    reversed_run_ids.append(prev.langsmith_run_id)
+
+    # Tag LangSmith runs retroactively (fire-and-forget — don't fail close on errors)
+    _tag_langsmith_runs_async(
+        session_run_ids=[m.langsmith_run_id for m in asst_messages if m.langsmith_run_id],
+        reversed_run_ids=reversed_run_ids,
+        outcome=outcome,
+    )
+
     now = datetime.now(UTC)
     refine_session.status = "closed"
     refine_session.closed_at = now
     await session.commit()
     await session.refresh(refine_session)
-    return _session_out(refine_session)
+    return {
+        **_session_out(refine_session),
+        "outcome": outcome,
+        "reversed_turns": len(reversed_run_ids),
+    }
+
+
+def _total_planned_qty(snapshot: dict) -> int:
+    """Extract total planned qty from a plan context_snapshot dict."""
+    if not snapshot:
+        return 0
+    if "total_planned_qty" in snapshot:
+        return int(snapshot["total_planned_qty"] or 0)
+    details = snapshot.get("details", [])
+    return sum(int(d.get("planned_qty") or 0) for d in details)
+
+
+def _tag_langsmith_runs_async(
+    session_run_ids: list[str],
+    reversed_run_ids: list[str],
+    outcome: str,
+) -> None:
+    """Fire-and-forget: tag LangSmith runs with outcome metadata.
+
+    Uses a background thread to avoid blocking the close endpoint.
+    Silently skips if LangSmith is not configured.
+    """
+    if not settings.langchain_api_key or not session_run_ids:
+        return
+    import threading
+
+    def _tag():
+        try:
+            from langsmith import Client
+            client = Client(api_key=settings.langchain_api_key)
+            reversed_set = set(reversed_run_ids)
+            for run_id_str in session_run_ids:
+                run_outcome = "reversed" if run_id_str in reversed_set else outcome
+                client.update_run(
+                    run_id_str,
+                    extra={"metadata": {"outcome": run_outcome, "feature": "refine"}},
+                )
+        except Exception as exc:
+            _log.warning("LangSmith outcome tagging failed: %s", exc)
+
+    threading.Thread(target=_tag, daemon=True).start()
 
 
 # ── Helper ────────────────────────────────────────────────────────────────────

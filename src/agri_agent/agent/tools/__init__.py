@@ -40,6 +40,14 @@ from agri_agent.agent.tools.sandhar.planning import (
     sandhar_create_alert,
     sandhar_propose_plan_for_review,
 )
+from agri_agent.agent.tools.sandhar.plan_refiner import (
+    sandhar_refine_get_plan,
+    sandhar_refine_update_qty,
+    sandhar_refine_move_wo,
+    sandhar_refine_add_wo,
+    sandhar_refine_remove_wo,
+    sandhar_refine_explain_constraint,
+)
 
 _TOOL_REGISTRY: dict[str, BaseTool] = {
     "calculator": calculator,
@@ -72,6 +80,12 @@ _TOOL_REGISTRY: dict[str, BaseTool] = {
     "sandhar_save_plan_header": sandhar_save_plan_header,
     "sandhar_create_alert": sandhar_create_alert,
     "sandhar_propose_plan_for_review": sandhar_propose_plan_for_review,
+    "sandhar_refine_get_plan": sandhar_refine_get_plan,
+    "sandhar_refine_update_qty": sandhar_refine_update_qty,
+    "sandhar_refine_move_wo": sandhar_refine_move_wo,
+    "sandhar_refine_add_wo": sandhar_refine_add_wo,
+    "sandhar_refine_remove_wo": sandhar_refine_remove_wo,
+    "sandhar_refine_explain_constraint": sandhar_refine_explain_constraint,
 }
 
 
