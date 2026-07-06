@@ -207,7 +207,10 @@ async function loadMachines() {
     document.getElementById('machine-count').textContent = rows.length + ' machines';
     let html = '<table><thead><tr><th>Code</th><th>Name</th><th>Type</th><th>Line</th><th>Status</th></tr></thead><tbody>';
     for (const m of rows) {
-      html += `<tr><td><code>${m.machine_code}</code></td><td>${m.machine_name}</td><td>${m.machine_type || '—'}</td><td>${m.line_id ? m.line_id.substring(0,8)+'…' : '—'}</td><td><span class="badge ${m.status === 'active' ? 'badge-green' : 'badge-red'}">${m.status === 'active' ? 'Operational' : (m.status || 'unknown')}</span></td></tr>`;
+      const os = m.operational_status;
+      const badgeCls = os === 'breakdown' ? 'badge-red' : os === 'running' ? 'badge-green' : os === 'maintenance' ? 'badge-medium' : os === 'idle' ? 'badge-gray' : (m.status === 'active' ? 'badge-green' : 'badge-red');
+      const label = os ? (os.charAt(0).toUpperCase() + os.slice(1)) : (m.status === 'active' ? 'Operational' : (m.status || 'unknown'));
+      html += `<tr><td><code>${m.machine_code}</code></td><td>${m.machine_name}</td><td>${m.machine_type || '—'}</td><td>${m.line_id ? m.line_id.substring(0,8)+'…' : '—'}</td><td><span class="badge ${badgeCls}">${label}</span></td></tr>`;
     }
     document.getElementById('machines-table').innerHTML = html + '</tbody></table>';
   } catch(e) { document.getElementById('machines-table').innerHTML = '<div class="empty">Error loading machines</div>'; }

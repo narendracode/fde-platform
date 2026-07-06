@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agri_agent.api.dependencies import verify_api_key
@@ -16,6 +16,7 @@ from agri_agent.db.models import (
     SandharEmployee,
     SandharLine,
     SandharMachine,
+    SandharMachineStatus,
     SandharProduct,
     SandharShift,
 )
@@ -71,7 +72,7 @@ def _line_out(l: SandharLine) -> dict[str, Any]:
     }
 
 
-def _machine_out(m: SandharMachine) -> dict[str, Any]:
+def _machine_out(m: SandharMachine, operational_status: str | None = None) -> dict[str, Any]:
     return {
         "id": str(m.id),
         "machine_code": m.machine_code,
@@ -80,6 +81,7 @@ def _machine_out(m: SandharMachine) -> dict[str, Any]:
         "machine_type": m.machine_type,
         "capacity_per_hour": m.capacity_per_hour,
         "status": m.status,
+        "operational_status": operational_status,
         "created_at": m.created_at.isoformat(),
         "updated_at": m.updated_at.isoformat(),
     }
@@ -313,7 +315,26 @@ async def list_machines(
     if status:
         q = q.where(SandharMachine.status == status)
     rows = await session.execute(q)
-    return [_machine_out(m) for m in rows.scalars().all()]
+    machines = rows.scalars().all()
+
+    # Fetch latest operational status from the event log for each machine.
+    # Uses a row_number window to pick the most-recent record per machine_id.
+    inner = (
+        select(
+            SandharMachineStatus.machine_id,
+            SandharMachineStatus.machine_status,
+            func.row_number().over(
+                partition_by=SandharMachineStatus.machine_id,
+                order_by=SandharMachineStatus.status_datetime.desc(),
+            ).label("rn"),
+        ).subquery()
+    )
+    op_rows = await session.execute(
+        select(inner.c.machine_id, inner.c.machine_status).where(inner.c.rn == 1)
+    )
+    op_map: dict[str, str] = {str(r.machine_id): r.machine_status for r in op_rows}
+
+    return [_machine_out(m, op_map.get(str(m.id))) for m in machines]
 
 
 @router.post("/machines")

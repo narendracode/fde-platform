@@ -196,7 +196,7 @@ async def generate_plan(
         .where(
             and_(
                 AgentRun.status.in_(["pending", "running"]),
-                AgentRun.input["plan_date"].astext == req.plan_date,
+                AgentRun.input["extra_context"]["plan_date"].astext == req.plan_date,
             )
         )
         .limit(1)
@@ -216,6 +216,11 @@ async def generate_plan(
         raise HTTPException(
             status_code=404,
             detail="Planning agent 'sandhar-planning-supervisor' not found. Register the agent first.",
+        )
+    if not agent.is_active:
+        raise HTTPException(
+            status_code=403,
+            detail="Planning agent 'sandhar-planning-supervisor' is not active. Activate it from the Agents dashboard first.",
         )
 
     # 4. Create AgentRun
