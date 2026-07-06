@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agri_agent.api.dependencies import verify_api_key
 from agri_agent.config.settings import settings
-from agri_agent.db.models import Agent, AgentAction
+from agri_agent.db.models import Agent, AgentAction, AgentRefineMessage, AgentRefineSession
 from agri_agent.db.session import get_session
 
 router = APIRouter(prefix="/api/v1/actions", tags=["actions"])
@@ -68,7 +68,8 @@ class MarkDriftedRequest(BaseModel):
 
 # ── Serialiser ────────────────────────────────────────────────────────────────
 
-def _action_out(a: AgentAction) -> dict[str, Any]:
+def _action_out(a: AgentAction, flags: dict | None = None) -> dict[str, Any]:
+    f = flags or {}
     return {
         "id": str(a.id),
         "agent_name": a.agent_name,
@@ -95,7 +96,83 @@ def _action_out(a: AgentAction) -> dict[str, Any]:
         "drift_override": a.drift_override,
         "created_at": a.created_at.isoformat(),
         "updated_at": a.updated_at.isoformat(),
+        # Refinement capability — sourced from the agent's feature_flags
+        "enable_refinement": bool(f.get("enable_refinement", False)),
+        "refinement_agent": f.get("refinement_agent", ""),
+        "refinement_preview": f.get("refinement_preview", ""),
     }
+
+
+def _session_out(s: AgentRefineSession, *, is_new: bool = False) -> dict[str, Any]:
+    return {
+        "session_id": str(s.id),
+        "action_id": str(s.action_id),
+        "refinement_agent": s.refinement_agent,
+        "status": s.status,
+        "opened_by": s.opened_by,
+        "is_new": is_new,
+        "created_at": s.created_at.isoformat(),
+        "closed_at": s.closed_at.isoformat() if s.closed_at else None,
+    }
+
+
+def _message_out(m: AgentRefineMessage) -> dict[str, Any]:
+    return {
+        "id": str(m.id),
+        "session_id": str(m.session_id),
+        "role": m.role,
+        "content": m.content,
+        "tool_calls": m.tool_calls,
+        "input_tokens": m.input_tokens,
+        "output_tokens": m.output_tokens,
+        "langsmith_trace_url": m.langsmith_trace_url,
+        "created_at": m.created_at.isoformat(),
+    }
+
+
+# ── Agent feature-flag helpers ────────────────────────────────────────────────
+
+async def _agent_flags(session: AsyncSession, agent_name: str) -> dict:
+    """Return feature_flags dict for a named agent; empty dict if not found."""
+    row = await session.execute(select(Agent).where(Agent.name == agent_name))
+    agent = row.scalar_one_or_none()
+    return (agent.config.get("feature_flags", {}) if agent else {})
+
+
+async def _agents_flags(session: AsyncSession, agent_names: set[str]) -> dict[str, dict]:
+    """Batch-fetch feature_flags for a set of agent names."""
+    if not agent_names:
+        return {}
+    rows = await session.execute(select(Agent).where(Agent.name.in_(agent_names)))
+    return {a.name: a.config.get("feature_flags", {}) for a in rows.scalars().all()}
+
+
+async def _ensure_agent_active(session: AsyncSession, agent_name: str) -> None:
+    """Auto-register and activate a refinement agent if it is not already active.
+
+    Silently skips if the agent YAML does not yet exist — allows the session
+    to be created in Phase 1 before the agent YAML is added in Phase 2.
+    """
+    from agri_agent.config.loader import load_agent_config
+
+    row = await session.execute(select(Agent).where(Agent.name == agent_name))
+    agent = row.scalar_one_or_none()
+    if agent is None:
+        try:
+            cfg = load_agent_config(agent_name)
+        except FileNotFoundError:
+            return  # YAML not yet present; session creation still proceeds
+        agent = Agent(
+            name=cfg.name,
+            description=cfg.description,
+            version=cfg.version,
+            config=cfg.model_dump(),
+            is_active=True,
+        )
+        session.add(agent)
+    elif not agent.is_active:
+        agent.is_active = True
+    await session.flush()
 
 
 # ── Staleness utilities ───────────────────────────────────────────────────────
@@ -346,7 +423,11 @@ async def list_actions(
     if confidence:
         q = q.where(AgentAction.confidence == confidence)
     rows = await session.execute(q)
-    actions = [_action_out(a) for a in rows.scalars().all()]
+    action_list = rows.scalars().all()
+    # Batch-load agent flags so the UI knows which actions have refinement enabled
+    names = {a.agent_name for a in action_list}
+    flags_map = await _agents_flags(session, names)
+    actions = [_action_out(a, flags_map.get(a.agent_name)) for a in action_list]
     return {"actions": actions, "auto_staled_count": auto_staled}
 
 
@@ -357,7 +438,9 @@ async def get_action(
     _: str = Depends(verify_api_key),
 ):
     """Get a single action by ID."""
-    return _action_out(await _get_or_404(session, action_id))
+    action = await _get_or_404(session, action_id)
+    flags = await _agent_flags(session, action.agent_name)
+    return _action_out(action, flags)
 
 
 @router.post("/{action_id}/approve")
@@ -543,6 +626,132 @@ async def retry_action(
     if not success:
         raise HTTPException(502, detail={"message": "Retry failed", "error": error})
     return _action_out(action)
+
+
+# ── Refinement endpoints ──────────────────────────────────────────────────────
+
+@router.post("/{action_id}/refine/start")
+async def start_refine_session(
+    action_id: str,
+    session: AsyncSession = Depends(get_session),
+    _: str = Depends(verify_api_key),
+):
+    """Open a 'Refine with AI' session on a pending action.
+
+    Returns the existing active session if one already exists (idempotent).
+    Auto-registers and auto-activates the configured refinement_agent.
+    Fails with 422 if the action is not pending_review, or 403 if the agent
+    does not have enable_refinement: true in its feature_flags.
+    """
+    action = await _get_or_404(session, action_id)
+    if action.status != "pending_review":
+        raise HTTPException(
+            422,
+            detail=f"Refinement requires a pending_review action; current status is '{action.status}'",
+        )
+
+    flags = await _agent_flags(session, action.agent_name)
+    if not flags.get("enable_refinement"):
+        raise HTTPException(
+            403,
+            detail=f"Agent '{action.agent_name}' does not have enable_refinement enabled",
+        )
+
+    refinement_agent = flags.get("refinement_agent", "").strip()
+    if not refinement_agent:
+        raise HTTPException(
+            422,
+            detail=f"Agent '{action.agent_name}' has enable_refinement=true but no refinement_agent configured",
+        )
+
+    # Return existing active session (idempotent — single-user system for v1)
+    existing = await session.execute(
+        select(AgentRefineSession)
+        .where(AgentRefineSession.action_id == action.id)
+        .where(AgentRefineSession.status == "active")
+    )
+    existing_session = existing.scalar_one_or_none()
+    if existing_session:
+        return _session_out(existing_session, is_new=False)
+
+    # Ensure the refinement agent is registered and active
+    await _ensure_agent_active(session, refinement_agent)
+
+    refine_session = AgentRefineSession(
+        action_id=action.id,
+        refinement_agent=refinement_agent,
+        status="active",
+        opened_by="anonymous",
+    )
+    session.add(refine_session)
+    await session.commit()
+    await session.refresh(refine_session)
+    return _session_out(refine_session, is_new=True)
+
+
+@router.get("/{action_id}/refine/messages")
+async def get_refine_messages(
+    action_id: str,
+    session: AsyncSession = Depends(get_session),
+    _: str = Depends(verify_api_key),
+):
+    """Return the most recent refinement session and its messages for an action.
+
+    Returns {"session": null, "messages": []} if no session has been started.
+    Used on page reload to restore an in-progress session.
+    """
+    action = await _get_or_404(session, action_id)
+
+    # Most recent session regardless of status (for page-reload restore)
+    sess_row = await session.execute(
+        select(AgentRefineSession)
+        .where(AgentRefineSession.action_id == action.id)
+        .order_by(AgentRefineSession.created_at.desc())
+        .limit(1)
+    )
+    refine_session = sess_row.scalar_one_or_none()
+    if not refine_session:
+        return {"session": None, "messages": []}
+
+    msg_rows = await session.execute(
+        select(AgentRefineMessage)
+        .where(AgentRefineMessage.session_id == refine_session.id)
+        .order_by(AgentRefineMessage.created_at)
+    )
+    return {
+        "session": _session_out(refine_session),
+        "messages": [_message_out(m) for m in msg_rows.scalars().all()],
+    }
+
+
+@router.post("/{action_id}/refine/close")
+async def close_refine_session(
+    action_id: str,
+    session: AsyncSession = Depends(get_session),
+    _: str = Depends(verify_api_key),
+):
+    """Close the active refinement session without approving.
+
+    The action remains pending_review — Approve and Reject still available.
+    Returns 404 if there is no active session to close.
+    """
+    action = await _get_or_404(session, action_id)
+
+    sess_row = await session.execute(
+        select(AgentRefineSession)
+        .where(AgentRefineSession.action_id == action.id)
+        .where(AgentRefineSession.status == "active")
+    )
+    refine_session = sess_row.scalar_one_or_none()
+    if not refine_session:
+        raise HTTPException(404, detail="No active refinement session for this action")
+
+    now = datetime.now(UTC)
+    refine_session.status = "closed"
+    refine_session.closed_at = now
+    await session.commit()
+    await session.refresh(refine_session)
+    return _session_out(refine_session)
 
 
 # ── Helper ────────────────────────────────────────────────────────────────────

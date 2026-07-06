@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agri_agent.api.dependencies import verify_api_key
 from agri_agent.db.models import (
     Agent,
+    AgentAction,
     AgentRun,
     SandharAlert,
     SandharAttendance,
@@ -266,7 +267,12 @@ async def list_plan_versions(
     session: AsyncSession = Depends(get_session),
     _: str = Depends(verify_api_key),
 ):
-    """List all plan header versions for a given date."""
+    """List all plan header versions for a given date.
+
+    Each header includes `action_id` (UUID string or null) pointing to the
+    pending_review AgentAction for that plan, so the UI can wire up the
+    'Refine with AI' button without a second API call.
+    """
     try:
         from datetime import date as _date
         plan_date = _date.fromisoformat(date)
@@ -278,7 +284,29 @@ async def list_plan_versions(
         .where(SandharPlanHeader.plan_date == plan_date)
         .order_by(desc(SandharPlanHeader.version))
     )
-    return [_header_out(h) for h in rows.scalars().all()]
+    headers = rows.scalars().all()
+    if not headers:
+        return []
+
+    # Batch-fetch pending_review actions for sandhar-plan-generator that reference
+    # any of these plan headers via approval_action.url_params.plan_header_id
+    action_rows = await session.execute(
+        select(AgentAction)
+        .where(AgentAction.status == "pending_review")
+        .where(AgentAction.agent_name == "sandhar-plan-generator")
+    )
+    action_map: dict[str, str] = {}
+    for a in action_rows.scalars().all():
+        hid = (a.approval_action or {}).get("url_params", {}).get("plan_header_id")
+        if hid:
+            action_map[hid] = str(a.id)
+
+    result = []
+    for h in headers:
+        d = _header_out(h)
+        d["action_id"] = action_map.get(str(h.id))
+        result.append(d)
+    return result
 
 
 @router.get("/plan/{header_id}")

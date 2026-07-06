@@ -157,6 +157,48 @@ class AgentAction(Base):
     )
 
 
+class AgentRefineSession(Base):
+    """A conversational refinement session attached to an AgentAction.
+
+    Created when a planner opens the 'Refine with AI' canvas on a pending action.
+    One active session per action at a time; past sessions kept for LLMOps audit.
+    """
+
+    __tablename__ = "agent_refine_session"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    action_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("agent_actions.id"), nullable=False, index=True
+    )
+    refinement_agent: Mapped[str] = mapped_column(String(100), nullable=False)
+    # active | approved | closed
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    opened_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AgentRefineMessage(Base):
+    """A single message turn (user or assistant) inside a refinement session."""
+
+    __tablename__ = "agent_refine_message"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("agent_refine_session.id"), nullable=False, index=True
+    )
+    # user | assistant | system
+    role: Mapped[str] = mapped_column(String(20), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    tool_calls: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    context_snapshot: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    langsmith_run_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    langsmith_trace_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class PlatformSettings(Base):
     """Key-value store for platform-level feature flags and operational settings."""
 
