@@ -1,7 +1,7 @@
-# Plan Refinement via Conversational AI — Feature & Change Design
+# Conversational Plan Refinement — Feature & Platform Design
 
 **Feature name:** "Refine with AI"  
-**Target page:** `/sandhar/plan?date=YYYY-MM-DD`  
+**Target page (first consumer):** `/sandhar/plan?date=YYYY-MM-DD`  
 **Status:** Design / pre-implementation  
 **Author:** Design session — 2026-07-06
 
@@ -9,194 +9,356 @@
 
 ## 1. What Are We Building
 
-A conversational AI side-panel ("canvas") that opens when a planner clicks **"Refine with AI"** on a draft plan. The planner types natural-language instructions — "move WO-2345 to Line 3", "reduce Shift B qty by 10%", "why is there a manpower gap on L001?" — and the AI interprets them, executes the changes directly on the `sandhar_plan_detail` records, and instantly re-renders the plan preview. Once satisfied the planner clicks **"Approve Plan"** (either inside the panel or the existing button on the main page). The conversation is locked after approval but preserved for LLMOps.
+Two things, layered on top of each other:
 
-### 1.1 Button naming rationale
+**Layer 1 — Platform generic capability**  
+A "Refine with AI" canvas attached to the existing `AgentAction` / HITL system. Any agent can opt into it via a feature flag in its YAML config. The canvas (chat + live preview), the session/message storage, the SSE streaming endpoint, and the LLMOps wiring are all platform-level and shared across every agent that enables the flag. No custom UI code is needed per domain.
 
-| Candidate | Verdict |
-|---|---|
-| Adjust | Neutral, mechanical |
-| **Refine with AI** | ✅ Chosen — implies iterative improvement with AI assistance |
-| Co-pilot | Too product-brand-specific |
-| Tune Plan | Too narrow (sounds only quantitative) |
+**Layer 2 — Sandhar reference implementation**  
+The first consumer of the platform capability. When a Sandhar production plan is generated and proposed for review, the planner sees **Approve**, **Reject**, and **Refine with AI** in the action inbox (and also on the plan page). The refinement agent has Sandhar-specific tools (move WO, update quantity, etc.) and a Sandhar-specific live preview partial. These domain pieces are the only custom code written for Sandhar; everything else is inherited from the platform layer.
+
+### 1.1 Why generic matters
+
+The `AgentAction` system already uses this exact pattern for `track_resource_state` — `actions.py` reads `agent.config.get("feature_flags", {})` at runtime (line 166). The refinement feature is a second feature flag following the same convention. Once the platform layer exists, the cost of giving any future agent a conversational refinement canvas is:
+1. Write a domain-specific refinement agent + tools
+2. Optionally write a domain-specific preview template partial
+3. Set three lines in the agent's YAML
 
 ---
 
 ## 2. User Experience Flow
 
+### 2.1 Generic (action inbox)
+
 ```
-Draft plan rendered on /sandhar/plan
+Action Inbox — pending actions list
         │
         ▼
-Planner sees three buttons:
-  [✅ Approve Plan]  [✗ Reject]  [✨ Refine with AI]   ← NEW
+Action row for any HITL agent with enable_refinement: true
+shows three buttons:
+
+  [✅ Approve]  [✗ Reject]  [✨ Refine with AI]   ← platform button
         │
-        ▼  clicks "Refine with AI"
-Right-side panel slides in (60 % width, full viewport height)
-Left side still shows the live plan table (shrinks to 40 %)
-        │
-        ▼
-Panel header:
-  "Refining: Shift A · 2026-07-06 · v2"  [✅ Approve Plan]  [✕ Close]
+        ▼  planner clicks "Refine with AI"
+Right-side canvas slides in (58 % width, full viewport height)
+Action card stays visible on left (42 %)
         │
         ▼
-Chat window — welcome message from assistant:
-  "I have your Shift A plan loaded. I can adjust quantities,
-   reassign WOs between lines, or explain any allocation.
-   What would you like to change?"
+Canvas header:
+  "Refining: <action title>"  [✅ Approve]  [✕ Close]
+        │
+        ▼
+Chat window — welcome message from the configured refinement agent.
         │
         ▼  planner types: "Move WO-SEED-0003 to Line 2"
         │
         ▼
-[Thinking…] spinner → AI calls tool sandhar_refine_move_wo()
+[Thinking…] spinner → agent calls domain-specific tools
+Live preview panel on left updates
+AI responds with summary of change
+        │
+        ▼  planner types "Approve" OR clicks [✅ Approve] in canvas
         │
         ▼
-Plan preview on left updates — WO-SEED-0003 now on Line 2
-AI responds: "Done. WO-SEED-0003 (Cylinder Head) moved from
-Line 3 → Line 2. Line 2 manpower utilisation is now 92 %."
-        │
-        ▼  planner types: "Approve" OR clicks [✅ Approve Plan] in panel
-        │
-        ▼
-Plan status → approved, chat locked, panel shows
-  "✅ Plan approved at 14:32. This conversation is saved."
+Platform calls existing POST /api/v1/actions/{action_id}/approve
+Chat locked, canvas shows "✅ Approved at 14:32. Conversation saved."
+```
+
+### 2.2 Sandhar plan page (additional entry point)
+
+The Sandhar plan page (`/sandhar/plan`) has its own inline Approve/Reject buttons that bypass the inbox. The "Refine with AI" button on this page also appears alongside them. It calls the same generic endpoint using the `action_id` of the pending AgentAction for that plan — obtained from the existing plan-load response (a small addition: `action_id` returned when a `pending_review` action exists for the plan header).
+
+---
+
+## 3. Architecture
+
+```
+Browser                         FastAPI (api container)              DB (postgres)
+──────                          ──────────────────────               ─────────────
+approvals.html /                                                      ─ PLATFORM ─
+sandhar/plan.html               /api/v1/actions/                      agent_actions (existing)
+  │                             {action_id}/refine/start  ─────────► agent_refine_session  ← NEW
+  │  POST start ───────────────►                                       agent_refine_message ← NEW
+  │◄──── session_id ────────────
+  │
+  │  POST message ─────────────► /api/v1/actions/          ─────────► invokes refinement agent
+  │  (SSE stream)                {action_id}/refine/message            (name from feature_flags)
+  │◄─── token stream / done ────                                       │
+  │                                                                    ▼ calls domain tools
+  │  preview refresh ──────────► domain-specific GET  ─────────────►  domain tables mutated
+  │◄─── updated preview JSON ───
+  │
+  │  POST approve ─────────────► /api/v1/actions/          ─────────► (existing endpoint, unchanged)
+                                 {action_id}/approve
+```
+
+**Key principle:** Every path through the approval funnel — Approve, Reject, Refine-then-Approve — converges at the same existing `POST /api/v1/actions/{action_id}/approve` endpoint. No new approval logic is added.
+
+**Layering:**
+
+```
+┌────────────────────────────────────────────────────────────┐
+│  PLATFORM  (built once, shared)                            │
+│  agent_refine_session / message tables                     │
+│  /api/v1/actions/{id}/refine/* endpoints                   │
+│  Generic canvas component in approvals.html                │
+│  LangSmith tagging + annotation queue wiring               │
+└────────────────────────────────────────────────────────────┘
+        ▲ consumes
+┌────────────────────────────────────────────────────────────┐
+│  SANDHAR DOMAIN  (first consumer)                          │
+│  sandhar-plan-refiner YAML + tools                         │
+│  _refine_preview_sandhar-plan.html partial                 │
+│  feature_flags on sandhar-planning-supervisor YAML         │
+└────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 3. Architecture Overview
+## 4. Platform Layer: Feature Flag Convention
 
-```
-Browser                          FastAPI (api container)              DB (postgres)
-──────                           ──────────────────────               ─────────────
-plan.html                        /sandhar/plan/                        sandhar_plan_header
-  │  open canvas                 {header_id}/refine/start  ──────────► sandhar_plan_refine_session
-  │  POST start session ────────►                                       sandhar_plan_refine_message
-  │◄──────── session_id ─────────
-  │
-  │  POST message ──────────────► /sandhar/plan/refine/    ──────────► runs agent turn:
-  │  (SSE stream)                 {session_id}/message                  sandhar-plan-refiner (ReAct)
-  │◄─── token stream / done ─────                                       │
-  │                                                                     ▼ calls tools:
-  │  preview auto-refresh ───────► GET /sandhar/plan/{hid}  ──────────► sandhar_plan_detail (mutated)
-  │◄──── updated plan JSON ───────
-  │
-  │  POST approve ──────────────► /sandhar/plan/{hid}/approve  ──────► (existing endpoint, unchanged)
+No changes to `AgentConfig` model are needed. The existing `feature_flags: dict[str, Any] = {}` field accepts arbitrary keys. The same pattern already used for `track_resource_state` in `actions.py` is extended with three new keys:
+
+```yaml
+# In any agent YAML that wants conversational refinement:
+feature_flags:
+  enable_refinement: true
+  refinement_agent: "sandhar-plan-refiner"    # name of the agent to invoke in the canvas
+  refinement_preview: "sandhar-plan"           # name of the Jinja preview partial (optional)
 ```
 
-**Key design principle:** The existing `approve_plan` and `reject_plan` endpoints are **not touched**. The Refine canvas calls the same approve endpoint as the main page buttons do today.
+| Flag key | Type | Required | Default | Purpose |
+|---|---|---|---|---|
+| `enable_refinement` | bool | yes | false | Shows/hides "Refine with AI" button in the inbox and on domain pages |
+| `refinement_agent` | string | if enabled | — | The agent name to run each chat turn; must be a valid registered agent |
+| `refinement_preview` | string | no | `""` | Name of the Jinja partial for the live preview panel; falls back to generic JSON viewer if absent |
+
+**How the platform reads this** (in `actions.py`, following the existing `_check_drift` pattern):
+```python
+flags = agent.config.get("feature_flags", {})
+refinement_enabled = flags.get("enable_refinement", False)
+refinement_agent   = flags.get("refinement_agent", "")
+refinement_preview = flags.get("refinement_preview", "")
+```
 
 ---
 
-## 4. New Data Models
+## 5. Platform Layer: New Data Models
 
-### 4.1 `sandhar_plan_refine_session`
+### 5.1 `agent_refine_session`
 
-Represents one refinement session on one plan header. A plan can have at most one active session; past sessions are kept for audit/LLMOps.
+One row per refinement session on one `AgentAction`. A session is the container for the full conversation.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | UUID PK | |
-| `plan_header_id` | UUID FK → sandhar_plan_header | |
+| `action_id` | UUID FK → agent_actions | The action being refined |
+| `refinement_agent` | VARCHAR(100) | Copied from feature_flags at session creation; stable even if YAML changes |
 | `status` | VARCHAR(20) | `active` · `approved` · `closed` |
-| `opened_by` | VARCHAR(100) | planner identity (future auth) |
+| `opened_by` | VARCHAR(100) | `"anonymous"` for v1; auth field reserved |
 | `created_at` | TIMESTAMPTZ | |
-| `closed_at` | TIMESTAMPTZ | set on approve or close |
+| `closed_at` | TIMESTAMPTZ | Set on approve or explicit close |
 
-### 4.2 `sandhar_plan_refine_message`
+### 5.2 `agent_refine_message`
 
 One row per message turn (user or assistant).
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | UUID PK | |
-| `session_id` | UUID FK → sandhar_plan_refine_session | |
+| `session_id` | UUID FK → agent_refine_session | |
 | `role` | VARCHAR(20) | `user` · `assistant` · `system` |
 | `content` | TEXT | |
-| `tool_calls` | JSONB | list of `{tool, args, result}` dicts — LLMOps training signal |
-| `plan_snapshot` | JSONB | full plan detail array *after* this turn — diff-able for LLMOps |
-| `langsmith_run_id` | VARCHAR(100) | per-turn trace for cost/latency breakdown |
+| `tool_calls` | JSONB | `[{tool, args, result}]` — LLMOps training signal |
+| `context_snapshot` | JSONB | Full domain context JSON *after* this turn — generic name covers plan, email, dispatch, etc. |
+| `langsmith_run_id` | VARCHAR(100) | Per-turn trace |
 | `langsmith_trace_url` | TEXT | |
 | `input_tokens` | INT | |
 | `output_tokens` | INT | |
 | `created_at` | TIMESTAMPTZ | |
 
-**Why `plan_snapshot` per message?**  
-Lets us reconstruct exactly what the plan looked like at each step. Enables offline analysis of "what did the human actually want vs what the AI changed" — the core LLMOps training signal.
+**Column naming:** `context_snapshot` replaces the earlier `plan_snapshot` name — generic enough for any domain object (plan details, email body, dispatch order JSON, etc.).
 
-### 4.3 Alembic migration
+### 5.3 Alembic migration
 
-One new migration file: `alembic/versions/XXXX_add_plan_refine_tables.py` — creates both tables above. No changes to any existing table.
+One new migration file: `alembic/versions/XXXX_add_agent_refine_tables.py` — creates both tables. No changes to any existing table.
 
 ---
 
-## 5. New API Endpoints
+## 6. Platform Layer: New API Endpoints
 
-All prefixed under `/api/v1/sandhar`. All require `X-API-Key` header (same as existing).
+All added to the existing `actions.py` router (`prefix="/api/v1/actions"`). All require `X-API-Key` (same as all other action endpoints).
 
-### 5.1 Start a session
-
-```
-POST /plan/{header_id}/refine/start
-Response: { session_id, plan_header_id, status, welcome_message }
-```
-
-- Creates a `sandhar_plan_refine_session` row.
-- If an `active` session already exists for this header, returns it (idempotent — single-user system for v1).
-- Validates the plan header exists and is in `draft` status — returns 422 if already approved/rejected.
-- **Auto-registers and auto-activates** the `sandhar-plan-refiner` agent if it is not yet in the DB or is currently inactive. This removes the need for manual operator activation in the Agents dashboard for this internal agent.
-
-### 5.2 Send a message (SSE streaming)
+### 6.1 Start a session
 
 ```
-POST /plan/refine/{session_id}/message
-Body: { "content": "Move WO-SEED-0003 to Line 2" }
-Response: text/event-stream  (Server-Sent Events — streaming confirmed)
+POST /api/v1/actions/{action_id}/refine/start
+Response: { session_id, action_id, refinement_agent, status, welcome_message }
+```
+
+- Validates the action exists and is in `pending_review` status.
+- Reads `feature_flags.enable_refinement` from the action's agent config — returns 403 if `false`.
+- Creates an `agent_refine_session` row (or returns the existing `active` session idempotently).
+- **Auto-registers and auto-activates** the `refinement_agent` if not yet active in the DB. This internal agent does not require manual activation via the Agents dashboard.
+- Returns a context-aware `welcome_message` (generated by briefly describing the action to the refinement agent).
+
+### 6.2 Send a message — SSE streaming
+
+```
+POST /api/v1/actions/{action_id}/refine/message
+Body:     { "content": "Move WO-SEED-0003 to Line 2" }
+Response: text/event-stream
 ```
 
 - Validates session is still `active`.
-- Persists the user message row.
-- Runs the `sandhar-plan-refiner` agent (new, described in §6) with the full conversation history as context.
-- Streams the LLM token output back via SSE. No polling fallback — SSE is the single delivery mechanism.
-- On completion: persists assistant message row (with `tool_calls`, `plan_snapshot`, tokens).
-- Frontend reads the stream and appends tokens to the chat bubble; on `event: done` it refreshes the plan preview.
+- Persists user message row.
+- Invokes the `refinement_agent` with conversation history + injected domain context.
+- Streams LLM token output via SSE. SSE is the sole delivery mechanism — no polling fallback.
+- On stream completion: persists assistant message row (tool_calls, context_snapshot, tokens).
+- Emits `event: done` — frontend uses this to trigger a preview refresh.
 
-### 5.3 Get message history
-
+SSE event format:
 ```
-GET /plan/refine/{session_id}/messages
-Response: [ { id, role, content, tool_calls, created_at, ... } ]
-```
-
-- Used when reopening a session from a page reload.
-
-### 5.4 Close session without approving
-
-```
-POST /plan/refine/{session_id}/close
+data: {"type": "token",    "content": "Done. WO-SEED-0003 moved..."}
+data: {"type": "tool_use", "tool": "sandhar_refine_move_wo", "args": {...}}
+data: {"type": "done",     "session_id": "..."}
 ```
 
-- Sets session `status = closed`. Plan remains `draft`.
-- Does **not** touch the plan header.
-
-### 5.5 Approve from within canvas
+### 6.3 Get message history
 
 ```
-POST /plan/{header_id}/approve   ← existing endpoint, zero changes
+GET /api/v1/actions/{action_id}/refine/messages
+Response: [{ id, role, content, tool_calls, created_at, ... }]
 ```
 
-- The "Approve Plan" button inside the canvas calls this same endpoint.
-- After success the frontend calls `close` on the session with `status = approved`.
+Used on page reload to restore an in-progress session.
 
-**No new approve/reject endpoints.** The canvas reuses what already exists.
+### 6.4 Close session without approving
+
+```
+POST /api/v1/actions/{action_id}/refine/close
+```
+
+- Sets session `status = closed`. Does not touch the action or its underlying domain state.
+- The action remains `pending_review` — the planner can still Approve or Reject normally.
+
+### 6.5 Approve (existing endpoint — unchanged)
+
+```
+POST /api/v1/actions/{action_id}/approve   ← no changes
+```
+
+After approval, the canvas JS calls `close` on the session with `status = approved`. No new approval endpoint.
 
 ---
 
-## 6. New Agent: `sandhar-plan-refiner`
+## 7. Platform Layer: Canvas UI
 
-### 6.1 YAML config
+### 7.1 Files touched
 
-New file: `agents/configs/sandhar-plan-refiner.yaml`
+| File | Change type |
+|---|---|
+| `templates/approvals.html` | Add "Refine with AI" button, generic canvas HTML/CSS/JS |
+| `templates/base.html` | Add `.btn-refine` style and canvas container (if not in approvals.html already) |
+
+**Domain-specific files:** each Sandhar-specific preview partial is in `templates/sandhar/`.  
+**No other existing template is touched.**
+
+### 7.2 Button visibility
+
+The platform injects `enable_refinement` into the action row context when rendering the inbox. The button is shown only when:
+- `feature_flags.enable_refinement == true` on the action's agent, AND
+- Action status is `pending_review`
+
+```html
+<!-- Platform-rendered in approvals.html action row (pseudocode) -->
+{% if action.enable_refinement %}
+<button class="btn btn-refine" onclick="openRefineCanvas('{{action.id}}')">
+  ✨ Refine with AI
+</button>
+{% endif %}
+```
+
+### 7.3 Canvas structure (generic)
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│  PREVIEW PANEL (42 %)              │  CHAT CANVAS (58 %)             │
+│                                    │  ┌──────────────────────────────┐│
+│  Rendered by:                      │  │ Refining: <action.title>     ││
+│  _refine_preview_{name}.html       │  │      [✅ Approve]  [✕ Close] ││
+│  OR generic JSON viewer            │  ├──────────────────────────────┤│
+│                                    │  │ 🤖 <welcome message>         ││
+│  Updates live after every          │  │ 👤 <user message>            ││
+│  event:done SSE event              │  │ 🤖 <assistant response>      ││
+│                                    │  ├──────────────────────────────┤│
+│                                    │  │ [ Type your instruction... ] ││
+│                                    │  │                     [Send →] ││
+│                                    │  └──────────────────────────────┘│
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+**Preview panel resolution order:**
+1. `_refine_preview_{refinement_preview}.html` — domain-specific partial (e.g., `_refine_preview_sandhar-plan.html`)
+2. If not found → generic JSON viewer that renders `context_snapshot` from the last message turn
+
+### 7.4 Canvas JavaScript logic (generic)
+
+```
+openRefineCanvas(actionId)
+  │
+  ├── POST /api/v1/actions/{actionId}/refine/start
+  ├── store session_id, refinement_preview name
+  ├── render preview panel (load partial or JSON viewer)
+  ├── slide canvas in
+  └── render welcome message
+
+sendMessage(content)
+  │
+  ├── append user bubble immediately
+  ├── show [Thinking…] / tool-use indicator
+  ├── POST /api/v1/actions/{actionId}/refine/message  (SSE)
+  │     read stream:
+  │       type:token    → append to assistant bubble
+  │       type:tool_use → show tool badge in bubble
+  │       type:done     → call refreshPreview()
+  └── refreshPreview()
+        └── re-fetch domain data + re-render preview partial
+
+closeCanvas()
+  │
+  ├── POST /api/v1/actions/{actionId}/refine/close
+  └── restore full-width action view
+
+approveFromCanvas(actionId)
+  │
+  ├── POST /api/v1/actions/{actionId}/approve  (existing)
+  └── on success → lock chat input, show "✅ Approved" banner
+```
+
+### 7.5 Chat locked state
+
+After approval (from any entry point): chat input disabled, send button removed, header shows "✅ Approved at HH:MM". Message history stays visible for audit.
+
+---
+
+## 8. Sandhar Reference Implementation
+
+### 8.1 YAML change: `sandhar-planning-supervisor.yaml`
+
+Add three lines to the existing supervisor's `feature_flags`:
+
+```yaml
+feature_flags:
+  # ... existing flags unchanged ...
+  enable_refinement: true
+  refinement_agent: "sandhar-plan-refiner"
+  refinement_preview: "sandhar-plan"
+```
+
+This is the **only change** to the existing supervisor YAML. No tools, system prompt, or routing config is touched.
+
+### 8.2 New agent: `agents/configs/sandhar-plan-refiner.yaml`
 
 ```yaml
 agent:
@@ -204,349 +366,263 @@ agent:
   type: react
   companies: [sandhar]
   description: >
-    Conversational plan refinement agent. Reads the current draft plan and
-    applies targeted edits requested by the planner in natural language.
+    Conversational plan refinement agent. Reads the current draft Sandhar
+    production plan and applies targeted edits in response to planner instructions.
+  context_hub:
+    system_prompt: "sandhar/plan-refiner-system:latest"
+    domain_context: "sandhar/planning-domain-context:v1.0"
   inputs:
     plan_header_id:
       type: string
       required: true
-    session_id:
-      type: string
-      required: true
+      description: "UUID of the SandharPlanHeader being refined"
 ```
 
-### 6.2 New tool file: `src/agri_agent/agent/tools/sandhar/plan_refiner.py`
+The `context_hub` field instructs the platform endpoint to pull the system prompt and domain context from LangSmith Hub before invoking the agent. `plan_header_id` is extracted from the AgentAction's `display_data` at session start and injected as `extra_context`.
 
-Six focused tools — all operate on a specific `plan_header_id`:
+### 8.3 New tool file: `src/agri_agent/agent/tools/sandhar/plan_refiner.py`
 
-| Tool name | What it does |
-|---|---|
-| `sandhar_refine_get_plan` | Returns full current plan details (lines, WOs, quantities, gaps) |
-| `sandhar_refine_update_qty` | Updates `planned_qty` on one `plan_detail` row |
-| `sandhar_refine_move_wo` | Reassigns a WO from its current line to a different line (updates `line_id` on the detail row) |
-| `sandhar_refine_add_wo` | Adds an open WO (not yet in the plan) as a new `plan_detail` row |
-| `sandhar_refine_remove_wo` | Removes a `plan_detail` row (WO returns to "unplanned") |
-| `sandhar_refine_explain_constraint` | Read-only — calls existing constraint tools and explains a specific gap or alert in plain language |
+Six focused tools. All operate against a specific `plan_header_id` passed via agent context:
 
-**Tools only mutate `sandhar_plan_detail` and `sandhar_resource_allocation`** — the same tables the planning supervisor writes to. No new table writes during refinement except those two.
+| Tool | What it does | Tables mutated |
+|---|---|---|
+| `sandhar_refine_get_plan` | Returns full current plan details — lines, WOs, quantities, gaps, manpower | None (read-only) |
+| `sandhar_refine_update_qty` | Updates `planned_qty` on one `plan_detail` row | `sandhar_plan_detail` |
+| `sandhar_refine_move_wo` | Reassigns a WO to a different line (`line_id` update) | `sandhar_plan_detail` |
+| `sandhar_refine_add_wo` | Adds an open WO as a new `plan_detail` row | `sandhar_plan_detail` |
+| `sandhar_refine_remove_wo` | Removes a `plan_detail` row (WO returns to unplanned) | `sandhar_plan_detail` |
+| `sandhar_refine_explain_constraint` | Explains a specific gap or alert in plain language | None (read-only) |
 
-### 6.3 Agent system prompt (key points)
+Only `sandhar_plan_detail` and `sandhar_resource_allocation` are ever written to — the same tables the planning supervisor writes during generation.
 
-The system prompt lives in Context Hub (`sandhar/plan-refiner-system:latest`), not hardcoded in the YAML. Key directives it contains:
+### 8.4 New preview partial: `templates/sandhar/_refine_preview_sandhar-plan.html`
 
-- Told it has a live plan loaded for a specific header and date.
-- Given the full plan context on the first turn via `[Runtime context]` (injected by the endpoint).
-- Instructed to confirm every destructive change ("I am about to remove WO-X from the plan — confirm?") unless the user's message is unambiguous.
-- Instructed to keep responses concise — one paragraph max, then show a brief summary of what changed.
-- Told it cannot approve or reject; only the planner can do that.
+A Jinja partial that renders the current plan as a live table (same visual as the plan page). Receives the current plan detail JSON and re-renders after each `event:done`. This is the only new Sandhar-specific template file.
 
-### 6.4 Activation
+### 8.5 System prompt — Context Hub
 
-This agent is **auto-registered and auto-activated** by the `POST /plan/{header_id}/refine/start` endpoint on first use. It does not require manual activation through the Agents dashboard (unlike operator-deployed agents). If it is already registered and active, the `start` call is a no-op for activation.
+System prompt stored in LangSmith Hub as `sandhar/plan-refiner-system:latest`. Key directives:
+- Role: plan refinement assistant with Sandhar manufacturing context
+- Given the full current plan as `[Runtime context]` on the first turn
+- Confirm every destructive operation before executing unless user intent is unambiguous
+- Keep responses concise: one short paragraph + a "What changed" summary line
+- Cannot approve or reject — only the human can do that
 
----
+Domain context stored as `sandhar/planning-domain-context:v1.0`:
+- Sandhar line codes (L001–L010), their product families, and capacity constraints
+- Shift structure (A/B/C) and working hours
+- WO priority rules and hard constraints
 
-## 7. Frontend Changes
+### 8.6 Plan page entry point
 
-### 7.1 Files touched
+The Sandhar plan page (`/sandhar/plan`) exposes Approve/Reject inline. To surface "Refine with AI" here too, a small addition is made to the existing plan-load response:
 
-| File | Change type |
-|---|---|
-| `templates/sandhar/plan.html` | Add button, canvas HTML, canvas CSS, canvas JS |
-
-**No other template or route file is touched.**
-
-### 7.2 "Refine with AI" button
-
-Added in the `plan-actions` div alongside Approve and Reject. Only rendered when `!isApproved` (exact same condition as today's Approve/Reject buttons). Styled with a new `.btn-refine` class (indigo outline style — visually distinct from the green Approve and red Reject).
-
-```html
-<!-- existing -->
-<button class="btn btn-success" onclick="approvePlan(...)">✅ Approve Plan</button>
-<button class="btn btn-danger"  onclick="rejectPlan(...)">✗ Reject</button>
-<!-- new -->
-<button class="btn btn-refine"  onclick="openRefineCanvas('${plan.id}','${shift}')">✨ Refine with AI</button>
+```python
+# GET /api/v1/sandhar/plan/versions?date=...  (existing endpoint)
+# Add to response per plan header:
+"action_id": "<uuid>"   # if a pending_review AgentAction exists for this header, else null
 ```
 
-### 7.3 Canvas structure
-
-A fixed overlay panel attached to the right side of the viewport. Does not replace the plan table — the plan table shrinks to ~42 % width; the canvas takes ~58 %. Both are visible simultaneously.
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│  PLAN TABLE (42 %)         │  REFINE CANVAS (58 %)               │
-│                            │  ┌────────────────────────────────┐ │
-│  Line │ WO    │ Qty │ ...  │  │ Refining: Shift A · 2026-07-06 │ │
-│  L001   WO-01  400         │  │           [✅ Approve] [✕ Close]│ │
-│  L002   WO-03  320  ←live  │  ├────────────────────────────────┤ │
-│  ...                       │  │ 🤖 I have your plan loaded...  │ │
-│                            │  │ 👤 Move WO-0003 to Line 2      │ │
-│                            │  │ 🤖 Done. WO-0003 moved...      │ │
-│                            │  ├────────────────────────────────┤ │
-│                            │  │ [  Type your instruction...  ] │ │
-│                            │  │                        [Send →]│ │
-│                            │  └────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────────┘
+Frontend logic:
+```javascript
+// When rendering plan actions:
+if (plan.action_id) {
+  // show Refine with AI button — calls generic platform endpoint
+  renderRefineButton(plan.action_id);
+}
 ```
 
-### 7.4 Canvas JavaScript logic
+If `action_id` is null (e.g., plan was generated but `propose_plan_for_review` wasn't called), the Refine button is simply not rendered — Approve and Reject remain available as today.
 
-```
-openRefineCanvas(headerId, shift)
-  │
-  ├── POST /plan/{headerId}/refine/start  (auto-activates agent if needed)
-  ├── store session_id
-  ├── disable "↺ Re-generate Shift" button on the main page
-  ├── slide canvas in
-  └── render welcome message
+### 8.7 Re-generate button guard
 
-sendMessage(content)
-  │
-  ├── append user bubble immediately
-  ├── show [Thinking…] bubble
-  ├── POST /plan/refine/{session_id}/message  (SSE — confirmed delivery mechanism)
-  │     read stream → append tokens to assistant bubble
-  └── on event:done → refreshPlanPreview()
-            │
-            └── GET /plan/versions?date=...  → re-render plan table on left
+When a refinement canvas is open (active session exists for the plan's action), the **"↺ Re-generate Shift"** button on the plan page is disabled. On canvas close, it re-enables.
 
-closeCanvas()
-  │
-  ├── POST /plan/refine/{session_id}/close
-  └── restore plan table to full width
-      └── re-enable "↺ Re-generate Shift" button
-
-approveFromCanvas(headerId)
-  │
-  ├── same as existing approvePlan() — calls POST /plan/{headerId}/approve
-  └── on success → lock chat, show "✅ Plan approved" banner
-```
-
-### 7.5 Re-generate button guard
-
-When a refinement canvas is open (active session exists), the **"↺ Re-generate Shift"** button on the main page is disabled. If the planner closes the canvas without approving, the button is re-enabled.
-
-If a planner tries to click re-generate while a session is active (e.g., via direct URL or keyboard), the endpoint `POST /plan/generate` checks for an active refine session on that header and returns:
+Server-side guard: `POST /sandhar/plan/generate` checks for an active `agent_refine_session` on any action linked to that plan header — returns 422 if found:
 ```json
 { "detail": "A refinement session is active. Close or approve it before re-generating." }
 ```
 
-This is a hard guard — re-generating will permanently discard all refinements in the active session.
-
-### 7.6 Chat locked state
-
-After approval (from either button): input box becomes `disabled`, send button removed, header shows "✅ Approved". The message history remains visible for audit. The main page "↺ Re-generate Shift" button remains disabled (plan is approved; re-generate is already blocked by existing logic).
-
 ---
 
-## 8. LLMOps: LangSmith Engine + Context Hub
+## 9. LLMOps: LangSmith Engine + Context Hub
 
-The observability and continuous-improvement layer has two distinct responsibilities handled by two distinct tools:
+### 9.1 Two tools, two roles
 
 | Tool | Role |
 |---|---|
-| **LangSmith Engine** | Capture, annotate, evaluate, and curate every agent interaction |
-| **Context Hub** (LangSmith Hub) | Version, store, and serve system prompts + domain knowledge at runtime |
+| **LangSmith Engine** | Capture, tag, annotate, evaluate, and curate every refinement turn |
+| **Context Hub** (LangSmith Hub) | Version, store, and serve system prompts + domain knowledge |
 
----
+### 9.2 LangSmith — per-turn trace enrichment
 
-### 8.1 What LangSmith already does in this project
-
-LangSmith tracing is already active (`LANGCHAIN_TRACING_V2`, `LANGCHAIN_API_KEY`, project `agri-agent-poc` in settings). Every `AgentRun` already stores `langsmith_run_id` and `langsmith_trace_url`. The refine feature extends this existing integration — it does not introduce a new tracing mechanism.
-
----
-
-### 8.2 LangSmith Engine — per-turn trace enrichment
-
-Each time the planner sends a message, the endpoint invokes the `sandhar-plan-refiner` agent, which runs under LangSmith tracing exactly like any other agent in this platform. Two additions are made on top of the existing trace:
-
-**LangSmith project:** Refiner turns are logged to the existing `agri-agent-poc` project — no separate project is created. Separation is achieved via tags, which is sufficient for annotation queue filtering and dataset curation.
+LangSmith tracing is already active (`LANGCHAIN_TRACING_V2`, `LANGCHAIN_API_KEY`, project `agri-agent-poc`). Refiner turns land in the **same project**, distinguished by tags.
 
 **Run-level tags written on every turn:**
 
-| Tag | Value | Why |
+| Tag | Value | Purpose |
 |---|---|---|
-| `agent` | `sandhar-plan-refiner` | Distinguishes refiner turns from all other runs in the shared `agri-agent-poc` project |
+| `feature` | `refine` | Distinguish all refinement turns from other agent runs in the project |
+| `refinement_agent` | `sandhar-plan-refiner` | Per-agent filtering (generic — works for any future refiner) |
 | `session_id` | UUID | Group all turns in a session |
-| `plan_date` | `2026-07-06` | Filter by date for seasonal analysis |
-| `shift_code` | `A` / `B` | Shift-level performance splits |
-| `turn_index` | `1`, `2`, `3`… | Detect repeated instructions |
-| `outcome` | `in_progress` / `approved` / `reversed` | Applied retroactively on session close |
+| `turn_index` | 1, 2, 3… | Detect repeated instructions |
+| `outcome` | `in_progress` / `approved` / `reversed` | Applied retroactively at session close |
 
-**`outcome: reversed`** is the most valuable signal — set on any turn where the planner's next message undoes what the AI just did (e.g., AI moved WO to Line 2; planner then says "move it back to Line 3"). Detecting reversals is done by comparing consecutive `plan_snapshot` diffs at session-close time.
+**`outcome: reversed`** — set on any turn where the planner's next message undoes the AI's previous action. Detected by diffing consecutive `context_snapshot` values at session-close time. This is the most valuable LLMOps signal.
 
----
+### 9.3 LangSmith — Annotation Queues
 
-### 8.3 LangSmith Engine — Annotation Queues
+Sessions are auto-queued for annotation based on outcome signals. All queues filter on `feature = refine` within the shared `agri-agent-poc` project.
 
-Not every session needs human review. Sessions are automatically queued for annotation under these conditions:
-
-Annotation queues are filtered using the `agent: sandhar-plan-refiner` tag within the shared `agri-agent-poc` project.
-
-| Trigger | Queue name | What annotators do |
+| Trigger | Queue | Annotator task |
 |---|---|---|
-| Planner needed > 3 turns to approve | `sandhar-refiner-complex` | Label *why* first attempt failed (wrong WO ID, wrong line, wrong qty interpretation, constraint gap) |
-| At least one `reversed` turn | `sandhar-refiner-reversals` | Confirm intent label, mark gold tool-call sequence |
-| Session closed without approve | `sandhar-refiner-abandoned` | Free-text note on what the AI got wrong |
+| > 3 turns to approve | `refine-complex` | Label root cause of AI misunderstanding |
+| ≥ 1 reversed turn | `refine-reversals` | Write correct tool-call sequence (gold label) |
+| Session closed without approve | `refine-abandoned` | Free-text note on what went wrong |
 
-Annotations are written back to the LangSmith run as `feedback` records (score 0–1 + label). This is the ground truth that feeds the dataset.
+### 9.4 LangSmith — Dataset and Evaluators
 
----
-
-### 8.4 LangSmith Engine — Dataset and Evaluators
-
-**Dataset: `sandhar-refiner-training`**
-
-Built from annotated sessions. Each row is one planner turn:
+**Dataset: `refiner-training`** — one row per annotated turn:
 
 ```
-input:  { plan_context: <current plan JSON>, conversation_history: [...], user_message: "..." }
+input:  { context: <domain JSON>, history: [...], user_message: "..." }
 output: { tool_calls: [...], response_text: "..." }
-label:  "positive" | "corrected"   (from annotation)
+label:  "positive" | "corrected"
 ```
 
-- **Positive examples** — approved in ≤ 2 turns, no reversals. These are the direct fine-tuning signal.
-- **Corrected examples** — annotator wrote the *correct* tool-call sequence alongside the AI's wrong one. Used for contrastive fine-tuning or DPO.
+**Evaluators:**
 
-**Evaluators run on every new agent version:**
-
-| Evaluator | Checks |
-|---|---|
-| `tool_call_accuracy` | Did the agent call the right tool for the stated intent? (LLM-as-judge against annotated gold) |
-| `plan_validity` | After tool execution, does the plan still satisfy hard constraints (line capacity, shift hours)? (deterministic) |
-| `response_conciseness` | Response ≤ 120 words? (heuristic) |
-| `turns_to_approve` | Average turns per session ≤ 2? (population metric over eval dataset) |
-
----
-
-### 8.5 Context Hub (LangSmith Hub)
-
-Context Hub is the **versioned prompt registry** for this platform, implemented using LangSmith Hub (`hub.langchain.com`). System prompts and domain-knowledge templates are stored in the Hub rather than hardcoded in YAML files. This decouples prompt iteration from code deployments.
-
-**Hub artifacts are public** for this POC phase — readable without credentials. The `LANGCHAIN_API_KEY` already present in the environment is sufficient for writes. This can be tightened to private org-scoped access in a production rollout.
-
-**What goes into the Hub:**
-
-| Hub artifact | Slug | Contents |
+| Evaluator | Type | Checks |
 |---|---|---|
-| Refiner system prompt | `sandhar/plan-refiner-system` | Role definition, tool-use instructions, confirmation rules, response style |
-| Planning domain context | `sandhar/planning-domain-context` | Sandhar line codes, shift structure, capacity rules, priority hierarchy — injected as a system-level context block every turn |
-| Supervisor system prompt | `sandhar/planning-supervisor-system` | Existing planning supervisor prompt — moved to Hub when supervisor improvements are identified via LLMOps |
+| `tool_call_accuracy` | LLM-as-judge | Did agent call the right tool for the stated intent? |
+| `context_validity` | Deterministic | Does the domain context after tool execution satisfy hard constraints? |
+| `response_conciseness` | Heuristic | Response ≤ 120 words? |
+| `turns_to_approve` | Population metric | Average turns per approved session ≤ 2? |
 
-**How agents pull from the Hub at runtime:**
+### 9.5 Context Hub (LangSmith Hub)
 
+Versioned prompt registry at `hub.langchain.com`. System prompts and domain knowledge live here — decoupled from code deployments. **Public access** for POC phase; tighten to org-private in production.
+
+| Artifact | Slug | Contents |
+|---|---|---|
+| Sandhar refiner system prompt | `sandhar/plan-refiner-system` | Role, tool instructions, confirmation rules, response style |
+| Sandhar domain context | `sandhar/planning-domain-context` | Line codes, capacity rules, shift structure, WO priority hierarchy |
+| Sandhar supervisor prompt | `sandhar/planning-supervisor-system` | Moved here when upstream supervisor improvements are identified |
+
+Pull at runtime (in refine endpoint, before invoking agent):
 ```python
-# In the refiner endpoint, before invoking the agent:
 from langchain import hub
-system_prompt = hub.pull("sandhar/plan-refiner-system")           # latest tagged version
-domain_context = hub.pull("sandhar/planning-domain-context")      # pinned commit hash in config
+system_prompt  = hub.pull("sandhar/plan-refiner-system")          # :latest
+domain_context = hub.pull("sandhar/planning-domain-context:v1.0") # pinned
 ```
 
-The YAML config for `sandhar-plan-refiner` gains two new fields:
+Pinned domain context updates require a PR with an eval pass against `refiner-training` dataset before the commit hash is updated in the YAML.
 
-```yaml
-context_hub:
-  system_prompt: "sandhar/plan-refiner-system:latest"
-  domain_context: "sandhar/planning-domain-context:v1.2"
-```
-
-Using `:latest` for the system prompt means prompt improvements are picked up on the next container restart without a code change. Domain context uses a pinned version so accidental upstream edits don't silently change agent behaviour.
-
----
-
-### 8.6 Continuous improvement loop
+### 9.6 Continuous improvement loop
 
 ```
-Planner sessions (daily)
+Daily planner refinement sessions
         │
         ▼
-LangSmith Engine — auto-tags, Annotation Queues
+LangSmith Engine — auto-tags per turn, outcome applied at session close
         │
         ▼
-Annotators review flagged sessions → label intents, write gold tool calls
+Sessions meeting annotation triggers → queued in LangSmith (§9.3)
         │
         ▼
-Curated examples appended to Dataset: sandhar-refiner-training
+Annotators label turns → feedback records written back to runs
         │
         ▼
-Prompt engineer iterates system prompt in Context Hub (draft commit)
+Curated rows appended to Dataset: refiner-training
         │
         ▼
-Run LangSmith Evaluators against dataset with new prompt version
+Prompt engineer drafts improved system prompt in Context Hub
+        │
+        ▼
+Run evaluators on refiner-training against new prompt version
         │
    improvement?
-   ├─ YES → merge to :latest tag in Hub → picked up on next restart
-   └─ NO  → iterate further, keep current :latest
+   ├─ YES → tag new commit as :latest → picked up on next container restart
+   └─ NO  → iterate; current :latest unchanged
         │
         ▼
-Downstream: if pattern is in upstream supervisor (e.g., AI always
-mis-allocates Line 5 for WO type X), the supervisor system prompt
-in sandhar/planning-supervisor-system is also updated → fewer
-refinement sessions needed in future
+Patterns that survive to the upstream supervisor (e.g., recurring
+misallocation) → sandhar/planning-supervisor-system also updated
+→ fewer sessions needed to reach approval
 ```
 
----
+### 9.7 LangSmith setup (one-time)
 
-### 8.7 LangSmith setup (one-time)
-
-No new LangSmith project is needed. All refiner traces land in the existing `agri-agent-poc` project. The one-time setup tasks are:
-
-1. **Define annotation queues** in the `agri-agent-poc` project with the filter `agent = sandhar-plan-refiner` — three queues as listed in §8.3.
-2. **Create Hub artifacts** `sandhar/plan-refiner-system` and `sandhar/planning-domain-context` in LangSmith Hub with an initial version tagged `:latest`.
-3. No `LANGCHAIN_PROJECT` env var override is required in the refiner endpoint.
+No new project. One-time tasks in the `agri-agent-poc` project:
+1. Define three annotation queues with filter `feature = refine` (§9.3)
+2. Create Hub artifacts `sandhar/plan-refiner-system` and `sandhar/planning-domain-context` with initial content tagged `:latest` / `v1.0`
 
 ---
 
-## 9. What Is NOT Changed
-
-This section explicitly lists existing code that is **not modified**:
+## 10. What Is NOT Changed
 
 | Component | Status |
 |---|---|
-| `POST /plan/{header_id}/approve` | Unchanged — canvas calls it as-is |
-| `POST /plan/{header_id}/reject` | Unchanged |
-| `POST /plan/generate` | Unchanged |
-| `SandharPlanHeader` model | Unchanged — no new columns |
-| `SandharPlanDetail` model | Unchanged — tool writes to it via existing columns |
-| `sandhar-planning-supervisor` agent | Unchanged |
-| All existing planning tools | Unchanged — refiner tools are new files |
-| Action Inbox / HITL flow | Unchanged — approve still goes through same path |
-| `AgentRun` table | Unchanged — per-turn runs still stored there |
-| Runs page (`/runs`) | Unchanged — refiner turns appear there naturally |
+| `POST /api/v1/actions/{id}/approve` | Unchanged — canvas calls it as-is |
+| `POST /api/v1/actions/{id}/reject` | Unchanged |
+| `AgentAction` model | Unchanged — no new columns |
+| `AgentConfig` model | Unchanged — `feature_flags: dict` already accepts new keys |
+| `sandhar-planning-supervisor` agent logic | Unchanged — only YAML `feature_flags` block gets 3 new lines |
+| All existing planning tools | Unchanged — refiner tools are a new file |
+| `SandharPlanHeader` / `SandharPlanDetail` models | Unchanged — refiner tools write to existing columns |
+| `AgentRun` table | Unchanged — refiner turns stored there naturally |
+| Action Inbox approve/reject flow | Unchanged |
+| Runs page (`/runs`) | Unchanged |
 | Simulation, master, dashboard pages | Unchanged |
 
-The only existing file touched is `templates/sandhar/plan.html` (add button + canvas).
+Files modified:
+- `templates/approvals.html` — add canvas component + button
+- `templates/sandhar/plan.html` — add `action_id` usage + Refine button
+- `sandhar-planning-supervisor.yaml` — 3 new `feature_flags` lines
+- `src/agri_agent/api/routes/actions.py` — new refine sub-routes added
+- `GET /api/v1/sandhar/plan/versions` — add `action_id` to response (small addition)
+
+Files created:
+- `alembic/versions/XXXX_add_agent_refine_tables.py`
+- `agents/configs/sandhar-plan-refiner.yaml`
+- `src/agri_agent/agent/tools/sandhar/plan_refiner.py`
+- `templates/sandhar/_refine_preview_sandhar-plan.html`
 
 ---
 
-## 10. Implementation Sequence
+## 11. Implementation Sequence
 
-The feature can be built and merged incrementally without ever breaking the live system:
+Incremental. Each step is independently shippable.
 
-| Step | What | Risk if stopped here |
-|---|---|---|
-| 0 | **Context Hub + LangSmith setup** — create Hub artifacts `sandhar/plan-refiner-system` and `sandhar/planning-domain-context` in LangSmith Hub; define three annotation queues in the existing `agri-agent-poc` project (no new project needed) | Zero — nothing in code pulls from Hub yet |
-| 1 | Alembic migration (two new tables only) | Zero — no code reads them yet |
-| 2 | New API endpoints (start, message, close) | Zero — no UI calls them yet |
-| 3 | New agent YAML + refiner tools; wire `context_hub` fields to pull prompts at runtime | Zero — not wired to anything |
-| 4 | Canvas HTML/CSS in plan.html (hidden by default) | Zero — button not rendered yet |
-| 5 | Canvas JS + button render | Feature live, existing buttons unchanged |
-| 6 | **Post-launch** — annotate first 20 sessions; run first evaluator pass; promote first prompt revision to `:latest` | Additive — does not affect running feature |
-
----
-
-## 11. Design Decisions Log
-
-All design questions have been resolved. This section records each decision for traceability.
-
-| # | Question | Decision | Impact on design |
+| Step | Layer | What | Risk if stopped |
 |---|---|---|---|
-| 1 | Auth / planner identity | `opened_by = "anonymous"` for v1; auth deferred | No login check on session start |
-| 2 | Concurrent refinement | Single-user system assumed for v1; no lock needed | `start` returns existing session idempotently; no presence detection |
-| 3 | Re-generate after refine | Re-generate **discards all refinements** | Re-generate button disabled while canvas is open; hard server-side guard added to `POST /plan/generate` (§7.5) |
-| 4 | Streaming vs polling | **SSE confirmed** — no polling fallback | `POST /refine/{session_id}/message` is `text/event-stream` only |
-| 5 | Plan snapshot storage | **Full snapshot per turn in v1**; diff format in v2 | `plan_snapshot` column stores complete JSON; no migration needed for v2 upgrade |
-| 6 | Agent activation | **Auto-register + auto-activate on first `start` call** | `start` endpoint handles activation; Agents dashboard not needed for this agent |
-| 7 | Hub artifact visibility | **Public** for POC phase | No credential overhead for Hub reads; tighten in production rollout |
-| 8 | Hub prompt pinning ownership | Updates to pinned commit hash require a **PR + eval pass** before merge | Documented as a dependency upgrade workflow; no tooling change needed |
-| 9 | LangSmith project | **Same project (`agri-agent-poc`)**, differentiated by `agent: sandhar-plan-refiner` tag | No new project; no `LANGCHAIN_PROJECT` override; annotation queues filtered by tag |
+| 0 | Ops | LangSmith Hub artifact creation + annotation queue setup in `agri-agent-poc` project | Zero — nothing in code references them yet |
+| 1 | Platform | Alembic migration — `agent_refine_session` and `agent_refine_message` tables | Zero |
+| 2 | Platform | Refine sub-routes in `actions.py` (start, message, close) | Zero — no UI calls them |
+| 3 | Platform | Canvas HTML/CSS/JS in `approvals.html` (gated by `enable_refinement` flag; no agent has it yet) | Zero — flag is false everywhere |
+| 4 | Sandhar | `sandhar-plan-refiner.yaml` + `plan_refiner.py` tools + Hub prompt content | Zero — agent not activated |
+| 5 | Sandhar | `_refine_preview_sandhar-plan.html` preview partial | Zero |
+| 6 | Sandhar | `sandhar-planning-supervisor.yaml` — add 3 `feature_flags` lines | **Feature goes live** — Refine button appears in inbox for Sandhar plan actions |
+| 7 | Sandhar | `plan.html` — surface Refine button using `action_id` from plan-load response | Plan page entry point live |
+| 8 | Ops (post-launch) | Annotate first 20 sessions; run first evaluator pass; promote first prompt revision to `:latest` | Additive — does not affect live feature |
+
+Steps 0–5 can be merged and deployed before Step 6 flips the switch. Rollback = remove the 3 `feature_flags` lines from the supervisor YAML.
+
+---
+
+## 12. Design Decisions Log
+
+| # | Question | Decision | Where applied |
+|---|---|---|---|
+| 1 | Custom Sandhar vs generic platform | **Generic platform layer first**, Sandhar as first consumer | Entire document restructured; §3–§7 are platform, §8 is Sandhar |
+| 2 | Where does refine session attach? | **`agent_actions.id`** — the canonical HITL unit | §5.1 session table FK; §6.1 start endpoint |
+| 3 | Sandhar plan page entry point | Look up `action_id` from plan-load response; button hidden if no action exists | §8.6 |
+| 4 | Auth / planner identity | `opened_by = "anonymous"` for v1 | §5.1 |
+| 5 | Concurrent refinement | Single-user system for v1; `start` is idempotent | §6.1 |
+| 6 | Re-generate after refine | Discards all refinements; hard server-side guard | §8.7 |
+| 7 | Streaming | **SSE confirmed**, no polling fallback | §6.2 |
+| 8 | Context snapshot | **Full snapshot per turn** in v1; diff format deferred to v2 | §5.2 |
+| 9 | Agent activation | **Auto-register + auto-activate** on first `start` call | §6.1 |
+| 10 | Hub artifact visibility | **Public** for POC phase | §9.5 |
+| 11 | Hub prompt pinning ownership | Pinned hash changes require **PR + eval pass** | §9.5 |
+| 12 | LangSmith project | **Same project** (`agri-agent-poc`), tags for separation | §9.2, §9.7 |
