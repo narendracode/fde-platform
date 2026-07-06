@@ -56,6 +56,7 @@ services:
       LANGSMITH_ENDPOINT: ${LANGSMITH_ENDPOINT:-https://api.smith.langchain.com}
       API_KEY: ${API_KEY:-dev-secret-key-change-in-prod}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      COMPANIES_TO_SHOW: ${COMPANIES_TO_SHOW:-sandhar,fundly}
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
       OTEL_SERVICE_NAME: agri-agent-api
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
