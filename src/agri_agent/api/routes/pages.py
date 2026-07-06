@@ -113,6 +113,7 @@ async def runs_page(
             "message": (r.input or {}).get("message", ""),
             "output_text": (r.output or {}).get("text", ""),
             "tool_calls": (r.output or {}).get("tool_calls", []),
+            "sub_agents": (r.output or {}).get("sub_agents", []),
             "input_tokens": r.input_tokens or 0,
             "output_tokens": r.output_tokens or 0,
             "cost_usd": r.cost_usd or 0,

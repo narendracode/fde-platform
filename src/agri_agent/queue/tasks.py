@@ -65,7 +65,11 @@ def run_agent_task(
             run = session.get(AgentRun, uuid.UUID(run_id))
             if run:
                 run.status = "completed"
-                run.output = {"text": result["output"], "tool_calls": result["tool_calls"]}
+                run.output = {
+                    "text": result["output"],
+                    "tool_calls": result["tool_calls"],
+                    "sub_agents": result.get("sub_agents", []),
+                }
                 run.thread_id = result["thread_id"]
                 run.input_tokens = result["input_tokens"]
                 run.output_tokens = result["output_tokens"]

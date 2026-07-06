@@ -56,6 +56,7 @@ class SupervisorState(TypedDict):
     next_instruction: str   # the instruction the supervisor wants to give the next worker
     next_context: dict      # structured key-value context injected as [Runtime context] for the next worker
     rounds: int             # incremented each time the supervisor node runs
+    worker_stats: list      # per-invocation token/cost tracking for each worker call
 
 
 # ── Supervisor routing decision (structured output) ───────────────────────────
@@ -111,7 +112,24 @@ def _worker_node_fn(worker_agent, worker_name: str, worker_config: AgentConfig):
                    if m.__class__.__name__ == "AIMessage" and m.content]
         result_text = ai_msgs[-1].content if ai_msgs else "(no output)"
 
-        _log.info("worker '%s' finished: %s…", worker_name, result_text[:120])
+        # Sum token usage from usage_metadata on every AI message in the worker result.
+        # LangChain populates usage_metadata for Anthropic and OpenAI models.
+        in_tok = out_tok = 0
+        for msg in result.get("messages", []):
+            meta = getattr(msg, "usage_metadata", None) or {}
+            in_tok += meta.get("input_tokens", 0)
+            out_tok += meta.get("output_tokens", 0)
+
+        existing_stats = list(state.get("worker_stats") or [])
+        stat: dict[str, Any] = {
+            "name": worker_name,
+            "order": len(existing_stats) + 1,
+            "instruction": instruction[:300],
+            "input_tokens": in_tok,
+            "output_tokens": out_tok,
+        }
+
+        _log.info("worker '%s' finished: in=%d out=%d tokens — %s…", worker_name, in_tok, out_tok, result_text[:80])
 
         return {
             "messages": [
@@ -119,7 +137,8 @@ def _worker_node_fn(worker_agent, worker_name: str, worker_config: AgentConfig):
                     content=f"[{worker_name} result]\n{result_text}",
                     name=worker_name,
                 )
-            ]
+            ],
+            "worker_stats": existing_stats + [stat],
         }
 
     return worker_node
@@ -317,6 +336,7 @@ def run_supervisor(
         "next_instruction": "",
         "next_context": {},
         "rounds": 0,
+        "worker_stats": [],
     }
 
     # Assign a stable run_id so LangSmith can aggregate the full trace cost
@@ -346,6 +366,9 @@ def run_supervisor(
         for m in result["messages"]
     ]
 
+    # Per-worker stats captured by _worker_node_fn via usage_metadata
+    worker_stats: list[dict] = list(result.get("worker_stats") or [])
+
     # Token counts and cost come from LangSmith — not from message usage_metadata.
     # All messages in the supervisor state are synthetic AIMessages constructed by
     # the supervisor/worker nodes; none carry usage_metadata.  LangSmith aggregates
@@ -360,6 +383,36 @@ def run_supervisor(
         output_tokens = metrics["output_tokens"]
         cost_usd = metrics["cost_usd"]
         langsmith_trace_url = _langsmith_url(str(ls_run_id))
+
+        # Enrich each worker stat with its own LangSmith child-run URL and cost.
+        # LangGraph records each node execution as a child run named by node key.
+        try:
+            from agri_agent.agent.react_agent import _get_ls_client
+            from agri_agent.config.settings import settings as _settings
+            ls_client = _get_ls_client()
+            if ls_client and worker_stats:
+                worker_names = {w.agent for w in config.workers}
+                child_iter = ls_client.list_runs(
+                    project_name=_settings.langchain_project,
+                    parent_run_id=str(ls_run_id),
+                )
+                child_runs = [r for r in child_iter if r.name in worker_names]
+                child_runs.sort(key=lambda r: r.start_time or "")
+                # Match child runs to stats in call order per worker name
+                visit: dict[str, int] = {}
+                for stat in worker_stats:
+                    name = stat["name"]
+                    idx = visit.get(name, 0)
+                    same_name = [r for r in child_runs if r.name == name]
+                    if idx < len(same_name):
+                        cr = same_name[idx]
+                        stat["langsmith_run_id"] = str(cr.id)
+                        stat["langsmith_trace_url"] = _langsmith_url(str(cr.id))
+                        if cr.total_cost:
+                            stat["cost_usd"] = float(cr.total_cost)
+                    visit[name] = idx + 1
+        except Exception as _exc:
+            _log.warning("Could not fetch worker child runs from LangSmith: %s", _exc)
 
     # OTel trace — valid because run_agent opens a span before calling us
     otel_trace_id = current_trace_id()
@@ -380,4 +433,5 @@ def run_supervisor(
         "otel_trace_url": otel_trace_url,
         "blocked": False,
         "rounds": result.get("rounds", 0),
+        "sub_agents": worker_stats,
     }

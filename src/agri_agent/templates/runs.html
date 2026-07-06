@@ -102,6 +102,25 @@
                                        padding: 4px 12px; color: #6b7280; }
 
     .empty-state { text-align: center; padding: 48px 24px; color: #9ca3af; font-size: 14px; }
+
+    .sub-agents-wrap { margin-top: 14px; }
+    .sub-agent-row { display: flex; align-items: flex-start; gap: 12px;
+                     padding: 10px 14px; background: #fff; border: 1px solid #e5e7eb;
+                     border-radius: 8px; margin-bottom: 8px; }
+    .sub-agent-row:last-child { margin-bottom: 0; }
+    .sub-agent-badge { flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%;
+                       background: #e0e7ff; color: #4338ca; font-size: 11px; font-weight: 700;
+                       display: flex; align-items: center; justify-content: center; }
+    .sub-agent-body { flex: 1; min-width: 0; }
+    .sub-agent-name { font-size: 12px; font-weight: 700; color: #1a1a2e; margin-bottom: 2px; }
+    .sub-agent-instruction { font-size: 11px; color: #6b7280; white-space: nowrap;
+                              overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
+    .sub-agent-metrics { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11px; color: #374151; }
+    .sub-agent-metrics span { display: flex; align-items: center; gap: 3px; }
+    .sub-agent-link { flex-shrink: 0; font-size: 11px; font-weight: 600; padding: 3px 8px;
+                      border-radius: 5px; text-decoration: none;
+                      background: #f5f3ff; color: #6d28d9; border: 1px solid #c4b5fd; }
+    .sub-agent-link:hover { background: #ede9fe; }
     .empty-icon  { font-size: 36px; margin-bottom: 10px; }
 
     .spinner { width: 12px; height: 12px; border: 2px solid #c7d2fe;
@@ -223,6 +242,34 @@
               </div>
               <div class="detail-label">Output</div>
               <div class="output-wrap" id="output-{{ run.id }}" data-raw='{{ run.output_text | tojson }}'></div>
+
+              {% if run.sub_agents %}
+              <div class="detail-label" style="margin-top:16px;">Sub-agents called ({{ run.sub_agents | length }})</div>
+              <div class="sub-agents-wrap">
+                {% for sa in run.sub_agents %}
+                <div class="sub-agent-row">
+                  <div class="sub-agent-badge">{{ sa.order }}</div>
+                  <div class="sub-agent-body">
+                    <div class="sub-agent-name">{{ sa.name }}</div>
+                    {% if sa.instruction %}
+                    <div class="sub-agent-instruction" title="{{ sa.instruction }}">{{ sa.instruction }}</div>
+                    {% endif %}
+                    <div class="sub-agent-metrics">
+                      <span>⬆ {{ sa.input_tokens }} in</span>
+                      <span>⬇ {{ sa.output_tokens }} out</span>
+                      <span>Σ {{ sa.input_tokens + sa.output_tokens }} tokens</span>
+                      {% if sa.cost_usd is defined and sa.cost_usd %}
+                      <span>💰 ${{ "%.4f" | format(sa.cost_usd) }}</span>
+                      {% endif %}
+                    </div>
+                  </div>
+                  {% if sa.langsmith_trace_url %}
+                  <a class="sub-agent-link" href="{{ sa.langsmith_trace_url }}" target="_blank">📊 Trace ↗</a>
+                  {% endif %}
+                </div>
+                {% endfor %}
+              </div>
+              {% endif %}
             </div>
           </td>
         </tr>
