@@ -674,7 +674,96 @@ Each Propguru page route passes the correct `active_page` key to the template (e
 
 ---
 
-## 15. Implementation Considerations
+## 15. Implementation Phases
+
+Dependencies drive the order: database models must exist before tools can query them; tools must be registered before YAML agents can use them; agents must work before the UI has anything meaningful to show; the refinement canvas depends on all of the above being stable.
+
+---
+
+### Phase 1 — Data Foundation
+**Goal:** The database exists, master data is browsable, seed/reset works. No agents yet.
+
+**Why first:** Every subsequent piece — tools, agents, UI — depends on the DB schema and seed data being in place. Phase 1 can be independently verified by browsing the master data page and running the seed endpoint.
+
+| Task | Files |
+|---|---|
+| DB migrations 016, 017, 018 | `alembic/versions/016_propguru_master.py` `017_propguru_deals.py` `018_propguru_evaluation.py` |
+| ORM models | Append all 7 Propguru models to `src/agri_agent/db/models.py` |
+| Simulation seed + reset endpoints | `src/agri_agent/api/routes/propguru/simulation.py` |
+| Master data API routes | `src/agri_agent/api/routes/propguru/master.py` (CPs, criteria, properties) |
+| Navigation — `base.html` Propguru block | `src/agri_agent/templates/base.html` |
+| `settings.py` default update | `companies_to_show` default → `"sandhar,fundly,propguru"` |
+| Master Data UI page | `src/agri_agent/templates/propguru/master.html` |
+| Simulation UI page | `src/agri_agent/templates/propguru/simulation.html` |
+| Page routes for master + simulation | `src/agri_agent/api/routes/propguru/pages.py` |
+| Register propguru routers in app | `src/agri_agent/api/app.py` |
+
+**Verification:** Run `POST /api/v1/propguru/simulation/seed` → visit `/propguru/master` → all 30 criteria, 8 channel partners, 10 properties are visible. Propguru section appears in sidebar when `COMPANIES_TO_SHOW` includes `propguru`.
+
+---
+
+### Phase 2 — Agent Pipeline + Deal Flow
+**Goal:** Create a deal, trigger the evaluation agent pipeline, review the output, approve it. Full HITL flow end-to-end. No refinement canvas yet.
+
+**Why second:** Agent tools call the deal and evaluation API endpoints, so those routes must exist. The supervisor + 4 worker agents then use those tools. The UI surfaces the results.
+
+| Task | Files |
+|---|---|
+| Deal API routes (CRUD + stage transitions) | `src/agri_agent/api/routes/propguru/deals.py` |
+| Evaluation API routes (trigger, get report, scores, approve, reject) | `src/agri_agent/api/routes/propguru/evaluation.py` |
+| Agent tools — deals | `src/agri_agent/agent/tools/propguru/deals.py` (`propguru_get_deal`, `propguru_get_property_details`, `propguru_list_deals`) |
+| Agent tools — evaluation | `src/agri_agent/agent/tools/propguru/evaluation.py` (`propguru_get_criteria`, `propguru_get_market_comp`, `propguru_save_evaluation_score`, `propguru_calculate_price`, `propguru_propose_evaluation`, `propguru_create_evaluation_report`) |
+| Register propguru tools in tool registry | `src/agri_agent/agent/tools/__init__.py` |
+| Agent YAML configs — 5 agents | `propguru-evaluation-supervisor.yaml` `propguru-data-collector.yaml` `propguru-market-analyst.yaml` `propguru-scorer.yaml` `propguru-evaluator.yaml` |
+| Deals UI page | `src/agri_agent/templates/propguru/deals.html` |
+| Evaluation UI page (trigger + review + approve/reject, no canvas) | `src/agri_agent/templates/propguru/evaluation.html` |
+| Dashboard UI page | `src/agri_agent/templates/propguru/dashboard.html` |
+| Page routes for dashboard, deals, evaluation | `src/agri_agent/api/routes/propguru/pages.py` (extend from Phase 1) |
+| Scenarios s1-normal, s2-luxury, s3-missing-data, s5-market-drop | `src/agri_agent/api/routes/propguru/simulation.py` (extend from Phase 1) |
+
+**Verification:** Trigger scenario s1-normal → seed a deal → click "Start Evaluation" → watch agent pipeline progress → evaluation report appears with 30 scores and a recommended price → click Approve → deal stage advances to `evaluation_done` → `target_acquisition_price` set on the deal.
+
+---
+
+### Phase 3 — Refinement Canvas + Tests
+**Goal:** Analyst can open a conversational canvas on any pending evaluation, adjust individual scores through chat, set a final price override, and approve from within the canvas. Full test coverage.
+
+**Why last:** The refinement canvas depends on the evaluation agent and HITL action both being stable (Phase 2). The refiner tools call the same evaluation endpoints added in Phase 2 — no new API routes needed.
+
+| Task | Files |
+|---|---|
+| Refinement tools | `src/agri_agent/agent/tools/propguru/evaluation_refiner.py` (`propguru_refine_get_evaluation`, `propguru_refine_update_score`, `propguru_refine_explain_score`, `propguru_refine_update_final_price`) |
+| Register refinement tools | `src/agri_agent/agent/tools/__init__.py` |
+| Refinement agent YAML | `agents/configs/propguru-evaluation-refiner.yaml` |
+| Feature flags on evaluator YAML | `enable_refinement: true`, `refinement_agent: propguru-evaluation-refiner`, `refinement_preview: propguru-evaluation` |
+| Preview partial template | `src/agri_agent/templates/propguru/_refine_preview_propguru-evaluation.html` |
+| Preview server route | `src/agri_agent/api/routes/propguru/pages.py` — `GET /propguru/evaluation/{report_id}/refine-preview` |
+| Refinement canvas UI (SSE chat, deep-link, Back button) | `src/agri_agent/templates/propguru/evaluation.html` (extend from Phase 2) |
+| Scenario s4-analyst-override | `src/agri_agent/api/routes/propguru/simulation.py` |
+| Test suite | `tests/test_propguru_evaluation.py` `tests/test_propguru_simulation.py` |
+
+**Verification:** Open any `pending_review` evaluation → click "✦ Refine with AI" → canvas opens with score breakdown on the left and chat on the right → type "Metro station is only 0.6 km" → agent updates CRIT-011 score → recommended price updates in preview → click Approve → session saved, deal approved. URL contains `?refine=<action_id>`. Browser Back closes the canvas without ending the session.
+
+---
+
+### Dependency Summary
+
+```
+Phase 1 ──► Phase 2 ──► Phase 3
+  │              │            │
+  DB models      Tools        Refiner tools
+  Migrations     Agents       Refiner YAML
+  Seed data      Routes       Canvas UI
+  Master UI      Deal UI      Preview partial
+  Nav change     Eval UI      Tests
+                 Dashboard
+```
+
+Nothing in Phase 2 can start until migrations and the seed function are working (Phase 1). Nothing in Phase 3 can start until the base evaluation pipeline produces a valid `AgentAction` in the inbox (Phase 2). Each phase is independently demonstrable before the next begins.
+
+---
+
+## 16. Implementation Considerations
 
 1. **No custom scoring algorithm in code.** The formula (`score_factor × max_premium`) is stored in constants. Weights are in the DB (editable per criteria record). This keeps the "trade secret" aspect configurable without code changes.
 
