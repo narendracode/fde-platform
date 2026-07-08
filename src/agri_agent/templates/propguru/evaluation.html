@@ -187,6 +187,8 @@
     <div class="stage-tab" data-stage="lead" onclick="setStage(this, 'lead')">Not Evaluated</div>
     <div class="stage-tab" data-stage="evaluation_pending" onclick="setStage(this, 'evaluation_pending')">Evaluation Pending</div>
     <div class="stage-tab" data-stage="evaluation_done" onclick="setStage(this, 'evaluation_done')">Evaluation Done</div>
+    <div class="stage-tab" data-stage="listed" onclick="setStage(this, 'listed')">Listed</div>
+    <div class="stage-tab" data-stage="sold" onclick="setStage(this, 'sold')">Sold</div>
   </div>
 
   <!-- Evaluation lifecycle legend -->
@@ -435,10 +437,11 @@ function renderDealsTable() {
         const prop = d.property || {};
         const cp   = d.sourcing_cp || {};
         const size = prop.bedrooms ? prop.bedrooms + ' BHK' : (prop.carpet_area ? prop.carpet_area + ' sqft' : '');
+        const hasReport = ['evaluation_pending','evaluation_done','listed','sold'].includes(d.stage);
         const actionHtml = d.stage === 'lead'
           ? `<button class="btn btn-success" style="font-size:11px;padding:5px 12px"
                onclick="event.stopPropagation();triggerEval('${d.id}','${d.deal_code}',this)">▶ Evaluate</button>`
-          : (d.stage === 'evaluation_pending' || d.stage === 'evaluation_done')
+          : hasReport
             ? `<span style="font-size:11px;color:#6b7280">click row to view</span>`
             : '—';
         return `<tr class="deal-row" id="row-${d.id}" onclick="selectDeal('${d.id}')">
@@ -498,10 +501,13 @@ async function selectDeal(dealId) {
     const stage = _currentDeal?.stage || '';
     const emptyEl = document.getElementById('empty-state');
     emptyEl.style.display = 'block';
+    const code = _currentDeal?.deal_code || dealId;
     if (stage === 'lead') {
-      emptyEl.textContent = `No evaluation report yet for ${_currentDeal?.deal_code}. Click "▶ Evaluate" in the table above to start the AI pipeline.`;
+      emptyEl.textContent = `No evaluation report yet for ${code}. Click "▶ Evaluate" in the table above to start the AI pipeline.`;
+    } else if (['evaluation_done', 'listed', 'sold'].includes(stage)) {
+      emptyEl.innerHTML = `<strong>${code}</strong> is in <em>${stage}</em> stage but has no evaluation report on record — it was likely advanced to this stage manually or via seed data, bypassing the AI pipeline. To generate a report, the deal stage would need to be reset to <em>lead</em> first.`;
     } else {
-      emptyEl.textContent = `No evaluation report found for this deal.`;
+      emptyEl.textContent = `No evaluation report found for ${code}.`;
     }
   }
 }
