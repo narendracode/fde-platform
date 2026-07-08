@@ -103,14 +103,22 @@ def _worker_node_fn(worker_agent, worker_name: str, worker_config: AgentConfig):
             parts.append(f"[Feature flags]\n{flag_lines}")
         parts.append(f"[Task]\n{instruction}")
 
-        result = worker_agent.invoke({
-            "messages": [HumanMessage(content="\n\n".join(parts))]
-        })
+        from langchain_core.runnables import RunnableConfig as _RC
+        result = worker_agent.invoke(
+            {"messages": [HumanMessage(content="\n\n".join(parts))]},
+            config=_RC(recursion_limit=worker_config.guardrails.max_iterations),
+        )
 
         # Extract final AI text from the worker's message list
         ai_msgs = [m for m in result["messages"]
                    if m.__class__.__name__ == "AIMessage" and m.content]
         result_text = ai_msgs[-1].content if ai_msgs else "(no output)"
+        # Log whether tools were used
+        has_tool_calls = any(
+            isinstance(m.content, list) for m in result["messages"]
+            if m.__class__.__name__ in ("AIMessage", "ToolMessage")
+        )
+        _log.info("worker '%s' tool_calls_used=%s msg_count=%d", worker_name, has_tool_calls, len(result["messages"]))
 
         # Sum token usage from usage_metadata on every AI message in the worker result.
         # LangChain populates usage_metadata for Anthropic and OpenAI models.

@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+{% block title %}Deals — Propguru{% endblock %}
+
+{% block head_extra %}
+<style>
+  .main { max-width: 1100px; margin: 0 auto; padding: 24px 28px; }
+  h2 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  .subtitle { color: #6b7280; font-size: 13px; margin-bottom: 24px; }
+  .toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 18px; flex-wrap: wrap; }
+  .filter-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+  .filter-tab { padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 600;
+                cursor: pointer; border: 1px solid #e5e7eb; background: #fff; color: #6b7280;
+                transition: background .15s, color .15s; }
+  .filter-tab.active { background: #7c3aed; color: #fff; border-color: #7c3aed; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px;
+         border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer;
+         border: none; transition: opacity .15s; }
+  .btn:hover { opacity: .85; }
+  .btn-primary { background: #7c3aed; color: #fff; }
+  .btn-sm { padding: 5px 12px; font-size: 12px; }
+  .btn-success { background: #16a34a; color: #fff; }
+  .btn-outline { background: #fff; color: #374151; border: 1px solid #d1d5db; }
+  .card { background: #fff; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.07);
+          border: 1px solid #e5e7eb; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; padding: 10px 14px; font-size: 11px; font-weight: 700; color: #9ca3af;
+       text-transform: uppercase; background: #fafafa; border-bottom: 1px solid #eee; white-space: nowrap; }
+  td { padding: 12px 14px; border-bottom: 1px solid #f5f5f5; font-size: 13px; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #fafafa; }
+  .badge { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 11px; font-weight: 700; }
+  .badge-lead { background: #f3f4f6; color: #6b7280; }
+  .badge-eval-pending { background: #fef3c7; color: #92400e; }
+  .badge-eval-done { background: #dbeafe; color: #1e40af; }
+  .badge-listed { background: #ede9fe; color: #5b21b6; }
+  .badge-sold { background: #dcfce7; color: #14532d; }
+  .badge-lost { background: #fee2e2; color: #991b1b; }
+  .empty { color: #9ca3af; font-size: 13px; text-align: center; padding: 48px; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #e5e7eb;
+             border-top-color: #7c3aed; border-radius: 50%; animation: spin .6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #toast { position: fixed; bottom: 24px; right: 24px; background: #1a1a2e; color: white;
+           padding: 10px 18px; border-radius: 8px; font-size: 13px; display: none;
+           box-shadow: 0 4px 12px rgba(0,0,0,.2); z-index: 999; }
+
+  /* Create modal */
+  .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4);
+                    z-index: 200; align-items: center; justify-content: center; }
+  .modal-backdrop.open { display: flex; }
+  .modal { background: #fff; border-radius: 12px; padding: 28px; width: 480px;
+           box-shadow: 0 12px 40px rgba(0,0,0,.2); }
+  .modal h3 { font-size: 16px; font-weight: 700; margin-bottom: 18px; }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12px; font-weight: 600; color: #374151; margin-bottom: 5px; }
+  .field select, .field input, .field textarea {
+    width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 7px;
+    font-size: 13px; outline: none; }
+  .field select:focus, .field input:focus { border-color: #7c3aed; }
+  .modal-footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="main">
+  <h2>Deals</h2>
+  <p class="subtitle">All property acquisition deals with status and evaluation actions</p>
+
+  <div class="toolbar">
+    <div class="filter-tabs">
+      <div class="filter-tab active" onclick="setFilter('')">All</div>
+      <div class="filter-tab" onclick="setFilter('lead')">Lead</div>
+      <div class="filter-tab" onclick="setFilter('evaluation_pending')">Eval Pending</div>
+      <div class="filter-tab" onclick="setFilter('evaluation_done')">Evaluated</div>
+      <div class="filter-tab" onclick="setFilter('listed')">Listed</div>
+      <div class="filter-tab" onclick="setFilter('sold')">Sold</div>
+    </div>
+    <button class="btn btn-primary" onclick="openCreateModal()" style="margin-left:auto">
+      + New Deal
+    </button>
+  </div>
+
+  <div class="card">
+    <div id="deals-table"><div class="empty"><span class="spinner"></span></div></div>
+  </div>
+</div>
+
+<!-- Create Deal Modal -->
+<div class="modal-backdrop" id="create-modal">
+  <div class="modal">
+    <h3>New Deal</h3>
+    <div class="field">
+      <label>Property</label>
+      <select id="f-property"><option value="">Loading…</option></select>
+    </div>
+    <div class="field">
+      <label>Sourcing Channel Partner</label>
+      <select id="f-cp"><option value="">Loading…</option></select>
+    </div>
+    <div class="field">
+      <label>Lead Source</label>
+      <select id="f-source">
+        <option value="channel_partner">Channel Partner</option>
+        <option value="referral">Referral</option>
+        <option value="direct">Direct</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Notes (optional)</label>
+      <textarea id="f-notes" rows="2" placeholder="Any initial notes…"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeCreateModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitCreate()" id="create-submit-btn">Create Deal</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const H = { 'X-API-Key': '{{ api_key }}', 'Content-Type': 'application/json' };
+let _activeFilter = '';
+
+const STAGE_CLASSES = {
+  lead: 'badge-lead',
+  evaluation_pending: 'badge-eval-pending',
+  evaluation_done: 'badge-eval-done',
+  listed: 'badge-listed',
+  sold: 'badge-sold',
+  lost: 'badge-lost',
+};
+const STAGE_LABELS = {
+  lead: 'Lead',
+  evaluation_pending: 'Eval Pending',
+  evaluation_done: 'Eval Done',
+  listed: 'Listed',
+  sold: 'Sold',
+  lost: 'Lost',
+};
+
+function toast(msg, ok = true) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = ok ? '#1a1a2e' : '#dc2626';
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 3500);
+}
+
+function setFilter(stage) {
+  _activeFilter = stage;
+  document.querySelectorAll('.filter-tab').forEach((el, i) => {
+    const tabs = ['', 'lead', 'evaluation_pending', 'evaluation_done', 'listed', 'sold'];
+    el.classList.toggle('active', tabs[i] === stage);
+  });
+  loadDeals();
+}
+
+async function loadDeals() {
+  document.getElementById('deals-table').innerHTML = '<div class="empty"><span class="spinner"></span></div>';
+  const params = _activeFilter ? `?stage=${_activeFilter}` : '';
+  const r = await fetch(`/api/v1/propguru/deals${params}`, { headers: H });
+  if (!r.ok) { document.getElementById('deals-table').innerHTML = '<div class="empty">Failed to load</div>'; return; }
+  const data = await r.json();
+
+  if (!data.length) {
+    document.getElementById('deals-table').innerHTML = '<div class="empty">No deals found — use New Deal or run a simulation scenario</div>';
+    return;
+  }
+
+  document.getElementById('deals-table').innerHTML = `
+    <table>
+      <thead><tr>
+        <th>Deal</th><th>Property</th><th>Type</th><th>Locality</th>
+        <th>Channel Partner</th><th>Stage</th><th>Acq. Price</th><th>Actions</th>
+      </tr></thead>
+      <tbody>${data.map(d => {
+        const prop = d.property || {};
+        const cp = d.sourcing_cp || {};
+        const price = d.target_acquisition_price;
+        const priceFmt = price ? '₹' + (price/100000).toFixed(1) + 'L' : '—';
+        const canEval = ['lead', 'evaluation_pending'].includes(d.stage);
+        return `<tr>
+          <td><strong>${d.deal_code}</strong></td>
+          <td>${prop.property_code || '—'}</td>
+          <td style="text-transform:capitalize">${(prop.property_type || '').replace('_', ' ')}</td>
+          <td>${prop.locality || '—'} <span style="color:#9ca3af;font-size:11px">${prop.bedrooms ? prop.bedrooms + 'BHK' : ''}</span></td>
+          <td>${cp.name || '—'}</td>
+          <td><span class="badge ${STAGE_CLASSES[d.stage] || ''}">${STAGE_LABELS[d.stage] || d.stage}</span></td>
+          <td>${priceFmt}</td>
+          <td>
+            ${canEval ? `<button class="btn btn-success btn-sm" onclick="triggerEval('${d.id}', '${d.deal_code}', this)">▶ Evaluate</button>` : ''}
+            ${d.stage === 'evaluation_pending' || d.stage === 'evaluation_done' ? `<a href="/propguru/evaluation?deal_id=${d.id}" class="btn btn-outline btn-sm">View Report</a>` : ''}
+          </td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>`;
+}
+
+async function triggerEval(dealId, dealCode, btn) {
+  if (!confirm(`Start evaluation pipeline for ${dealCode}?`)) return;
+  btn.disabled = true;
+  btn.textContent = '…';
+  const r = await fetch(`/api/v1/propguru/deals/${dealId}/evaluate`, {
+    method: 'POST',
+    headers: H,
+    body: JSON.stringify({}),
+  });
+  const d = await r.json();
+  if (r.ok) {
+    toast(`Evaluation started for ${dealCode} — Run #${d.run_id.slice(0,8)}`);
+    setTimeout(loadDeals, 1200);
+  } else {
+    toast(d.detail || 'Failed to start evaluation', false);
+    btn.disabled = false;
+    btn.textContent = '▶ Evaluate';
+  }
+}
+
+// Create modal
+async function openCreateModal() {
+  const [propsResp, cpsResp] = await Promise.all([
+    fetch('/api/v1/propguru/properties', { headers: H }),
+    fetch('/api/v1/propguru/channel-partners?status=active', { headers: H }),
+  ]);
+  const props = await propsResp.json();
+  const cps = await cpsResp.json();
+
+  document.getElementById('f-property').innerHTML = props.map(p =>
+    `<option value="${p.id}">${p.property_code} — ${p.locality} (${p.bedrooms}BHK)</option>`
+  ).join('');
+  document.getElementById('f-cp').innerHTML = cps.map(c =>
+    `<option value="${c.id}">${c.cp_code} — ${c.name} (${c.commission_pct}%)</option>`
+  ).join('');
+  document.getElementById('create-modal').classList.add('open');
+}
+
+function closeCreateModal() {
+  document.getElementById('create-modal').classList.remove('open');
+}
+
+async function submitCreate() {
+  const btn = document.getElementById('create-submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'Creating…';
+  const r = await fetch('/api/v1/propguru/deals', {
+    method: 'POST',
+    headers: H,
+    body: JSON.stringify({
+      property_id: document.getElementById('f-property').value,
+      sourcing_cp_id: document.getElementById('f-cp').value,
+      lead_source: document.getElementById('f-source').value,
+      notes: document.getElementById('f-notes').value || null,
+    }),
+  });
+  const d = await r.json();
+  btn.disabled = false;
+  btn.textContent = 'Create Deal';
+  if (r.ok) {
+    closeCreateModal();
+    toast(`Deal ${d.deal_code} created`);
+    loadDeals();
+  } else {
+    toast(d.detail || 'Failed to create deal', false);
+  }
+}
+
+// Close modal on backdrop click
+document.getElementById('create-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeCreateModal();
+});
+
+loadDeals();
+</script>
+{% endblock %}

@@ -1,0 +1,417 @@
+{% extends "base.html" %}
+{% block title %}Evaluation — Propguru{% endblock %}
+
+{% block head_extra %}
+<style>
+  .main { max-width: 1100px; margin: 0 auto; padding: 24px 28px; }
+  h2 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  .subtitle { color: #6b7280; font-size: 13px; margin-bottom: 24px; }
+
+  /* Deal selector */
+  .deal-selector { display: flex; gap: 12px; align-items: center; margin-bottom: 24px; }
+  .deal-selector select { flex: 1; padding: 9px 12px; border: 1px solid #d1d5db;
+                           border-radius: 7px; font-size: 13px; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px;
+         border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer;
+         border: none; transition: opacity .15s; }
+  .btn:hover:not(:disabled) { opacity: .85; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-primary { background: #7c3aed; color: #fff; }
+  .btn-success { background: #16a34a; color: #fff; }
+  .btn-danger  { background: #dc2626; color: #fff; }
+  .btn-outline { background: #fff; color: #374151; border: 1px solid #d1d5db; }
+
+  /* Run status */
+  .run-status { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px;
+                padding: 12px 16px; margin-bottom: 20px; font-size: 13px; color: #92400e;
+                display: none; }
+  .run-status.show { display: flex; align-items: center; gap: 10px; }
+
+  /* Report header */
+  .report-area { display: none; }
+  .report-area.show { display: block; }
+  .report-header { background: #fff; border-radius: 10px; border: 1px solid #e5e7eb;
+                   padding: 22px 26px; margin-bottom: 20px;
+                   box-shadow: 0 1px 4px rgba(0,0,0,.07); }
+  .price-display { display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px; }
+  .price-main { font-size: 32px; font-weight: 800; color: #1a1a2e; }
+  .price-sub { font-size: 14px; color: #6b7280; }
+  .meta-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 18px; }
+  .meta-card { background: #f9fafb; border-radius: 8px; padding: 12px 14px; }
+  .meta-label { font-size: 11px; color: #9ca3af; font-weight: 600; text-transform: uppercase;
+                letter-spacing: .4px; margin-bottom: 4px; }
+  .meta-value { font-size: 16px; font-weight: 700; }
+  .confidence-high { color: #16a34a; }
+  .confidence-medium { color: #d97706; }
+  .confidence-low { color: #dc2626; }
+  .reasoning-box { background: #f0f9ff; border-left: 3px solid #0ea5e9; border-radius: 6px;
+                   padding: 12px 16px; font-size: 13px; color: #0c4a6e; line-height: 1.6;
+                   margin-bottom: 16px; white-space: pre-wrap; }
+  .action-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+  /* Scores panel */
+  .scores-section { background: #fff; border-radius: 10px; border: 1px solid #e5e7eb;
+                    padding: 20px 24px; margin-bottom: 20px;
+                    box-shadow: 0 1px 4px rgba(0,0,0,.07); }
+  .scores-title { font-size: 15px; font-weight: 700; margin-bottom: 14px; }
+  .category-block { margin-bottom: 18px; }
+  .cat-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .cat-label { font-size: 11px; font-weight: 800; text-transform: uppercase;
+               letter-spacing: .5px; color: #5b21b6; }
+  .cat-count { font-size: 11px; color: #9ca3af; }
+  table.scores { width: 100%; border-collapse: collapse; }
+  table.scores th { text-align: left; padding: 7px 10px; font-size: 10px; font-weight: 700;
+                    color: #9ca3af; text-transform: uppercase; border-bottom: 1px solid #f0f0f0; }
+  table.scores td { padding: 9px 10px; border-bottom: 1px solid #f9f9f9; font-size: 12px; }
+  table.scores tr:last-child td { border-bottom: none; }
+  .score-bar-wrap { display: flex; align-items: center; gap: 6px; }
+  .score-bar-outer { flex: 1; height: 6px; background: #e5e7eb; border-radius: 3px; max-width: 80px; }
+  .score-bar-inner { height: 6px; border-radius: 3px; background: #7c3aed; }
+  .source-agent { color: #7c3aed; font-size: 10px; font-weight: 700; }
+  .source-analyst { color: #16a34a; font-size: 10px; font-weight: 700; }
+
+  /* Badge */
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 11px; font-weight: 700; }
+  .badge-draft { background: #f3f4f6; color: #6b7280; }
+  .badge-pending { background: #fef3c7; color: #92400e; }
+  .badge-approved { background: #dcfce7; color: #14532d; }
+  .badge-rejected { background: #fee2e2; color: #991b1b; }
+
+  .empty { color: #9ca3af; font-size: 13px; text-align: center; padding: 48px; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #e5e7eb;
+             border-top-color: #7c3aed; border-radius: 50%; animation: spin .6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #toast { position: fixed; bottom: 24px; right: 24px; background: #1a1a2e; color: white;
+           padding: 10px 18px; border-radius: 8px; font-size: 13px; display: none;
+           box-shadow: 0 4px 12px rgba(0,0,0,.2); z-index: 999; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="main">
+  <h2>Property Evaluation</h2>
+  <p class="subtitle">Review evaluation reports, approve or reject, and refine with AI</p>
+
+  <!-- Deal selector -->
+  <div class="deal-selector">
+    <select id="deal-select" onchange="onDealChange()">
+      <option value="">— Select a deal —</option>
+    </select>
+    <button class="btn btn-primary" onclick="triggerEvaluation()" id="eval-btn" disabled>
+      ▶ Start Evaluation
+    </button>
+  </div>
+
+  <!-- Run status bar -->
+  <div class="run-status" id="run-status">
+    <span class="spinner"></span>
+    <span id="run-status-text">Evaluation pipeline running…</span>
+  </div>
+
+  <!-- Report area -->
+  <div class="report-area" id="report-area">
+
+    <!-- Report header -->
+    <div class="report-header">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+        <div>
+          <div style="font-size:12px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">
+            <span id="rpt-deal-code">—</span> · Evaluation Report
+          </div>
+          <div id="rpt-status-badge"></div>
+        </div>
+        <div style="font-size:12px;color:#9ca3af" id="rpt-date">—</div>
+      </div>
+
+      <div class="price-display">
+        <div class="price-main" id="rpt-price">—</div>
+        <div class="price-sub">recommended acquisition price</div>
+      </div>
+
+      <div class="meta-grid">
+        <div class="meta-card">
+          <div class="meta-label">Base Price</div>
+          <div class="meta-value" id="rpt-base">—</div>
+        </div>
+        <div class="meta-card">
+          <div class="meta-label">Score Factor</div>
+          <div class="meta-value" id="rpt-score">—</div>
+        </div>
+        <div class="meta-card">
+          <div class="meta-label">Premium</div>
+          <div class="meta-value" id="rpt-premium">—</div>
+        </div>
+        <div class="meta-card">
+          <div class="meta-label">Confidence</div>
+          <div class="meta-value" id="rpt-confidence">—</div>
+        </div>
+      </div>
+
+      <div class="reasoning-box" id="rpt-reasoning" style="display:none"></div>
+
+      <div class="action-row" id="action-row">
+        <button class="btn btn-success" id="approve-btn" onclick="approveReport()">✓ Approve</button>
+        <button class="btn btn-danger" id="reject-btn" onclick="rejectReport()">✗ Reject</button>
+        <span style="color:#9ca3af;font-size:12px;margin-left:6px">Approval sets deal stage → evaluation_done</span>
+      </div>
+    </div>
+
+    <!-- Scores -->
+    <div class="scores-section">
+      <div class="scores-title">Evaluation Scores (30 Criteria)</div>
+      <div id="scores-body"><div class="empty"><span class="spinner"></span></div></div>
+    </div>
+
+  </div>
+
+  <!-- Empty state -->
+  <div id="empty-state" class="empty" style="background:#fff;border-radius:10px;border:1px solid #e5e7eb">
+    Select a deal above to view or start an evaluation
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const H = { 'X-API-Key': '{{ api_key }}', 'Content-Type': 'application/json' };
+let _currentDeal = null;
+let _currentReport = null;
+let _pollTimer = null;
+
+const CAT_LABELS = { amenity: 'Amenities', location: 'Location Connectivity', property: 'Property Attributes', society: 'Building / Society' };
+const STATUS_BADGE = {
+  draft: '<span class="badge badge-draft">Draft</span>',
+  pending_review: '<span class="badge badge-pending">Pending Review</span>',
+  approved: '<span class="badge badge-approved">Approved</span>',
+  rejected: '<span class="badge badge-rejected">Rejected</span>',
+};
+
+function toast(msg, ok = true) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = ok ? '#1a1a2e' : '#dc2626';
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 3500);
+}
+
+function fmt(n) { return n != null ? '₹' + (n/100000).toFixed(1) + 'L' : '—'; }
+
+async function loadDealSelect() {
+  const r = await fetch('/api/v1/propguru/deals', { headers: H });
+  if (!r.ok) return;
+  const deals = await r.json();
+  const sel = document.getElementById('deal-select');
+  sel.innerHTML = '<option value="">— Select a deal —</option>' + deals.map(d => {
+    const prop = d.property || {};
+    return `<option value="${d.id}">${d.deal_code} — ${prop.locality || ''} (${d.stage})</option>`;
+  }).join('');
+
+  // Auto-select from URL param
+  const params = new URLSearchParams(window.location.search);
+  const dealParam = params.get('deal_id');
+  if (dealParam) {
+    sel.value = dealParam;
+    onDealChange();
+  }
+}
+
+async function onDealChange() {
+  const dealId = document.getElementById('deal-select').value;
+  clearInterval(_pollTimer);
+  _currentDeal = null;
+  _currentReport = null;
+  document.getElementById('report-area').classList.remove('show');
+  document.getElementById('empty-state').style.display = 'block';
+  document.getElementById('run-status').classList.remove('show');
+  document.getElementById('eval-btn').disabled = !dealId;
+
+  if (!dealId) return;
+
+  // Load deal
+  const dr = await fetch(`/api/v1/propguru/deals/${dealId}`, { headers: H });
+  if (!dr.ok) return;
+  _currentDeal = await dr.json();
+
+  // Try to load evaluation report
+  const er = await fetch(`/api/v1/propguru/deals/${dealId}/evaluation`, { headers: H });
+  if (er.ok) {
+    _currentReport = await er.json();
+    renderReport(_currentReport);
+  } else {
+    document.getElementById('empty-state').style.display = 'block';
+    document.getElementById('empty-state').textContent = `No evaluation report for ${_currentDeal.deal_code} yet. Click "Start Evaluation" to run the agent pipeline.`;
+  }
+}
+
+async function triggerEvaluation() {
+  if (!_currentDeal) return;
+  if (!confirm(`Start evaluation pipeline for ${_currentDeal.deal_code}?`)) return;
+
+  const btn = document.getElementById('eval-btn');
+  btn.disabled = true;
+  btn.textContent = '…';
+
+  const r = await fetch(`/api/v1/propguru/deals/${_currentDeal.id}/evaluate`, {
+    method: 'POST',
+    headers: H,
+    body: JSON.stringify({}),
+  });
+  const d = await r.json();
+  btn.disabled = false;
+  btn.innerHTML = '▶ Start Evaluation';
+
+  if (r.ok) {
+    toast(`Pipeline started — Run ${d.run_id.slice(0,8)}`);
+    showRunStatus('Evaluation pipeline running…');
+    // Poll for the report to appear
+    _pollTimer = setInterval(() => pollForReport(_currentDeal.id), 5000);
+  } else {
+    toast(d.detail || 'Failed to start evaluation', false);
+    btn.disabled = false;
+  }
+}
+
+function showRunStatus(msg) {
+  const el = document.getElementById('run-status');
+  document.getElementById('run-status-text').textContent = msg;
+  el.classList.add('show');
+  document.getElementById('empty-state').style.display = 'none';
+}
+
+async function pollForReport(dealId) {
+  const er = await fetch(`/api/v1/propguru/deals/${dealId}/evaluation`, { headers: H });
+  if (er.ok) {
+    _currentReport = await er.json();
+    if (_currentReport.status !== 'draft') {
+      clearInterval(_pollTimer);
+      document.getElementById('run-status').classList.remove('show');
+    }
+    renderReport(_currentReport);
+  }
+}
+
+async function renderReport(report) {
+  document.getElementById('empty-state').style.display = 'none';
+  document.getElementById('report-area').classList.add('show');
+
+  const dealCode = _currentDeal ? _currentDeal.deal_code : '—';
+  document.getElementById('rpt-deal-code').textContent = dealCode;
+  document.getElementById('rpt-status-badge').innerHTML = STATUS_BADGE[report.status] || report.status;
+  document.getElementById('rpt-date').textContent = report.created_at ? new Date(report.created_at).toLocaleDateString('en-IN') : '';
+
+  document.getElementById('rpt-price').textContent = report.recommended_price
+    ? `₹${(report.recommended_price / 100000).toFixed(1)}L`
+    : '—';
+  document.getElementById('rpt-base').textContent = fmt(report.base_price);
+  document.getElementById('rpt-score').textContent = report.score_factor != null
+    ? `${(report.score_factor * 100).toFixed(1)}%` : '—';
+  document.getElementById('rpt-premium').textContent = report.price_premium_pct != null
+    ? `+${report.price_premium_pct}%` : '—';
+
+  const conf = report.confidence || '—';
+  const confEl = document.getElementById('rpt-confidence');
+  confEl.textContent = conf;
+  confEl.className = `meta-value confidence-${conf}`;
+
+  const reasoning = report.agent_reasoning;
+  const rb = document.getElementById('rpt-reasoning');
+  if (reasoning) { rb.textContent = reasoning; rb.style.display = 'block'; }
+  else { rb.style.display = 'none'; }
+
+  // Action row
+  const actionRow = document.getElementById('action-row');
+  if (report.status === 'approved' || report.status === 'rejected') {
+    actionRow.style.display = 'none';
+  } else {
+    actionRow.style.display = 'flex';
+  }
+
+  // Load scores
+  await loadScores(report.id);
+}
+
+async function loadScores(reportId) {
+  const r = await fetch(`/api/v1/propguru/evaluations/${reportId}/scores`, { headers: H });
+  if (!r.ok) { document.getElementById('scores-body').innerHTML = '<div class="empty">Could not load scores</div>'; return; }
+  const data = await r.json();
+
+  const cats = ['amenity', 'location', 'property', 'society'];
+  const groups = data.groups || {};
+  let html = '';
+
+  cats.forEach(cat => {
+    const items = groups[cat] || [];
+    if (!items.length) return;
+    html += `<div class="category-block">
+      <div class="cat-header">
+        <span class="cat-label">${CAT_LABELS[cat]}</span>
+        <span class="cat-count">${items.length} criteria</span>
+      </div>
+      <table class="scores">
+        <thead><tr><th>Criterion</th><th>Score</th><th>Raw Value</th><th>Source</th><th>Notes</th></tr></thead>
+        <tbody>`;
+    items.forEach(s => {
+      const crit = s.criterion || {};
+      const maxScore = crit.scoring_type === 'boolean' ? 1.0 : 5.0;
+      const pct = Math.round((s.score / maxScore) * 100);
+      html += `<tr>
+        <td><strong>${crit.criterion_code || '?'}</strong> ${crit.name || ''}</td>
+        <td>
+          <div class="score-bar-wrap">
+            <div class="score-bar-outer"><div class="score-bar-inner" style="width:${pct}%"></div></div>
+            <span style="font-size:12px;font-weight:700">${s.score}</span>
+          </div>
+        </td>
+        <td style="color:#6b7280">${s.raw_value || '—'}</td>
+        <td><span class="source-${s.source}">${s.source}</span></td>
+        <td style="color:#9ca3af;font-size:11px;max-width:200px">${s.notes || ''}</td>
+      </tr>`;
+    });
+    html += '</tbody></table></div>';
+  });
+
+  if (!html) html = '<div class="empty">No scores yet — pipeline may still be running</div>';
+  document.getElementById('scores-body').innerHTML = html;
+}
+
+async function approveReport() {
+  if (!_currentReport) return;
+  if (!confirm('Approve this evaluation? The deal will advance to evaluation_done.')) return;
+  const r = await fetch(`/api/v1/propguru/evaluations/${_currentReport.id}/approve`, {
+    method: 'PATCH',
+    headers: H,
+    body: JSON.stringify({ approved_by: 'analyst' }),
+  });
+  const d = await r.json();
+  if (r.ok) {
+    toast(`Approved — deal stage → ${d.deal_stage}, price set to ${fmt(d.final_price)}`);
+    _currentReport.status = 'approved';
+    document.getElementById('rpt-status-badge').innerHTML = STATUS_BADGE['approved'];
+    document.getElementById('action-row').style.display = 'none';
+    loadDealSelect();
+  } else {
+    toast(d.detail || 'Approval failed', false);
+  }
+}
+
+async function rejectReport() {
+  if (!_currentReport) return;
+  const reason = prompt('Rejection reason (optional):');
+  const r = await fetch(`/api/v1/propguru/evaluations/${_currentReport.id}/reject`, {
+    method: 'PATCH',
+    headers: H,
+    body: JSON.stringify({ reason }),
+  });
+  if (r.ok) {
+    toast('Evaluation rejected — re-trigger to run pipeline again');
+    _currentReport.status = 'rejected';
+    document.getElementById('rpt-status-badge').innerHTML = STATUS_BADGE['rejected'];
+    document.getElementById('action-row').style.display = 'none';
+  } else {
+    toast('Rejection failed', false);
+  }
+}
+
+loadDealSelect();
+</script>
+{% endblock %}

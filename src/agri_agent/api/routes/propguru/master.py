@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agri_agent.api.dependencies import verify_api_key
 from agri_agent.db.models import (
     PropguruChannelPartner,
-    PropguruDeal,
     PropguruEvaluationCriteria,
     PropguruMarketComp,
     PropguruProperty,
@@ -282,59 +281,4 @@ async def list_market_comps(
     return [_comp_out(c) for c in rows]
 
 
-# ── Deal list (read-only, full management in Phase 2) ─────────────────────────
-
-@router.get("/deals")
-async def list_deals(
-    stage: str | None = Query(None),
-    session: AsyncSession = Depends(get_session),
-    _: str = Depends(verify_api_key),
-):
-    """List deals with enriched property and CP info for the dashboard."""
-    q = select(PropguruDeal).order_by(PropguruDeal.created_at.desc())
-    if stage:
-        q = q.where(PropguruDeal.stage == stage)
-    rows = (await session.execute(q)).scalars().all()
-
-    result = []
-    for d in rows:
-        entry: dict = {
-            "id": str(d.id),
-            "deal_code": d.deal_code,
-            "stage": d.stage,
-            "lead_source": d.lead_source,
-            "notes": d.notes,
-            "target_acquisition_price": d.target_acquisition_price,
-            "final_sale_price": d.final_sale_price,
-            "sourcing_cp_commission_pct": d.sourcing_cp_commission_pct,
-            "created_at": d.created_at.isoformat(),
-            "updated_at": d.updated_at.isoformat(),
-            "property_code": None,
-            "locality": None,
-            "city": None,
-            "property_type": None,
-            "bedrooms": None,
-            "carpet_area_sqft": None,
-            "cp_name": None,
-            "cp_code": None,
-        }
-        if d.property_id:
-            prop = (await session.execute(
-                select(PropguruProperty).where(PropguruProperty.id == d.property_id)
-            )).scalar_one_or_none()
-            if prop:
-                entry["property_code"] = prop.property_code
-                entry["locality"] = prop.locality
-                entry["city"] = prop.city
-                entry["property_type"] = prop.property_type
-                entry["bedrooms"] = prop.bedrooms
-                entry["carpet_area_sqft"] = prop.carpet_area_sqft
-        if d.sourcing_cp_id:
-            cp = (await session.execute(
-                select(PropguruChannelPartner).where(PropguruChannelPartner.id == d.sourcing_cp_id)
-            )).scalar_one_or_none()
-            if cp:
-                entry["cp_name"] = cp.name
-                entry["cp_code"] = cp.cp_code
-        result.append(entry)
-    return result
+# Deal list moved to deals.py (Phase 2)

@@ -1,0 +1,84 @@
+agent:
+  name: propguru-data-collector
+  description: >
+    Reads property and deal data, creates the evaluation report, then scores
+    all criteria that can be determined directly from property attributes:
+    boolean amenity criteria, property attribute scale criteria, and society criteria.
+    Flags criteria that require location/proximity data for propguru-scorer.
+  version: "1.0.0"
+  companies: [propguru]
+
+  inputs:
+    deal_id:
+      type: string
+      required: true
+      description: "Deal UUID or deal_code to evaluate"
+
+  model:
+    provider: anthropic
+    name: claude-sonnet-4-6
+    temperature: 0.0
+    max_tokens: 4096
+    max_cost_usd: 1.00
+
+  system_prompt: |
+    You are the data collector for Propguru property evaluation.
+    Read deal_id from [Runtime context].
+
+    Workflow:
+    1. Call propguru_get_deal with deal_id to get the full deal + property record.
+       Extract: property_id, locality, carpet_area_sqft, bedrooms, building_age_years,
+       facing, floor_number, total_floors, property_type, latitude, longitude.
+
+    2. Call propguru_get_criteria to fetch all 30 active criteria with weights.
+
+    3. Call propguru_create_evaluation_report with deal_id to create a draft report.
+       Record the report_id for all subsequent calls.
+
+    4. Score criteria you CAN determine from property attributes (DO NOT guess):
+
+       AMENITY criteria (CRIT-001 to CRIT-010, boolean type):
+       - You cannot score these from property data alone — mark all as SKIPPED.
+         (Amenities require site visit or society info not in the DB record.)
+         Exception: if the property record mentions any amenity explicitly in notes.
+
+       PROPERTY criteria (CRIT-021 to CRIT-025):
+       - CRIT-021 Floor Level (scale_1_5): score based on floor_number and total_floors.
+           Ground/1st floor = 2, 2-5th floor = 3, 6-10th = 4, 11+ = 5, top floor - 1.
+       - CRIT-022 Facing Direction (scale_1_5): east = 5, north = 4, west = 3, south = 2.
+       - CRIT-023 Property Age (scale_1_5): 0-2 yrs = 5, 3-5 = 4, 6-10 = 3, 11-20 = 2, 20+ = 1.
+       - CRIT-024 Covered Parking (scale_1_5): score 3 if not available in data (neutral).
+       - CRIT-025 Power Backup (boolean): score 0 if not available in data.
+
+       SOCIETY criteria (CRIT-026 to CRIT-030):
+       - Score all as 3/5 (neutral) when data is not available.
+         Mark source as 'agent' and note as 'default neutral — analyst to verify'.
+
+    5. For each scored criterion call propguru_save_evaluation_score.
+
+    6. Report: deal summary, report_id, scored criteria list, skipped criteria list.
+       The report_id MUST appear in your final output so the supervisor can pass it forward.
+
+  tools:
+    - name: propguru_get_deal
+      enabled: true
+    - name: propguru_get_property_details
+      enabled: true
+    - name: propguru_get_criteria
+      enabled: true
+    - name: propguru_create_evaluation_report
+      enabled: true
+    - name: propguru_save_evaluation_score
+      enabled: true
+
+  guardrails:
+    max_iterations: 40
+    timeout_seconds: 180
+    blocked_patterns:
+      - "ignore previous instructions"
+
+  observability:
+    langsmith_tracing: true
+    log_inputs: true
+    log_outputs: true
+    log_tool_calls: true

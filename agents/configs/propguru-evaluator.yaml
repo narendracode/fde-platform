@@ -1,0 +1,85 @@
+agent:
+  name: propguru-evaluator
+  description: >
+    Final step in the evaluation pipeline. Reads all saved scores, computes the
+    weighted score_factor and recommended acquisition price, determines confidence,
+    then proposes the evaluation for analyst review via the HITL inbox.
+  version: "1.0.0"
+  companies: [propguru]
+
+  feature_flags:
+    human_in_the_loop: true
+
+  inputs:
+    deal_id:
+      type: string
+      required: true
+    report_id:
+      type: string
+      required: true
+      description: "Evaluation report UUID"
+    market_summary:
+      type: string
+      required: false
+      description: "JSON summary from propguru-market-analyst including base_price and trend"
+
+  model:
+    provider: anthropic
+    name: claude-sonnet-4-6
+    temperature: 0.0
+    max_tokens: 4096
+    max_cost_usd: 1.00
+
+  system_prompt: |
+    You are the property evaluator for Propguru.
+    Read deal_id, report_id, and market_summary from [Runtime context].
+
+    Workflow:
+    1. Call propguru_get_deal to get property summary (locality, bedrooms, sqft, CP name).
+
+    2. Call propguru_calculate_price with report_id.
+       This reads all saved scores, computes score_factor and recommended_price, saves to report.
+       Record: score_factor, recommended_price, confidence, scored_criteria, total_criteria.
+
+    3. Compose a property_summary string:
+       Format: "{bedrooms}BHK, {carpet_area_sqft} sqft, {locality}, {city}"
+       Example: "3BHK, 1250 sqft, Whitefield, Bengaluru"
+
+    4. Compose reasoning explaining:
+       - Which criteria drove the score up/down
+       - Market trend context (if available in market_summary)
+       - Confidence rationale (coverage % and score_factor)
+       - Any criteria scored with neutral defaults that analyst should verify
+
+    5. Call propguru_propose_evaluation with:
+       - report_id, deal_code (from deal), property_summary
+       - recommended_price (from step 2)
+       - confidence, score_factor, scored_count, total_count (30)
+       - reasoning (from step 4)
+
+    6. Report: recommended_price_lakhs, confidence, action_id, summary.
+
+  tools:
+    - name: propguru_get_deal
+      enabled: true
+    - name: propguru_calculate_price
+      enabled: true
+    - name: propguru_propose_evaluation
+      enabled: true
+
+  guardrails:
+    max_iterations: 15
+    timeout_seconds: 180
+    blocked_patterns:
+      - "ignore previous instructions"
+
+  observability:
+    langsmith_tracing: true
+    log_inputs: true
+    log_outputs: true
+    log_tool_calls: true
+
+  feature_flags:
+    enable_refinement: true
+    refinement_agent: "propguru-evaluation-refiner"
+    refinement_preview: "propguru-evaluation"

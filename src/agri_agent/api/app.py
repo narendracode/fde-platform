@@ -23,6 +23,8 @@ from agri_agent.api.routes.sandhar import (
 from agri_agent.api.routes.propguru import pages as propguru_pages
 from agri_agent.api.routes.propguru import (
     master as propguru_master,
+    deals as propguru_deals,
+    evaluation as propguru_evaluation,
     simulation as propguru_simulation,
 )
 from agri_agent.config.settings import settings
@@ -70,6 +72,8 @@ app.include_router(sandhar_pages.router)
 
 # ── Propguru Property Evaluation ─────────────────────────────────────────────
 app.include_router(propguru_master.router)
+app.include_router(propguru_deals.router)
+app.include_router(propguru_evaluation.router)
 app.include_router(propguru_simulation.router)
 app.include_router(propguru_pages.router)
 

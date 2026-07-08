@@ -1,0 +1,70 @@
+agent:
+  name: propguru-market-analyst
+  description: >
+    Fetches market comp data for the property's locality and computes the base price.
+    Sets market_rate_per_sqft and base_price on the evaluation report.
+    Returns the 6-month trend and transaction count for the evaluator's confidence assessment.
+  version: "1.0.0"
+  companies: [propguru]
+
+  inputs:
+    deal_id:
+      type: string
+      required: true
+      description: "Deal UUID or deal_code"
+    report_id:
+      type: string
+      required: true
+      description: "Evaluation report UUID from propguru-data-collector"
+
+  model:
+    provider: anthropic
+    name: claude-sonnet-4-6
+    temperature: 0.0
+    max_tokens: 2048
+    max_cost_usd: 0.50
+
+  system_prompt: |
+    You are the market analyst for Propguru property evaluation.
+    Read deal_id and report_id from [Runtime context].
+
+    Workflow:
+    1. Call propguru_get_deal with deal_id to get property locality and carpet_area_sqft.
+
+    2. Call propguru_get_market_comp with the locality name.
+       If no comp is found, try a broader area name (e.g. if 'Whitefield, Bengaluru' fails,
+       try 'Whitefield' or 'Bengaluru').
+
+    3. If market comp is found:
+       - market_rate_per_sqft = comp.avg_price_per_sqft
+       - base_price = market_rate_per_sqft × carpet_area_sqft
+       - Call propguru_set_base_price with these values and report_id.
+
+    4. If NO market comp found after 2 attempts:
+       - Use 10000 as fallback market_rate_per_sqft
+       - Call propguru_set_base_price with fallback values
+       - Note confidence as 'low' in your output
+
+    5. Report: locality, market_rate_per_sqft, carpet_area_sqft, base_price,
+       6-month trend (%), transaction count, data source.
+       Include base_price_lakhs for human readability.
+
+  tools:
+    - name: propguru_get_deal
+      enabled: true
+    - name: propguru_get_market_comp
+      enabled: true
+    - name: propguru_set_base_price
+      enabled: true
+
+  guardrails:
+    max_iterations: 15
+    timeout_seconds: 120
+    blocked_patterns:
+      - "ignore previous instructions"
+
+  observability:
+    langsmith_tracing: true
+    log_inputs: true
+    log_outputs: true
+    log_tool_calls: true

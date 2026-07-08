@@ -48,6 +48,21 @@ from agri_agent.agent.tools.sandhar.plan_refiner import (
     sandhar_refine_remove_wo,
     sandhar_refine_explain_constraint,
 )
+from agri_agent.agent.tools.propguru.deals import (
+    propguru_get_deal,
+    propguru_get_property_details,
+    propguru_list_deals,
+)
+from agri_agent.agent.tools.propguru.evaluation import (
+    propguru_get_criteria,
+    propguru_get_market_comp,
+    propguru_create_evaluation_report,
+    propguru_save_evaluation_score,
+    propguru_calculate_price,
+    propguru_set_base_price,
+    propguru_score_proximity,
+    propguru_propose_evaluation,
+)
 
 _TOOL_REGISTRY: dict[str, BaseTool] = {
     "calculator": calculator,
@@ -86,6 +101,18 @@ _TOOL_REGISTRY: dict[str, BaseTool] = {
     "sandhar_refine_add_wo": sandhar_refine_add_wo,
     "sandhar_refine_remove_wo": sandhar_refine_remove_wo,
     "sandhar_refine_explain_constraint": sandhar_refine_explain_constraint,
+    # ── Propguru ──────────────────────────────────────────────────────────────
+    "propguru_get_deal": propguru_get_deal,
+    "propguru_get_property_details": propguru_get_property_details,
+    "propguru_list_deals": propguru_list_deals,
+    "propguru_get_criteria": propguru_get_criteria,
+    "propguru_get_market_comp": propguru_get_market_comp,
+    "propguru_create_evaluation_report": propguru_create_evaluation_report,
+    "propguru_save_evaluation_score": propguru_save_evaluation_score,
+    "propguru_calculate_price": propguru_calculate_price,
+    "propguru_set_base_price": propguru_set_base_price,
+    "propguru_score_proximity": propguru_score_proximity,
+    "propguru_propose_evaluation": propguru_propose_evaluation,
 }
 
 
