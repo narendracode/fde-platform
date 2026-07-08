@@ -8,9 +8,9 @@
 
 ---
 
-**Document Version:** 1.0  
-**Status:** Draft  
-**Audience:** Engineering team building the Sandhar POC
+**Document Version:** 2.0  
+**Status:** Implemented (POC complete)  
+**Audience:** Engineering team — reference for the implemented system
 
 ---
 
@@ -603,13 +603,25 @@ Implement in `src/agri_agent/api/routes/sandhar/` — one file per module.
 | Method | Path | Description |
 |---|---|---|
 | `POST` | `/api/v1/sandhar/plan/generate` | Trigger AI plan generation for a date. Queues a Celery task, returns `{plan_run_id, task_id}`. |
-| `GET` | `/api/v1/sandhar/plan` | Get latest approved plan for a date (filter: date, shift_code) |
+| `GET` | `/api/v1/sandhar/plan` | Get plans for a date — returns shift list each with `plan_header_id`, `action_id` (if a `pending_review` action exists), confidence, and status |
 | `GET` | `/api/v1/sandhar/plan/{header_id}` | Get a specific plan version with all detail rows and allocations |
-| `GET` | `/api/v1/sandhar/plan/{header_id}/exceptions` | List unresolved exceptions for a plan |
 | `POST` | `/api/v1/sandhar/plan/{header_id}/approve` | Planner approves the plan — transitions status to `approved`, locks it |
-| `POST` | `/api/v1/sandhar/plan/{header_id}/reject` | Planner rejects with a reason — triggers re-generation |
-| `POST` | `/api/v1/sandhar/plan/{header_id}/override` | Planner manually overrides an allocation: body `{plan_detail_id, field, new_value, reason}` |
-| `GET` | `/api/v1/sandhar/plan/versions` | List all versions for a date — for diff/audit view |
+| `POST` | `/api/v1/sandhar/plan/{header_id}/reject` | Planner rejects with a reason |
+| `PATCH` | `/api/v1/sandhar/plan/{header_id}/details/{detail_id}` | Update a plan detail row: `planned_qty`, `planned_manpower`, or `line_id` |
+| `POST` | `/api/v1/sandhar/plan/{header_id}/details` | Add a new plan detail row (WO added to plan) |
+| `DELETE` | `/api/v1/sandhar/plan/{header_id}/details/{detail_id}` | Remove a plan detail row |
+| `POST` | `/api/v1/sandhar/plan/{header_id}/allocate-line` | Manually allocate a line |
+| `GET` | `/api/v1/sandhar/plan/versions` | List all plan headers for a date |
+
+**`action_id` in plan response:** `GET /api/v1/sandhar/plan` now includes `action_id` per shift — set when a `pending_review` `AgentAction` exists for that plan header (queried by `agent_name = "sandhar-plan-generator"` and `url_params.plan_header_id`). This enables the plan page to render the "Refine with AI" button without a separate API call.
+
+### 5.7 Plan Refinement Preview (`sandhar/pages.py`)
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/sandhar/plan/{header_id}/refine-preview` | Server-rendered HTML fragment (Jinja partial) with live plan data — injected into the refinement canvas preview pane |
+
+This endpoint fetches `SandharPlanHeader`, `SandharPlanDetail`, `SandharLine`, and `SandharWorkOrder` from the DB and renders `sandhar/_refine_preview_sandhar-plan.html`. Called by the canvas JS after every `event:done` SSE event to keep the preview in sync with AI changes.
 
 **Generate plan request body:**
 ```json
@@ -792,6 +804,16 @@ sandhar-planning-supervisor
             Tools: sandhar_calculate_planned_qty, sandhar_save_plan_header,
                     sandhar_create_alert, sandhar_propose_plan_for_review
             Output: plan_header + plan_detail rows written; plan proposed to HITL inbox
+            Feature flags:
+              enable_refinement: true
+              refinement_agent: "sandhar-plan-refiner"
+              refinement_preview: "sandhar-plan"
+
+sandhar-plan-refiner  (standalone — invoked per chat turn in the refinement canvas)
+    Tools: sandhar_refine_get_plan, sandhar_refine_update_qty, sandhar_refine_move_wo,
+           sandhar_refine_add_wo, sandhar_refine_remove_wo, sandhar_refine_explain_constraint
+    Writes to: sandhar_plan_detail (same table the supervisor writes during generation)
+    Config: agents/configs/sandhar-plan-refiner.yaml
 ```
 
 ### `sandhar-planning-supervisor.yaml`
@@ -1222,15 +1244,19 @@ in `src/agri_agent/api/routes/sandhar/pages.py`.
 
 | URL | Template | Persona | Description |
 |---|---|---|---|
-| `/sandhar` | `sandhar/dashboard.html` | Plant Manager | Command centre: live KPI cards, active alert badges, current shift status, shortcut to plan generation |
-| `/sandhar/plan` | `sandhar/plan.html` | Planner | Plan generation trigger, agent execution progress view, plan review with exception cards, approve/reject controls |
-| `/sandhar/floor` | `sandhar/floor.html` | Supervisor | Line-filtered view of approved plan, operator list, actuals entry form, disruption reporting |
-| `/sandhar/master` | `sandhar/master.html` | HR Admin | Master data tables: employees, lines, machines, products, customers, shifts. CRUD via modals. |
-| `/sandhar/skills` | `sandhar/skills.html` | HR Admin | Skill matrix view. Assign skills to employees. Expiry alerts. Skill search. |
-| `/sandhar/workorders` | `sandhar/workorders.html` | Planner | Open WO list. Constraint flags. Priority display. |
-| `/sandhar/alerts` | `sandhar/alerts.html` | Planner, Plant Manager | Full alert feed with severity filters. Acknowledge / resolve. |
-| `/sandhar/kpi` | `sandhar/kpi.html` | Plant Manager | Daily KPI summary cards + trend charts (Chart.js, same as existing dashboard) |
-| `/sandhar/simulation` | `sandhar/simulation.html` | Demo presenter | Simulation control panel (demo mode only). Scenario buttons, attendance injector, state reset. |
+| `/sandhar` | `sandhar/dashboard.html` | Plant Manager | Command centre: live KPI cards, active alert badges, current shift status |
+| `/sandhar/plan` | `sandhar/plan.html` | Planner | Plan generation, progress polling, plan review with **"Refine with AI" canvas**, approve/reject |
+| `/sandhar/floor` | `sandhar/floor.html` | Supervisor | Line-filtered plan view, operator list, actuals entry, disruption reporting |
+| `/sandhar/master` | `sandhar/master.html` | HR Admin | Master data CRUD: employees, lines, machines, products, customers, shifts |
+| `/sandhar/simulation` | `sandhar/simulation.html` | Demo presenter | Simulation control panel: scenario buttons, attendance injector, state reset |
+
+**Implemented templates:**
+- `sandhar/dashboard.html` — command centre
+- `sandhar/plan.html` — plan generation + refinement canvas (deep-linked via `?refine=<action_id>`)
+- `sandhar/floor.html` — supervisor view
+- `sandhar/master.html` — master data CRUD
+- `sandhar/simulation.html` — demo control panel
+- `sandhar/_refine_preview_sandhar-plan.html` — server-rendered plan preview partial for the refinement canvas
 
 ### 8.2 Key Page Designs
 
@@ -1603,6 +1629,66 @@ Build in this order to ensure each phase is independently testable.
 33. Implement `/sandhar/alerts` and `/sandhar/kpi`
 34. Implement `/sandhar/simulation` control panel
 35. **Verify:** Full demo walkthrough of all 8 scenarios end to end
+
+---
+
+## 15. Plan Refinement Canvas — Implementation Notes
+
+This section captures the as-built behaviour for the "Refine with AI" feature on the plan page. The generic platform design is in `docs/plan-refine-feature.md` and `docs/system-design.md` (Section 8). This section documents Sandhar-specific details and implementation decisions.
+
+### 15.1 Feature Flag Location
+
+The `enable_refinement` flag is on **`sandhar-plan-generator`**, not on `sandhar-planning-supervisor`. This is because `AgentAction.agent_name` is set to the agent that *created* the action — `propose_plan_for_review` (called by `sandhar-plan-generator`) sets `agent_name = "sandhar-plan-generator"`. The platform reads `feature_flags` from this agent's config, not from the supervisor.
+
+### 15.2 YAML-First Feature Flag Lookup
+
+`actions.py` uses a YAML-first, DB-fallback pattern when reading `feature_flags`:
+
+```python
+async def _agent_flags(session, agent_name):
+    try:
+        cfg = load_agent_config(agent_name)   # reads YAML from disk
+        if cfg.feature_flags:
+            return cfg.feature_flags
+    except Exception:
+        pass
+    row = await session.execute(select(Agent).where(Agent.name == agent_name))
+    agent = row.scalar_one_or_none()
+    return agent.config.get("feature_flags", {}) if agent else {}
+```
+
+This ensures the YAML is always the source of truth. The DB `Agent.config` snapshot can be stale.
+
+### 15.3 SSE Buffer Parsing
+
+The SSE streaming endpoint (`POST /refine/message`) emits events separated by `\n\n`. The browser JS must split the buffer on `\n\n` (complete events), not on `\n` (lines). Splitting on `\n` and using `.pop()` to buffer incomplete lines fails when the final `done` event arrives in a split TCP chunk:
+
+```javascript
+const processBuffer = async (flush = false) => {
+  const parts = buffer.split('\n\n');
+  buffer = flush ? '' : parts.pop();
+  for (const part of parts) {
+    for (const line of part.split('\n')) {
+      if (!line.startsWith('data: ')) continue;
+      // parse and handle event
+    }
+  }
+};
+```
+
+### 15.4 Deep Linking
+
+When the canvas opens, `history.pushState` adds `?refine=<action_id>` to the URL. On page reload, `init()` reads the URL param, finds the matching plan from the already-loaded plans array, and calls `openRefineCanvas()` which calls `refine/start` (idempotent — returns the existing `active` session) and `refine/messages` to restore history.
+
+"← Back to Plan" does **not** call `refine/close`. The session stays `active` so history is preserved across refreshes.
+
+### 15.5 Preview Sync
+
+The preview pane loads `GET /sandhar/plan/{header_id}/refine-preview` on every canvas open and after every `event:done`. This is a server-rendered HTML fragment with live DB data — no stale state is possible. The `planned_manpower` field is shown as `X/Y operators` where Y is `available_manpower`.
+
+### 15.6 `planned_manpower` Support
+
+The `sandhar_refine_update_qty` tool accepts an optional `new_planned_manpower` parameter. The `PATCH /api/v1/sandhar/plan/{header_id}/details/{detail_id}` endpoint and `UpdatePlanDetailRequest` schema both accept `planned_manpower: int | None`.
 
 ---
 

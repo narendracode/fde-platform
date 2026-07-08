@@ -4,8 +4,8 @@
 
 ---
 
-**Document Version:** 1.0  
-**Status:** Draft  
+**Document Version:** 2.0  
+**Status:** POC Implemented  
 **Audience:** Product, Engineering, Client Stakeholders
 
 ---
@@ -314,23 +314,31 @@ If the planner modifies any input (adds an exception, overrides an allocation), 
 
 ### M7 — Plan Review and Approval
 
-**F7.1 Planner Review Screen**  
-The planner sees the AI-generated plan shift by shift, with:
-- Line-wise allocation table (line, product, WO, qty, operators, supervisor)
-- Exception cards for every unresolved gap or constraint
-- Confidence score and summary statistics (total planned qty, manpower utilization %)
+**F7.1 Planner Review Screen** *(Implemented)*  
+The planner sees the AI-generated plan on `/sandhar/plan?date=YYYY-MM-DD`, shift by shift, with:
+- Per-shift plan table: line, product, WO number, planned quantity, operators, confidence badge
+- Pre-generation summary showing attendance, open WO count, and constraint flags
+- Approve and Reject buttons per shift
+- "✦ Refine with AI" button when a pending action exists for the shift
 
-**F7.2 Exception Resolution**  
-Each exception card shows: type, affected line/WO, suggested resolution options. The planner selects a resolution or dismisses the exception with a reason. Unresolved exceptions are visible to the plant manager.
+**F7.2 Refine with AI — Conversational Plan Editing** *(Implemented)*  
+The planner can open a full-screen conversational canvas to iteratively edit the plan through natural language before approving:
 
-**F7.3 Manual Override**  
-The planner can override any AI allocation: reassign an operator, change a planned quantity, swap a work order between shifts, or mark a line as offline. All overrides are logged with the planner's name and reason.
+- A split-screen canvas opens: **live plan preview pane (42%)** + **chat panel (58%)**
+- The AI refinement agent (`sandhar-plan-refiner`) has tools to: read the plan, update quantities, update operator counts, move work orders between lines, add/remove WOs
+- Changes made by the AI are immediately reflected in the live preview pane (server-rendered, always fresh from DB)
+- Full conversation history is persisted — page refresh restores the conversation and re-opens the canvas (deep-linked via `?refine=<action_id>` in the URL)
+- The session stays active after clicking "← Back to Plan" — history preserved until the plan is approved or rejected
+- Approval from the canvas calls the same platform endpoint as the standard Approve button
 
-**F7.4 Plan Approval**  
-Once exceptions are resolved (or acknowledged), the planner approves the plan. An approved plan is locked and distributed to supervisors.
+**F7.3 Manual Override via Refinement Agent**  
+Planners instruct the AI to make specific changes (e.g. "Move WO-1001 to Line 2", "Set Line 3 operators to 12"). The agent calls the appropriate domain tool and confirms the change. All tool calls are logged in the session's message history for audit.
 
-**F7.5 Plan Versioning**  
-Every regeneration or override creates a new plan version. The system retains all versions with a diff view showing what changed and why.
+**F7.4 Plan Approval** *(Implemented)*  
+Once satisfied, the planner approves via the Approve button on the plan page or from within the Refine canvas. Approval executes the stored `approval_action` (`POST /api/v1/sandhar/plan/{header_id}/approve`), transitions the plan to `approved`, and updates the related work orders to `planned` status.
+
+**F7.5 Plan Rejection and Re-generation** *(Implemented)*  
+If the plan is rejected, the planner can trigger a fresh generation for the same date and shift. The re-generate button is disabled while a refinement canvas is open (server-side guard returns 422 if an active session exists), preventing conflicts between manual editing and full re-generation.
 
 ---
 
@@ -355,55 +363,74 @@ On shift close, actuals are finalised and KPIs are computed for that shift. The 
 
 ## 8. AI Agent Design
 
-The system uses a supervisor-worker agent architecture. The Supervisor Agent orchestrates the planning process and delegates specialist tasks to Worker Agents.
+The system uses a supervisor-worker agent architecture. The Supervisor Agent orchestrates the planning process and delegates specialist tasks to Worker Agents. A separate Refinement Agent handles conversational plan editing.
 
-### 8.1 Agent Overview
+### 8.1 Agent Overview (Implemented)
 
 ```
-Planning Supervisor Agent
+sandhar-planning-supervisor  (supervisor type — orchestrates workers)
     │
-    ├── Attendance Analysis Agent
+    ├── sandhar-attendance-analyst
     │       Reads shift-wise attendance; maps operators to skills;
     │       identifies present, absent, late per shift.
+    │       Creates certification expiry alerts.
     │
-    ├── Work Order Prioritisation Agent
+    ├── sandhar-wo-prioritisation
     │       Imports open work orders; applies priority and due date ranking;
-    │       identifies WOs blocked by constraints.
+    │       identifies WOs blocked by quality holds.
     │
-    ├── Constraint Validation Agent
+    ├── sandhar-constraint-validator
     │       Checks machine availability, material stock, quality holds;
-    │       produces constraint summary with impact assessment.
+    │       creates alerts for each constraint found.
     │
-    ├── Resource Allocation Agent
-    │       Matches available operators to lines/machines;
-    │       detects gaps; generates resolution options.
+    ├── sandhar-resource-allocator
+    │       Matches present operators to lines based on skill matrix;
+    │       detects manpower and skill gaps; creates gap alerts;
+    │       writes resource_allocation rows.
     │
-    └── Production Plan Generation Agent
+    └── sandhar-plan-generator
             Assembles shift-wise plan from allocation output;
-            calculates planned quantities; assigns supervisors;
-            generates exception summary and confidence score.
+            calculates planned quantities using cycle time formula;
+            determines confidence score from alert count;
+            proposes the plan to the HITL inbox via propose_plan_for_review.
+            Feature flags: enable_refinement: true, refinement_agent: sandhar-plan-refiner
+
+sandhar-plan-refiner  (standalone — invoked per chat turn in the refinement canvas)
+    Conversational agent for iterative plan editing.
+    Reads current plan, applies targeted changes, explains constraints.
+    All changes write to the same sandhar_plan_detail table.
 ```
 
-### 8.2 Supervisor Agent Responsibilities
+### 8.2 Model Selection
 
-The Planning Supervisor Agent:
-- Triggers each worker in the correct sequence
-- Passes outputs from one worker as inputs to the next
-- Detects when a worker result requires human input before proceeding
-- Assembles the final plan and presents it for planner review
-- Handles re-planning when the planner makes overrides
+| Agent | Model | Rationale |
+|---|---|---|
+| `sandhar-planning-supervisor` | claude-haiku-4-5 | Lightweight orchestration only — no tools, just routing |
+| `sandhar-attendance-analyst` | claude-sonnet-4-6 | Moderate tool use; skill matrix reasoning |
+| `sandhar-wo-prioritisation` | claude-sonnet-4-6 | Priority ranking with ERP data |
+| `sandhar-constraint-validator` | claude-sonnet-4-6 | Multi-constraint reasoning |
+| `sandhar-resource-allocator` | claude-sonnet-4-6 | Complex allocation logic, up to 60 iterations |
+| `sandhar-plan-generator` | claude-sonnet-4-6 | Plan assembly + HITL submission |
+| `sandhar-plan-refiner` | claude-sonnet-4-6 | Conversational with tool use; needs domain reasoning |
 
 ### 8.3 Human-in-the-Loop Points
 
-The system does not auto-approve the plan. Human review is required before the plan is released to the shop floor. Specific escalations that always require human decision:
+The system does not auto-approve the plan. Three pathways to plan approval:
+
+| Pathway | Description |
+|---|---|
+| **Direct approve** | Planner reviews plan summary on `/sandhar/plan`, clicks Approve |
+| **Approve from inbox** | Plan action appears in `/approvals`; planner approves from there |
+| **Refine then approve** | Planner opens the refinement canvas, instructs the AI to make changes, then approves from within the canvas |
+
+Situations that always require human decision:
 
 | Situation | Human Action Required |
 |---|---|
-| Line has fewer operators than minimum required | Planner selects: cross-skill / overtime / accept reduced qty |
-| Work order due today has a material shortage | Planner decides: expedite material / reschedule WO / partial plan |
-| Machine breakdown affects a High-priority order | Planner decides: alternate line / hold WO / notify customer |
-| Skill gap cannot be filled by any cross-skilled operator | Planner decides: escalate to HR / accept gap / bring in from another shift |
-| Plan confidence is Low | Planner must review and explicitly approve |
+| Plan confidence is Low (≥ 4 active alerts) | Planner must review and explicitly approve or refine |
+| Line has fewer operators than minimum required | Use refinement canvas to adjust qty, or accept gap |
+| Material shortage affects a WO | Refinement agent can explain; planner decides to accept or remove WO from plan |
+| Machine breakdown affects a High-priority order | Re-generate or use refinement canvas to reassign WO |
 
 ---
 
@@ -412,18 +439,42 @@ The system does not auto-approve the plan. Human review is required before the p
 ### 9.1 Daily Planning Workflow (Planner)
 
 ```
-1. Planner opens the system (before shift start)
-2. System shows today's attendance summary for all shifts
-3. System shows open work orders with due dates and priorities
-4. System shows constraint summary (machine/material/quality issues)
-5. Planner clicks "Generate Plan for [Date]"
-6. AI agents run: attendance → WO priority → constraints → allocation → plan
-7. Plan is displayed with confidence score and exception list
-8. Planner reviews exceptions — selects resolutions for each
-9. Planner overrides any allocations (optional)
-10. Planner approves plan
-11. Plan is distributed to supervisors
-12. Supervisors acknowledge their line plan
+1. Planner opens /sandhar/plan?date=YYYY-MM-DD (before shift start)
+2. System shows pre-generation summary: attendance, open WO count, constraint flags
+3. Planner clicks "Generate Plan"
+4. AI agent pipeline runs: attendance-analyst → wo-prioritisation →
+   constraint-validator → resource-allocator → plan-generator
+   Progress shown in real time via polling
+5. Plan displayed shift by shift with confidence badge and alert count
+6. Planner reviews plan — three options per shift:
+   a. Approve directly
+   b. Refine with AI → opens conversational canvas
+   c. Reject → triggers re-generation
+7. (If refining) Planner types instructions:
+   "Move WO-1001 to Line 2", "Set Line 3 operators to 12", "Why is Line 3 understaffed?"
+   AI applies changes, preview panel updates live
+8. Planner approves from canvas or plan page
+9. Plan distributed to supervisors (visible on /sandhar/floor)
+```
+
+### 9.2 Plan Refinement Workflow (Planner — detailed)
+
+```
+1. Plan generated; Planner sees confidence badge "Medium" with 2 alerts
+2. Planner clicks "✦ Refine with AI" on Shift A row
+3. Canvas opens: live plan preview on left, chat on right
+4. AI greets planner with plan summary and flagged issues
+5. Planner: "Line 3 only has 10 operators but needs 15. Move 5 from Line 2."
+6. AI calls sandhar_refine_get_plan → reads current state
+   AI calls sandhar_refine_update_qty → sets Line 3 planned_manpower = 15
+   (or moves WO if capacity allows)
+7. Preview panel refreshes — Line 3 now shows 15/15 operators
+8. AI: "Done. Line 3 now has 15 allocated operators. Line 2 reduced to 10."
+9. Planner: "What happens to Line 2 output?"
+10. AI calls sandhar_refine_explain_constraint → explains impact
+11. Planner clicks "✅ Approve" in canvas header
+12. Existing HITL approve endpoint executes; plan status → approved
+13. Canvas shows "✅ Approved at 08:47. Conversation saved."
 ```
 
 ### 9.2 Mid-Shift Disruption Workflow (Supervisor)
@@ -517,14 +568,14 @@ The system follows a strict principle: **AI recommends, humans decide.** No prod
 
 ### 12.1 Approval Gates
 
-| Decision | Who Approves |
-|---|---|
-| Daily production plan release | Production Planner |
-| Plan override (manual allocation change) | Production Planner |
-| Mid-shift re-allocation after disruption | Production Planner |
-| Actuals submission | Shift Supervisor |
-| Quality hold release | QA Supervisor |
-| Overtime approval | Plant Manager |
+| Decision | Who Approves | How |
+|---|---|---|
+| Daily production plan release | Production Planner | Approve button on plan page or inbox; or from Refine canvas |
+| Plan refinement (AI-assisted change) | Production Planner | Each refinement turn is logged; final approval locks the plan |
+| Mid-shift re-allocation after disruption | Production Planner | Re-generate + approve new plan version |
+| Actuals submission | Shift Supervisor | Submit form on /sandhar/floor |
+| Quality hold release | QA Supervisor | Release endpoint |
+| Overtime approval | Plant Manager | Manual decision; planner reflects in plan via refinement |
 
 ### 12.2 Audit Trail
 
@@ -536,29 +587,45 @@ Every AI-generated recommendation and every human action (approve, override, dis
 
 Since this is a POC, the system will run on simulated data that mirrors Sandhar Group's real operational profile. The simulation is designed to demonstrate every key scenario a stakeholder would want to see.
 
-### 13.1 Simulated Data Set
+### 13.1 Simulated Data Set (Implemented)
 
 **Employees:** 50 operators, 10 supervisors across 3 shifts and 3 lines.  
-**Lines:** 3 assembly lines (Line-1, Line-2, Line-3).  
-**Machines:** 8 machines across 3 lines.  
-**Products:** 5 automotive part types (mirrors Sandhar's product categories).  
-**Customers:** 4 OEM customers at varying priority levels.  
-**Shifts:** Standard 3-shift configuration (A: 06–14, B: 14–22, C: 22–06).
+**Lines:** 3 assembly lines (L001, L002, L003).  
+**Machines:** 8 machines across 3 lines (M001–M007, including M005 critical for L003).  
+**Products:** 5 automotive part types (PROD-X, PROD-Y, PROD-Z, PROD-A, PROD-B).  
+**Customers:** 4 OEM customers (Maruti Suzuki — critical, Hero MotoCorp — high, TVS Motor — high, Mahindra — medium).  
+**Shifts:** A: 06:00–14:00, B: 14:00–22:00, C: 22:00–06:00 (7 productive hours each).
+
+Seed via: `POST /api/v1/sandhar/simulation/seed`  
+Reset via: `POST /api/v1/sandhar/simulation/reset`
 
 ### 13.2 Simulation Scenarios
 
-Each scenario demonstrates a specific product capability:
+Each scenario is triggered via `POST /api/v1/sandhar/simulation/scenario/{id}`.
 
-| # | Scenario | What It Demonstrates |
+| # | Scenario ID | What It Demonstrates |
 |---|---|---|
-| S1 | Normal day — all resources available, no constraints | Full auto-plan generation; clean allocation; plan approval |
-| S2 | High absenteeism on Shift A (20% operators absent) | Skill-based cross-allocation; gap detection; planner exception handling |
-| S3 | Machine M5 breaks down mid-shift | Mid-shift disruption alert; re-allocation workflow; supervisor view update |
-| S4 | Material shortage for highest-priority WO | Constraint engine; partial planning; planner override decision |
-| S5 | Two high-priority orders competing for same line | Priority-based allocation; planner override; plan versioning |
-| S6 | Skill gap — Line-3 needs certified M5 operator, none present | Skill gap alert; cross-skill suggestion; HR notification |
-| S7 | End-of-shift actuals entry with under-achievement | Actuals capture; variance alert; KPI update |
-| S8 | Full day simulation — all 3 shifts | Complete plan generation; shift transitions; rolling KPI dashboard |
+| S1 | `s1-normal` | Full auto-plan generation; clean allocation; plan approval |
+| S2 | `s2-absenteeism` | High absenteeism on Shift A; skill-based cross-allocation; gap detection |
+| S3 | `s3-breakdown` | Machine M5 breaks down; constraint alert; re-plan workflow |
+| S4 | `s4-material-shortage` | Material shortage for PROD-Y; constraint engine; planner decision |
+| S5 | `s5-priority-conflict` | Two High-priority WOs competing for Line-1; priority-based allocation |
+| S6 | `s6-skill-gap` | No qualified M5 operator present for L003; skill gap alert |
+| S7 | `s7-underachievement` | Actuals at 65% of plan; KPI variance alert |
+| S8 | `s8-full-day` | Complete 3-shift generation; shift transitions; rolling KPI dashboard |
+| S9 *(new)* | Manual | **Refine with AI demo** — generate plan for S2 (absenteeism), then open canvas and instruct agent to adjust Line 3 quantities to reflect reduced manpower |
+
+### 13.3 Demo Web Application (Implemented)
+
+The implemented application includes:
+
+- **`/sandhar`** — Command centre dashboard with KPI cards, alert severity badges, active shift status
+- **`/sandhar/plan`** — Step-by-step agent progress view, plan review per shift, "Refine with AI" canvas
+- **`/sandhar/floor`** — Supervisor line plan view, actuals entry, disruption reporting
+- **`/sandhar/master`** — Master data CRUD (employees, lines, machines, products, customers, shifts)
+- **`/sandhar/simulation`** — Scenario trigger buttons, attendance injector, seed/reset controls
+- **`/approvals`** — Generic HITL inbox showing Sandhar plan actions with "Refine with AI" button
+- **`/agents`** — Agent registry with YAML config viewer (syntax-highlighted modal)
 
 ### 13.3 Demo Web Application
 

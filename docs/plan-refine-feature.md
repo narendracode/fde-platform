@@ -2,7 +2,7 @@
 
 **Feature name:** "Refine with AI"  
 **Target page (first consumer):** `/sandhar/plan?date=YYYY-MM-DD`  
-**Status:** Design / pre-implementation  
+**Status:** Implemented (Phases 1–3 complete)  
 **Author:** Design session — 2026-07-06
 
 ---

@@ -100,12 +100,30 @@ starts as a YAML file committed to the Git repository.
 The DB stores the content of the `agent:` YAML node directly. All config lookups must go to
 `agent.config["feature_flags"]`, not `agent.config["agent"]["feature_flags"]`.
 
+**Feature flags (all keys accepted in `feature_flags:` block):**
+
+| Key | Type | Purpose |
+|---|---|---|
+| `human_in_the_loop` | bool | Instructs agent to call `propose_action` rather than executing directly |
+| `stale_after` | string | Duration string (e.g. `"4h"`, `"2d"`) — action auto-stales after this window |
+| `track_resource_state` | object | Fields and check URL for drift detection at approval time |
+| `enable_refinement` | bool | Shows "Refine with AI" canvas button on this agent's HITL actions |
+| `refinement_agent` | string | Name of the agent invoked per chat turn in the refinement canvas |
+| `refinement_preview` | string | Name of the Jinja preview partial (e.g. `"sandhar-plan"`) for the live preview pane; falls back to JSON viewer if absent |
+
 **Currently registered agents:**
 
-| Agent | Purpose | HITL | Stale window | Drift tracking |
+| Agent | Purpose | HITL | Stale | Refinement |
 |---|---|---|---|---|
-| `order-dispatch-review` | Recommends shipment mode for pharma orders | Yes | 4h | Yes — status, shipment_mode, due_date, urgency_days |
-| `pharma-outreach` | Email marketing outreach to pharma retailers | Yes | 2d | No — email content is static |
+| `order-dispatch-review` | Recommends shipment mode for pharma orders | Yes | 4h | No |
+| `pharma-outreach` | Email marketing outreach to pharma retailers | Yes | 2d | No |
+| `sandhar-planning-supervisor` | Orchestrates full daily production planning pipeline (supervisor agent) | No | — | No |
+| `sandhar-attendance-analyst` | Analyses shift-wise attendance; maps operators to skills; raises certification alerts | No | — | No |
+| `sandhar-wo-prioritisation` | Imports and ranks open work orders; identifies quality holds | No | — | No |
+| `sandhar-constraint-validator` | Validates machine, material, and quality constraints; creates alerts | No | — | No |
+| `sandhar-resource-allocator` | Allocates operators to lines/machines; detects and alerts on skill/manpower gaps | No | — | No |
+| `sandhar-plan-generator` | Assembles final shift plan, calculates quantities, proposes plan to HITL inbox | Yes | — | **Yes** — uses `sandhar-plan-refiner` |
+| `sandhar-plan-refiner` | Conversational refinement agent; applies targeted plan edits via domain tools | No | — | — (is the refiner) |
 
 **Example (order-dispatch-review):**
 ```yaml
@@ -225,6 +243,30 @@ in the system prompt. This allows agents to branch behaviour (e.g. `human_in_the
 | `dispatch_order` | `orders.py` | Directly dispatches an order (used when `human_in_the_loop=false`) |
 | `recommend_dispatch` | `orders.py` | Legacy — kept for backward compatibility; use `propose_action` instead |
 | `propose_action` | `platform.py` | **Platform tool** — creates an AgentAction record for human review |
+| `sandhar_get_attendance_summary` | `sandhar/attendance.py` | Shift-wise present/absent/late counts by designation |
+| `sandhar_get_present_operators` | `sandhar/attendance.py` | Full list of present operators for a shift |
+| `sandhar_get_operator_skills` | `sandhar/attendance.py` | Line and machine skills for one employee |
+| `sandhar_find_qualified_operators` | `sandhar/attendance.py` | Present operators qualified for a line/machine at a minimum skill level |
+| `sandhar_check_certification_expiry` | `sandhar/attendance.py` | Employees with certifications expiring within 30 days |
+| `sandhar_get_open_work_orders` | `sandhar/workorders.py` | Open WOs sorted by priority rank |
+| `sandhar_get_work_order_detail` | `sandhar/workorders.py` | Full WO detail including operations |
+| `sandhar_rank_work_orders` | `sandhar/workorders.py` | Re-orders WOs by due date proximity, customer priority, WO priority |
+| `sandhar_get_machine_status` | `sandhar/constraints.py` | Current status of all machines |
+| `sandhar_check_material_availability` | `sandhar/constraints.py` | Products with material shortfall for a planning date |
+| `sandhar_get_quality_holds` | `sandhar/constraints.py` | Active quality holds on WOs or products |
+| `sandhar_get_constraint_summary` | `sandhar/constraints.py` | Consolidated constraint summary: affected WOs, blocked qty, by type |
+| `sandhar_calculate_planned_qty` | `sandhar/planning.py` | Qty = cycle time × manpower × shift hours for a line+product+manpower combo |
+| `sandhar_allocate_line` | `sandhar/planning.py` | Creates `sandhar_resource_allocation` + `sandhar_plan_detail` rows |
+| `sandhar_get_crossskill_candidates` | `sandhar/planning.py` | Operators from lower-priority lines who are qualified for this line |
+| `sandhar_save_plan_header` | `sandhar/planning.py` | Creates a `sandhar_plan_header` row; returns `plan_header_id` |
+| `sandhar_create_alert` | `sandhar/planning.py` | Creates a `sandhar_alert` row; used by any Sandhar agent |
+| `sandhar_propose_plan_for_review` | `sandhar/planning.py` | Wrapper around `propose_action` formatted for production plan display |
+| `sandhar_refine_get_plan` | `sandhar/plan_refiner.py` | Read-only: returns current plan details for a header |
+| `sandhar_refine_update_qty` | `sandhar/plan_refiner.py` | Updates `planned_qty` and/or `planned_manpower` on a plan detail row |
+| `sandhar_refine_move_wo` | `sandhar/plan_refiner.py` | Reassigns a WO to a different production line |
+| `sandhar_refine_add_wo` | `sandhar/plan_refiner.py` | Adds an open WO as a new plan detail row |
+| `sandhar_refine_remove_wo` | `sandhar/plan_refiner.py` | Removes a plan detail row (WO returns to unplanned) |
+| `sandhar_refine_explain_constraint` | `sandhar/plan_refiner.py` | Explains a manpower gap or constraint in plain language |
 
 **`propose_action` is the key platform tool** that enables the generic HITL system.
 See the HITL section for full details.
@@ -251,6 +293,7 @@ See the HITL section for full details.
 | `GET` | `/api/v1/agents/tools` | API key | List all available tools (name + description) |
 | `POST` | `/api/v1/agents/register` | API key | Load YAML config into DB (upsert, starts inactive) |
 | `GET` | `/api/v1/agents/{name}` | API key | Get agent config from DB |
+| `GET` | `/api/v1/agents/{name}/yaml` | API key | Return raw YAML config file as plain text |
 | `PATCH` | `/api/v1/agents/{name}/activate` | API key | Activate — allows run requests |
 | `PATCH` | `/api/v1/agents/{name}/deactivate` | API key | Deactivate — blocks run requests |
 | `POST` | `/api/v1/agents/{name}/run` | API key | **Sync run** — waits for result |
@@ -271,6 +314,10 @@ See the HITL section for full details.
 | `POST` | `/api/v1/actions/{id}/dismiss` | API key | Mark `dismissed` — analyst cannot decide now, no prejudice |
 | `POST` | `/api/v1/actions/{id}/mark-drifted` | API key | Mark `drifted` after human acknowledges drift panel |
 | `POST` | `/api/v1/actions/{id}/retry` | API key | Retry a failed `approval_action` execution |
+| `POST` | `/api/v1/actions/{id}/refine/start` | API key | Start or resume a refinement session; validates `enable_refinement` flag; auto-registers refinement agent |
+| `GET` | `/api/v1/actions/{id}/refine/messages` | API key | Return full conversation history for the active session — used on page reload |
+| `POST` | `/api/v1/actions/{id}/refine/message` | API key | Send a chat turn; invokes refinement agent; streams response as SSE (`token` / `tool_use` / `done` events) |
+| `POST` | `/api/v1/actions/{id}/refine/close` | API key | Close session without approving; session stays in DB; action remains `pending_review` |
 
 #### Domain APIs
 
@@ -290,9 +337,15 @@ See the HITL section for full details.
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET` | `/dashboard` | None | Platform dashboard (agent list, run history) |
-| `GET` | `/agents` | None | Agent management page |
+| `GET` | `/agents` | None | Agent management — activate/deactivate, run agent, **view YAML config with syntax highlighting** |
 | `GET` | `/runs` | None | Run history page |
-| `GET` | `/approvals` | None | **Generic Action Inbox** — review pending actions across all agents |
+| `GET` | `/approvals` | None | **Generic Action Inbox** — review pending actions; "Refine with AI" canvas for eligible agents |
+| `GET` | `/sandhar` | None | Sandhar command centre — KPI cards, alert badges, current shift status |
+| `GET` | `/sandhar/plan` | None | Plan generation trigger, progress view, plan review with AI refinement canvas |
+| `GET` | `/sandhar/floor` | None | Supervisor view — line plan, actuals entry, disruption reporting |
+| `GET` | `/sandhar/master` | None | Master data CRUD — employees, lines, machines, products, customers, shifts |
+| `GET` | `/sandhar/simulation` | None | Demo control panel — scenario triggers, attendance injection, state reset |
+| `GET` | `/sandhar/plan/{header_id}/refine-preview` | API key | Server-rendered HTML partial for the live preview pane in the refinement canvas |
 
 **Authentication:** `X-API-Key` header validated against `settings.api_key`.
 
@@ -445,6 +498,32 @@ created_at        datetime
 updated_at        datetime
 ```
 
+#### `agent_refine_session` table — Refinement Canvas Sessions
+```
+id                UUID PK
+action_id         UUID FK → agent_actions      One session per action (idempotent start)
+refinement_agent  str                          Copied from feature_flags at creation
+status            str                          active | approved | closed
+opened_by         str | null                   "anonymous" for v1; reserved for auth
+created_at        datetime
+closed_at         datetime | null              Set on approve or explicit close
+```
+
+#### `agent_refine_message` table — Chat Message History
+```
+id                UUID PK
+session_id        UUID FK → agent_refine_session
+role              str                          user | assistant | system
+content           TEXT
+tool_calls        JSONB | null                 [{tool, args, result}] — LLMOps training signal
+context_snapshot  JSONB | null                 Full domain state snapshot after this turn
+langsmith_run_id  str | null
+langsmith_trace_url TEXT | null
+input_tokens      int | null
+output_tokens     int | null
+created_at        datetime
+```
+
 #### `platform_settings` table — Config Key-Value Store
 ```
 key        str PK    e.g. "feature_flags.hitl_enabled"
@@ -452,8 +531,9 @@ value      JSONB     arbitrary JSON value
 updated_at datetime
 ```
 
-**Migrations:** Managed by Alembic (`alembic upgrade head`). 8 migration files in
-`alembic/versions/` — 001 through 008.
+**Migrations:** Managed by Alembic (`alembic upgrade head`). Migration files in
+`alembic/versions/` — platform tables (001–008) plus Sandhar domain tables (009–014)
+plus refinement tables (015).
 
 ---
 
@@ -558,6 +638,67 @@ non-active statuses.
   analyst rejects and the agent is re-run
 - Dismiss is distinct from Reject: dismiss = "can't decide now" (neutral, no API call,
   action can be re-proposed); reject = definitive no
+
+#### "Refine with AI" Canvas
+
+A conversational canvas that lets a human planner iteratively edit a proposed action's underlying data through natural language, before deciding to approve or reject. It is a generic platform capability activated per-agent via feature flags — no domain-specific code in the platform layer.
+
+**How it is enabled (in any agent's YAML):**
+```yaml
+feature_flags:
+  enable_refinement: true
+  refinement_agent: "sandhar-plan-refiner"   # agent invoked per chat turn
+  refinement_preview: "sandhar-plan"          # Jinja preview partial name (optional)
+```
+
+**How the platform reads these flags:**
+`actions.py` reads `feature_flags` from the action's agent config (YAML-first, DB fallback) at request time. If `enable_refinement` is false or absent, `POST /refine/start` returns 403.
+
+**Session lifecycle:**
+
+```
+POST /refine/start
+  └── Creates agent_refine_session (or returns existing active session idempotently)
+  └── Auto-registers + auto-activates the refinement_agent if not yet in DB
+  └── Returns {session_id, welcome_message}
+
+POST /refine/message  (SSE streaming)
+  └── Persists user message row
+  └── Invokes refinement_agent with full conversation history
+  └── Streams token events to browser:
+        data: {"type": "token",    "content": "Done. WO-0003 moved..."}
+        data: {"type": "tool_use", "tool": "sandhar_refine_move_wo"}
+        data: {"type": "done",     "session_id": "..."}
+  └── On done: persists assistant message row (tool_calls, context_snapshot, tokens)
+
+POST /refine/close
+  └── Sets session status = closed; action stays pending_review
+
+[human clicks Approve in canvas]
+  └── Calls existing POST /actions/{id}/approve — no new approval logic
+```
+
+**Deep linking** (plan page): When a refinement canvas is open, the URL is updated to `?refine=<action_id>` via `history.pushState`. On page reload the canvas auto-opens and restores the full conversation history. The "← Back to Plan" button calls `_goBackToPlan()` which closes the overlay without calling `refine/close` — the session stays `active` so history is fully restored next time.
+
+**Canvas layout:**
+
+```
+┌──────────────────────────────────────────────────────┐
+│  PREVIEW PANE (42%)          │  CHAT CANVAS (58%)     │
+│                              │  Refining: <title>     │
+│  Live domain view —          │  [✅ Approve] [← Back] │
+│  server-rendered partial     │                        │
+│  refreshed on every          │  🤖 Welcome message   │
+│  event:done                  │  👤 User message       │
+│                              │  🤖 AI response        │
+│                              │  [tool badge]          │
+│                              │                        │
+│                              │  [ Type instruction ]  │
+│                              │            [Send →]    │
+└──────────────────────────────────────────────────────┘
+```
+
+**Preview partial resolution:** the platform fetches `GET /sandhar/plan/{header_id}/refine-preview` (a server-rendered HTML fragment with live DB data) and injects it into the preview pane. Refreshed after every `event:done`. Falls back to a formatted JSON viewer of `context_snapshot` if no named partial is found.
 
 ---
 
