@@ -483,3 +483,122 @@ class SandharDailyKpi(Base):
     active_alert_count: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+# ── Propguru Property Evaluation Models ───────────────────────────────────────
+
+class PropguruChannelPartner(Base):
+    __tablename__ = "propguru_channel_partners"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    cp_code: Mapped[str] = mapped_column(String(20), unique=True, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    cp_type: Mapped[str | None] = mapped_column(String(20))   # sourcing | distribution | both
+    phone: Mapped[str | None] = mapped_column(String(20))
+    email: Mapped[str | None] = mapped_column(String(100))
+    city: Mapped[str | None] = mapped_column(String(100))
+    status: Mapped[str] = mapped_column(String(20), default="active")
+    commission_pct: Mapped[float | None] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class PropguruEvaluationCriteria(Base):
+    __tablename__ = "propguru_evaluation_criteria"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    criterion_code: Mapped[str] = mapped_column(String(20), unique=True, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    category: Mapped[str | None] = mapped_column(String(30))   # amenity | location | property | society
+    weight: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    scoring_type: Mapped[str] = mapped_column(String(20), nullable=False)  # boolean | scale_1_5 | proximity_km
+    description: Mapped[str | None] = mapped_column(Text)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    sort_order: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PropguruProperty(Base):
+    __tablename__ = "propguru_properties"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    property_code: Mapped[str] = mapped_column(String(30), unique=True, nullable=False, index=True)
+    address_line1: Mapped[str | None] = mapped_column(String(300))
+    city: Mapped[str | None] = mapped_column(String(100))
+    locality: Mapped[str | None] = mapped_column(String(150))
+    pincode: Mapped[str | None] = mapped_column(String(10))
+    property_type: Mapped[str | None] = mapped_column(String(30))  # apartment | independent_house
+    carpet_area_sqft: Mapped[float | None] = mapped_column(Float)
+    built_up_area_sqft: Mapped[float | None] = mapped_column(Float)
+    bedrooms: Mapped[int | None] = mapped_column(Integer)
+    bathrooms: Mapped[int | None] = mapped_column(Integer)
+    floor_number: Mapped[int | None] = mapped_column(Integer)
+    total_floors: Mapped[int | None] = mapped_column(Integer)
+    building_age_years: Mapped[int | None] = mapped_column(Integer)
+    facing: Mapped[str | None] = mapped_column(String(20))
+    latitude: Mapped[float | None] = mapped_column(Float)
+    longitude: Mapped[float | None] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class PropguruDeal(Base):
+    __tablename__ = "propguru_deals"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    deal_code: Mapped[str] = mapped_column(String(30), unique=True, nullable=False, index=True)
+    property_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("propguru_properties.id"), nullable=True)
+    sourcing_cp_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("propguru_channel_partners.id"), nullable=True)
+    sourcing_cp_commission_pct: Mapped[float | None] = mapped_column(Float)
+    stage: Mapped[str] = mapped_column(String(30), default="lead", index=True)
+    lead_source: Mapped[str | None] = mapped_column(String(50))
+    notes: Mapped[str | None] = mapped_column(Text)
+    target_acquisition_price: Mapped[float | None] = mapped_column(Float)
+    final_sale_price: Mapped[float | None] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class PropguruEvaluationReport(Base):
+    __tablename__ = "propguru_evaluation_reports"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    deal_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("propguru_deals.id"), nullable=False, index=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    status: Mapped[str] = mapped_column(String(20), default="draft", index=True)
+    market_rate_per_sqft: Mapped[float | None] = mapped_column(Float)
+    base_price: Mapped[float | None] = mapped_column(Float)
+    score_factor: Mapped[float | None] = mapped_column(Float)
+    price_premium_pct: Mapped[float | None] = mapped_column(Float)
+    recommended_price: Mapped[float | None] = mapped_column(Float)
+    final_price: Mapped[float | None] = mapped_column(Float)
+    confidence: Mapped[str | None] = mapped_column(String(20))
+    agent_reasoning: Mapped[str | None] = mapped_column(Text)
+    analyst_notes: Mapped[str | None] = mapped_column(Text)
+    approved_by: Mapped[str | None] = mapped_column(String(100))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class PropguruEvaluationScore(Base):
+    __tablename__ = "propguru_evaluation_scores"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    report_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("propguru_evaluation_reports.id"), nullable=False, index=True)
+    criterion_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("propguru_evaluation_criteria.id"), nullable=False)
+    score: Mapped[float | None] = mapped_column(Float)
+    raw_value: Mapped[str | None] = mapped_column(String(200))
+    source: Mapped[str] = mapped_column(String(20), default="agent")
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class PropguruMarketComp(Base):
+    __tablename__ = "propguru_market_comps"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    locality: Mapped[str] = mapped_column(String(150), nullable=False, index=True)
+    property_type: Mapped[str | None] = mapped_column(String(30))
+    avg_price_per_sqft: Mapped[float | None] = mapped_column(Float)
+    min_price_per_sqft: Mapped[float | None] = mapped_column(Float)
+    max_price_per_sqft: Mapped[float | None] = mapped_column(Float)
+    price_trend_6m_pct: Mapped[float | None] = mapped_column(Float)
+    transaction_count_6m: Mapped[int | None] = mapped_column(Integer)
+    data_source: Mapped[str | None] = mapped_column(String(100))
+    as_of_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

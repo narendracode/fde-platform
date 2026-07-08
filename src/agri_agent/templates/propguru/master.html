@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+{% block title %}Master Data — Propguru{% endblock %}
+
+{% block head_extra %}
+<style>
+  .main { max-width: 1200px; margin: 0 auto; padding: 24px 28px; }
+  h2 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  .subtitle { color: #6b7280; font-size: 13px; margin-bottom: 24px; }
+  .tabs { display: flex; gap: 4px; margin-bottom: -1px; flex-wrap: wrap; }
+  .tab { padding: 9px 18px; border: 1px solid #e5e7eb; border-bottom: none;
+         border-radius: 8px 8px 0 0; background: #e5e7eb; cursor: pointer;
+         font-size: 13px; font-weight: 500; color: #6b7280; }
+  .tab.active { background: #fff; color: #1a1a2e; font-weight: 700; position: relative; top: 1px; }
+  .panel { display: none; background: #fff; border: 1px solid #e5e7eb;
+           border-radius: 0 10px 10px 10px; padding: 20px; }
+  .panel.active { display: block; }
+  .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .panel-title { font-size: 15px; font-weight: 600; }
+  .panel-count { font-size: 12px; color: #6b7280; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; padding: 8px 12px; font-size: 11px; font-weight: 700; color: #9ca3af;
+       text-transform: uppercase; background: #fafafa; border-bottom: 1px solid #eee; white-space: nowrap; }
+  td { padding: 10px 12px; border-bottom: 1px solid #f5f5f5; font-size: 13px; }
+  tr:last-child td { border-bottom: none; }
+  .badge { padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
+  .badge-active { background: #dcfce7; color: #14532d; }
+  .badge-inactive { background: #f3f4f6; color: #6b7280; }
+  .badge-sourcing { background: #dbeafe; color: #1e40af; }
+  .badge-distribution { background: #ede9fe; color: #5b21b6; }
+  .badge-both { background: #fef3c7; color: #92400e; }
+  .badge-amenity { background: #d1fae5; color: #065f46; }
+  .badge-location { background: #dbeafe; color: #1e40af; }
+  .badge-property { background: #fef3c7; color: #92400e; }
+  .badge-society { background: #ede9fe; color: #5b21b6; }
+  .weight-bar { display: inline-flex; align-items: center; gap: 6px; }
+  .weight-pip { width: 8px; height: 8px; border-radius: 2px; background: #e5e7eb; }
+  .weight-pip.on { background: #7c3aed; }
+  .trend-up { color: #16a34a; font-weight: 700; }
+  .trend-down { color: #dc2626; font-weight: 700; }
+  .trend-flat { color: #6b7280; }
+  .empty { color: #9ca3af; font-size: 13px; text-align: center; padding: 32px; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #e5e7eb;
+             border-top-color: #7c3aed; border-radius: 50%; animation: spin .6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #toast { position: fixed; bottom: 24px; right: 24px; background: #1a1a2e; color: white;
+           padding: 10px 18px; border-radius: 8px; font-size: 13px; display: none;
+           box-shadow: 0 4px 12px rgba(0,0,0,.2); z-index: 999; }
+  .category-header td { background: #f8f7ff; font-size: 11px; font-weight: 800;
+                         color: #5b21b6; text-transform: uppercase; letter-spacing: .6px;
+                         padding: 6px 12px; border-bottom: 1px solid #e5e7eb; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="main">
+  <h2>Master Data</h2>
+  <p class="subtitle">Channel Partners, Evaluation Criteria, Properties &amp; Market Comps</p>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('cp')">🤝 Channel Partners</div>
+    <div class="tab" onclick="switchTab('criteria')">📊 Evaluation Criteria</div>
+    <div class="tab" onclick="switchTab('properties')">🏠 Properties</div>
+    <div class="tab" onclick="switchTab('comps')">📈 Market Comps</div>
+  </div>
+
+  <!-- Channel Partners -->
+  <div class="panel active" id="panel-cp">
+    <div class="panel-header">
+      <span class="panel-title">Channel Partners</span>
+      <span class="panel-count" id="cp-count"></span>
+    </div>
+    <div id="cp-table"><div class="empty"><span class="spinner"></span></div></div>
+  </div>
+
+  <!-- Evaluation Criteria -->
+  <div class="panel" id="panel-criteria">
+    <div class="panel-header">
+      <span class="panel-title">Evaluation Criteria (30 Data Points)</span>
+      <span class="panel-count" id="criteria-count"></span>
+    </div>
+    <div id="criteria-table"><div class="empty"><span class="spinner"></span></div></div>
+  </div>
+
+  <!-- Properties -->
+  <div class="panel" id="panel-properties">
+    <div class="panel-header">
+      <span class="panel-title">Properties</span>
+      <span class="panel-count" id="properties-count"></span>
+    </div>
+    <div id="properties-table"><div class="empty"><span class="spinner"></span></div></div>
+  </div>
+
+  <!-- Market Comps -->
+  <div class="panel" id="panel-comps">
+    <div class="panel-header">
+      <span class="panel-title">Market Comps</span>
+      <span class="panel-count" id="comps-count"></span>
+    </div>
+    <div id="comps-table"><div class="empty"><span class="spinner"></span></div></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const H = { 'X-API-Key': '{{ api_key }}', 'Content-Type': 'application/json' };
+let _loaded = { cp: false, criteria: false, properties: false, comps: false };
+
+function toast(msg, ok = true) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = ok ? '#1a1a2e' : '#dc2626';
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 3000);
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.classList.toggle('active', ['cp','criteria','properties','comps'][i] === name);
+  });
+  document.querySelectorAll('.panel').forEach((p, i) => {
+    p.classList.toggle('active', ['cp','criteria','properties','comps'][i] === name);
+  });
+  if (!_loaded[name]) { loadTab(name); _loaded[name] = true; }
+}
+
+async function loadTab(name) {
+  if (name === 'cp') await loadCPs();
+  else if (name === 'criteria') await loadCriteria();
+  else if (name === 'properties') await loadProperties();
+  else if (name === 'comps') await loadComps();
+}
+
+function cpTypeBadge(t) {
+  if (!t) return '<span class="badge badge-inactive">—</span>';
+  const cls = { sourcing: 'badge-sourcing', distribution: 'badge-distribution', both: 'badge-both' }[t] || 'badge-inactive';
+  return `<span class="badge ${cls}">${t}</span>`;
+}
+
+function weightBar(w) {
+  const max = 10;
+  const filled = Math.round((w / max) * 10);
+  const pips = Array.from({length: 10}, (_, i) =>
+    `<div class="weight-pip${i < filled ? ' on' : ''}"></div>`
+  ).join('');
+  return `<div class="weight-bar">${pips} <span style="font-size:11px;color:#6b7280;margin-left:2px">${w}</span></div>`;
+}
+
+function categoryBadge(c) {
+  const cls = { amenity: 'badge-amenity', location: 'badge-location', property: 'badge-property', society: 'badge-society' }[c] || 'badge-inactive';
+  return c ? `<span class="badge ${cls}">${c}</span>` : '—';
+}
+
+function scoringTypeLabel(t) {
+  return { boolean: 'Yes / No', scale_1_5: 'Scale 1–5', proximity_km: 'Proximity (km)' }[t] || t;
+}
+
+async function loadCPs() {
+  const r = await fetch('/api/v1/propguru/channel-partners', { headers: H });
+  if (!r.ok) { document.getElementById('cp-table').innerHTML = '<div class="empty">Failed to load</div>'; return; }
+  const data = await r.json();
+  document.getElementById('cp-count').textContent = `${data.length} partners`;
+  if (!data.length) { document.getElementById('cp-table').innerHTML = '<div class="empty">No data — run seed first</div>'; return; }
+  document.getElementById('cp-table').innerHTML = `
+    <table>
+      <thead><tr>
+        <th>Code</th><th>Name</th><th>Type</th><th>City</th>
+        <th>Commission %</th><th>Phone</th><th>Status</th>
+      </tr></thead>
+      <tbody>${data.map(c => `
+        <tr>
+          <td><strong>${c.cp_code}</strong></td>
+          <td>${c.name}</td>
+          <td>${cpTypeBadge(c.cp_type)}</td>
+          <td>${c.city || '—'}</td>
+          <td>${c.commission_pct != null ? c.commission_pct + '%' : '—'}</td>
+          <td>${c.phone || '—'}</td>
+          <td><span class="badge ${c.status === 'active' ? 'badge-active' : 'badge-inactive'}">${c.status}</span></td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+async function loadCriteria() {
+  const r = await fetch('/api/v1/propguru/evaluation-criteria', { headers: H });
+  if (!r.ok) { document.getElementById('criteria-table').innerHTML = '<div class="empty">Failed to load</div>'; return; }
+  const data = await r.json();
+  document.getElementById('criteria-count').textContent = `${data.length} criteria`;
+  if (!data.length) { document.getElementById('criteria-table').innerHTML = '<div class="empty">No data — run seed first</div>'; return; }
+
+  const categories = ['amenity', 'location', 'property', 'society'];
+  const catLabels = { amenity: 'Amenities', location: 'Location Connectivity', property: 'Property Attributes', society: 'Building / Society' };
+  let rows = '';
+  categories.forEach(cat => {
+    const items = data.filter(d => d.category === cat);
+    if (!items.length) return;
+    rows += `<tr class="category-header"><td colspan="6">${catLabels[cat]} (${items.length})</td></tr>`;
+    items.forEach(c => {
+      rows += `<tr>
+        <td style="color:#6b7280;font-size:12px">${c.criterion_code}</td>
+        <td><strong>${c.name}</strong></td>
+        <td>${categoryBadge(c.category)}</td>
+        <td>${weightBar(c.weight)}</td>
+        <td>${scoringTypeLabel(c.scoring_type)}</td>
+        <td><span class="badge ${c.is_active ? 'badge-active' : 'badge-inactive'}">${c.is_active ? 'active' : 'inactive'}</span></td>
+      </tr>`;
+    });
+  });
+
+  document.getElementById('criteria-table').innerHTML = `
+    <table>
+      <thead><tr>
+        <th>Code</th><th>Name</th><th>Category</th><th>Weight</th><th>Scoring Type</th><th>Status</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+async function loadProperties() {
+  const r = await fetch('/api/v1/propguru/properties', { headers: H });
+  if (!r.ok) { document.getElementById('properties-table').innerHTML = '<div class="empty">Failed to load</div>'; return; }
+  const data = await r.json();
+  document.getElementById('properties-count').textContent = `${data.length} properties`;
+  if (!data.length) { document.getElementById('properties-table').innerHTML = '<div class="empty">No data — run seed first</div>'; return; }
+  document.getElementById('properties-table').innerHTML = `
+    <table>
+      <thead><tr>
+        <th>Code</th><th>Locality</th><th>City</th><th>Type</th>
+        <th>Beds</th><th>Carpet (sqft)</th><th>Floor</th><th>Age (yrs)</th><th>Facing</th>
+      </tr></thead>
+      <tbody>${data.map(p => `
+        <tr>
+          <td><strong>${p.property_code}</strong></td>
+          <td>${p.locality || '—'}</td>
+          <td>${p.city || '—'}</td>
+          <td>${p.property_type === 'apartment' ? '🏢 Apartment' : p.property_type === 'independent_house' ? '🏠 Ind. House' : p.property_type || '—'}</td>
+          <td>${p.bedrooms != null ? p.bedrooms + ' BHK' : '—'}</td>
+          <td>${p.carpet_area_sqft != null ? p.carpet_area_sqft.toLocaleString() : '—'}</td>
+          <td>${p.floor_number != null ? p.floor_number + '/' + (p.total_floors || '?') : '—'}</td>
+          <td>${p.building_age_years != null ? p.building_age_years : '—'}</td>
+          <td style="text-transform:capitalize">${p.facing || '—'}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+async function loadComps() {
+  const r = await fetch('/api/v1/propguru/market-comps', { headers: H });
+  if (!r.ok) { document.getElementById('comps-table').innerHTML = '<div class="empty">Failed to load</div>'; return; }
+  const data = await r.json();
+  document.getElementById('comps-count').textContent = `${data.length} localities`;
+  if (!data.length) { document.getElementById('comps-table').innerHTML = '<div class="empty">No data — run seed first</div>'; return; }
+  document.getElementById('comps-table').innerHTML = `
+    <table>
+      <thead><tr>
+        <th>Locality</th><th>Type</th><th>Avg ₹/sqft</th><th>Min</th><th>Max</th>
+        <th>6M Trend</th><th>Transactions (6M)</th><th>Source</th><th>As Of</th>
+      </tr></thead>
+      <tbody>${data.map(c => {
+        const trend = c.price_trend_6m_pct;
+        const trendHtml = trend == null ? '—'
+          : trend > 0 ? `<span class="trend-up">▲ ${trend}%</span>`
+          : trend < 0 ? `<span class="trend-down">▼ ${Math.abs(trend)}%</span>`
+          : `<span class="trend-flat">→ 0%</span>`;
+        return `<tr>
+          <td><strong>${c.locality}</strong></td>
+          <td style="text-transform:capitalize">${(c.property_type || '').replace('_', ' ')}</td>
+          <td>₹${c.avg_price_per_sqft != null ? c.avg_price_per_sqft.toLocaleString() : '—'}</td>
+          <td>₹${c.min_price_per_sqft != null ? c.min_price_per_sqft.toLocaleString() : '—'}</td>
+          <td>₹${c.max_price_per_sqft != null ? c.max_price_per_sqft.toLocaleString() : '—'}</td>
+          <td>${trendHtml}</td>
+          <td>${c.transaction_count_6m != null ? c.transaction_count_6m : '—'}</td>
+          <td style="color:#6b7280">${c.data_source || '—'}</td>
+          <td style="color:#6b7280">${c.as_of_date || '—'}</td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>`;
+}
+
+// Load the first tab on page load
+loadCPs();
+_loaded.cp = true;
+</script>
+{% endblock %}

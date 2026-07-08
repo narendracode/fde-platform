@@ -33,8 +33,8 @@ class Settings(BaseSettings):
     log_level: str = "info"
     agents_config_dir: str = "agents/configs"
 
-    # UI feature flags — comma-separated string: "sandhar,fundly" (empty = platform only)
-    companies_to_show: str = "sandhar,fundly"
+    # UI feature flags — comma-separated string: "sandhar,fundly,propguru" (empty = platform only)
+    companies_to_show: str = "sandhar,fundly,propguru"
 
     # OpenTelemetry
     otel_enabled: bool = False

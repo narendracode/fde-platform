@@ -20,6 +20,11 @@ from agri_agent.api.routes.sandhar import (
     kpi as sandhar_kpi,
     simulation as sandhar_simulation,
 )
+from agri_agent.api.routes.propguru import pages as propguru_pages
+from agri_agent.api.routes.propguru import (
+    master as propguru_master,
+    simulation as propguru_simulation,
+)
 from agri_agent.config.settings import settings
 
 logging.basicConfig(level=settings.log_level.upper())
@@ -62,6 +67,11 @@ app.include_router(sandhar_alerts.router)
 app.include_router(sandhar_kpi.router)
 app.include_router(sandhar_simulation.router)
 app.include_router(sandhar_pages.router)
+
+# ── Propguru Property Evaluation ─────────────────────────────────────────────
+app.include_router(propguru_master.router)
+app.include_router(propguru_simulation.router)
+app.include_router(propguru_pages.router)
 
 
 @app.on_event("startup")

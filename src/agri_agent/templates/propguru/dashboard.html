@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Propguru{% endblock %}
+
+{% block head_extra %}
+<style>
+  .main { max-width: 1100px; margin: 0 auto; padding: 24px 28px; }
+  h2 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  .subtitle { color: #6b7280; font-size: 13px; margin-bottom: 28px; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 28px; }
+  .kpi-card { background: #fff; border-radius: 10px; padding: 18px 16px;
+              box-shadow: 0 1px 4px rgba(0,0,0,.07); border: 1px solid #e5e7eb; }
+  .kpi-label { font-size: 11px; color: #6b7280; font-weight: 600; text-transform: uppercase;
+               letter-spacing: .5px; margin-bottom: 8px; }
+  .kpi-value { font-size: 26px; font-weight: 800; color: #1a1a2e; }
+  .kpi-sub { font-size: 11px; color: #9ca3af; margin-top: 4px; }
+  .pipeline { background: #fff; border-radius: 10px; padding: 20px 24px;
+              box-shadow: 0 1px 4px rgba(0,0,0,.07); border: 1px solid #e5e7eb; margin-bottom: 24px; }
+  .pipeline-title { font-size: 15px; font-weight: 700; margin-bottom: 16px; }
+  .stage-bar { display: flex; gap: 0; border-radius: 8px; overflow: hidden; height: 36px; margin-bottom: 12px; }
+  .stage-seg { display: flex; align-items: center; justify-content: center;
+               font-size: 11px; font-weight: 700; color: #fff; transition: flex .4s; min-width: 28px; }
+  .stage-lead { background: #6b7280; }
+  .stage-eval-pending { background: #d97706; }
+  .stage-eval-done { background: #2563eb; }
+  .stage-listed { background: #7c3aed; }
+  .stage-sold { background: #16a34a; }
+  .stage-lost { background: #dc2626; }
+  .stage-legend { display: flex; flex-wrap: wrap; gap: 14px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #374151; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 3px; }
+  .recent-card { background: #fff; border-radius: 10px; padding: 20px 24px;
+                 box-shadow: 0 1px 4px rgba(0,0,0,.07); border: 1px solid #e5e7eb; }
+  .recent-title { font-size: 15px; font-weight: 700; margin-bottom: 14px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; padding: 8px 12px; font-size: 11px; font-weight: 700; color: #9ca3af;
+       text-transform: uppercase; border-bottom: 1px solid #f3f4f6; }
+  td { padding: 10px 12px; border-bottom: 1px solid #f9fafb; font-size: 13px; }
+  tr:last-child td { border-bottom: none; }
+  .badge { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 11px; font-weight: 700; }
+  .badge-lead { background: #f3f4f6; color: #6b7280; }
+  .badge-eval-pending { background: #fef3c7; color: #92400e; }
+  .badge-eval-done { background: #dbeafe; color: #1e40af; }
+  .badge-listed { background: #ede9fe; color: #5b21b6; }
+  .badge-sold { background: #dcfce7; color: #14532d; }
+  .badge-lost { background: #fee2e2; color: #991b1b; }
+  .empty { color: #9ca3af; font-size: 13px; text-align: center; padding: 32px; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #e5e7eb;
+             border-top-color: #7c3aed; border-radius: 50%; animation: spin .6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="main">
+  <h2>Propguru — Command Centre</h2>
+  <p class="subtitle">Property evaluation pipeline overview</p>
+
+  <div class="kpi-grid" id="kpi-grid">
+    <div class="kpi-card"><div class="kpi-label">Total Deals</div><div class="kpi-value" id="kpi-total">—</div><div class="kpi-sub">all stages</div></div>
+    <div class="kpi-card"><div class="kpi-label">Leads</div><div class="kpi-value" id="kpi-lead">—</div><div class="kpi-sub">awaiting evaluation</div></div>
+    <div class="kpi-card"><div class="kpi-label">Pending Eval</div><div class="kpi-value" id="kpi-pending">—</div><div class="kpi-sub">ready to evaluate</div></div>
+    <div class="kpi-card"><div class="kpi-label">Evaluated</div><div class="kpi-value" id="kpi-done">—</div><div class="kpi-sub">approved &amp; listed</div></div>
+    <div class="kpi-card"><div class="kpi-label">Closed</div><div class="kpi-value" id="kpi-sold">—</div><div class="kpi-sub">sold deals</div></div>
+  </div>
+
+  <div class="pipeline">
+    <div class="pipeline-title">Deal Pipeline</div>
+    <div class="stage-bar" id="pipeline-bar"><div style="flex:1;background:#f3f4f6"></div></div>
+    <div class="stage-legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#6b7280"></div>Lead</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#d97706"></div>Evaluation Pending</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#2563eb"></div>Evaluation Done</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#7c3aed"></div>Listed</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#16a34a"></div>Sold</div>
+    </div>
+  </div>
+
+  <div class="recent-card">
+    <div class="recent-title">Recent Deals</div>
+    <div id="deals-table"><div class="empty"><span class="spinner"></span></div></div>
+  </div>
+</div>
+
+<script>
+const H = { 'X-API-Key': '{{ api_key }}', 'Content-Type': 'application/json' };
+
+const STAGE_CLASSES = {
+  lead: 'badge-lead',
+  evaluation_pending: 'badge-eval-pending',
+  evaluation_done: 'badge-eval-done',
+  listed: 'badge-listed',
+  sold: 'badge-sold',
+  lost: 'badge-lost',
+};
+const STAGE_LABELS = {
+  lead: 'Lead',
+  evaluation_pending: 'Eval Pending',
+  evaluation_done: 'Eval Done',
+  listed: 'Listed',
+  sold: 'Sold',
+  lost: 'Lost',
+};
+const STAGE_BAR_CLASS = {
+  lead: 'stage-lead',
+  evaluation_pending: 'stage-eval-pending',
+  evaluation_done: 'stage-eval-done',
+  listed: 'stage-listed',
+  sold: 'stage-sold',
+  lost: 'stage-lost',
+};
+
+async function load() {
+  const r = await fetch('/api/v1/propguru/deals', { headers: H });
+  if (!r.ok) { document.getElementById('deals-table').innerHTML = '<div class="empty">Failed to load deals</div>'; return; }
+  const deals = await r.json();
+
+  // KPI counts
+  const counts = {};
+  deals.forEach(d => { counts[d.stage] = (counts[d.stage] || 0) + 1; });
+  document.getElementById('kpi-total').textContent = deals.length;
+  document.getElementById('kpi-lead').textContent = counts['lead'] || 0;
+  document.getElementById('kpi-pending').textContent = counts['evaluation_pending'] || 0;
+  document.getElementById('kpi-done').textContent = (counts['evaluation_done'] || 0) + (counts['listed'] || 0);
+  document.getElementById('kpi-sold').textContent = counts['sold'] || 0;
+
+  // Pipeline bar
+  const bar = document.getElementById('pipeline-bar');
+  if (deals.length > 0) {
+    const order = ['lead', 'evaluation_pending', 'evaluation_done', 'listed', 'sold', 'lost'];
+    bar.innerHTML = order.filter(s => counts[s]).map(s =>
+      `<div class="stage-seg ${STAGE_BAR_CLASS[s]}" style="flex:${counts[s]}" title="${STAGE_LABELS[s]}: ${counts[s]}">${counts[s]}</div>`
+    ).join('');
+  }
+
+  // Table
+  if (deals.length === 0) {
+    document.getElementById('deals-table').innerHTML = '<div class="empty">No deals found — run seed first</div>';
+    return;
+  }
+  const rows = deals.slice(0, 10).map(d => `
+    <tr>
+      <td><strong>${d.deal_code}</strong></td>
+      <td>${d.locality || '—'}</td>
+      <td>${d.property_type || '—'}</td>
+      <td>${d.cp_name || '—'}</td>
+      <td><span class="badge ${STAGE_CLASSES[d.stage] || 'badge-lead'}">${STAGE_LABELS[d.stage] || d.stage}</span></td>
+      <td>${d.target_acquisition_price ? '₹' + (d.target_acquisition_price/100000).toFixed(1) + 'L' : '—'}</td>
+    </tr>`).join('');
+  document.getElementById('deals-table').innerHTML = `
+    <table>
+      <thead><tr>
+        <th>Deal</th><th>Locality</th><th>Type</th><th>Channel Partner</th><th>Stage</th><th>Acq. Price</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+load();
+</script>
+{% endblock %}

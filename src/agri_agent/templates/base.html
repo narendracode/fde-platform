@@ -125,6 +125,29 @@
   </div>
   {% endif %}
 
+  {% if 'propguru' in companies %}
+  <div class="sidebar-divider"></div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Propguru</div>
+    <a href="/propguru" class="sidebar-link {% if active_page == 'propguru_dashboard' %}active{% endif %}">
+      <span class="icon">🏠</span> Dashboard
+    </a>
+    <a href="/propguru/deals" class="sidebar-link {% if active_page == 'propguru_deals' %}active{% endif %}">
+      <span class="icon">📋</span> Deals
+    </a>
+    <a href="/propguru/evaluation" class="sidebar-link {% if active_page == 'propguru_evaluation' %}active{% endif %}">
+      <span class="icon">🔍</span> Evaluation
+    </a>
+    <a href="/propguru/master" class="sidebar-link {% if active_page == 'propguru_master' %}active{% endif %}">
+      <span class="icon">🗂</span> Master Data
+    </a>
+    <a href="/propguru/simulation" class="sidebar-link {% if active_page == 'propguru_simulation' %}active{% endif %}">
+      <span class="icon">🎮</span> Simulation
+    </a>
+  </div>
+  {% endif %}
+
   <div class="sidebar-footer">
     <a href="/docs" target="_blank">
       <span>📖</span> API Docs
