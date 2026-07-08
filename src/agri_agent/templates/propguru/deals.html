@@ -188,8 +188,16 @@ async function loadDeals() {
           <td><span class="badge ${STAGE_CLASSES[d.stage] || ''}">${STAGE_LABELS[d.stage] || d.stage}</span></td>
           <td>${priceFmt}</td>
           <td>
-            ${canEval ? `<button class="btn btn-success btn-sm" onclick="triggerEval('${d.id}', '${d.deal_code}', this)">▶ Evaluate</button>` : ''}
-            ${d.stage === 'evaluation_pending' || d.stage === 'evaluation_done' ? `<a href="/propguru/evaluation?deal_id=${d.id}" class="btn btn-outline btn-sm">View Report</a>` : ''}
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:nowrap">
+              ${d.stage === 'lead'
+                ? `<button class="btn btn-success btn-sm" onclick="triggerEval('${d.id}','${d.deal_code}',this)">▶ Evaluate</button>`
+                : d.stage === 'evaluation_pending'
+                  ? `<span style="font-size:11px;color:#92400e;background:#fef3c7;padding:2px 8px;border-radius:10px;font-weight:600;white-space:nowrap">⏳ Running</span>
+                     <a href="/propguru/evaluation?deal_id=${d.id}" class="btn btn-outline btn-sm">View Report</a>`
+                  : d.stage === 'evaluation_done'
+                    ? `<a href="/propguru/evaluation?deal_id=${d.id}" class="btn btn-outline btn-sm">View Report</a>`
+                    : '<span style="color:#d1d5db;font-size:12px">—</span>'}
+            </div>
           </td>
         </tr>`;
       }).join('')}

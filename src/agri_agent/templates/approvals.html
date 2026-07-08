@@ -2,6 +2,7 @@
 {% block title %}Actions — AI Agent Platform{% endblock %}
 
 {% block head_extra %}
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <style>
     .main { max-width: 940px; margin: 0 auto; padding: 24px 20px; }
 
@@ -143,6 +144,26 @@
     #toast { position: fixed; bottom: 24px; right: 24px; background: #1a1a2e; color: white;
              padding: 10px 18px; border-radius: 8px; font-size: 13px; display: none;
              box-shadow: 0 4px 12px rgba(0,0,0,.2); z-index: 999; max-width: 360px; }
+
+    /* ── Formatted output (markdown / JSON) ── */
+    .md-output { font-size: 13px; color: #374151; line-height: 1.65; }
+    .md-output h1,.md-output h2,.md-output h3 { font-size: 14px; font-weight: 700; color: #1a1a2e; margin: 10px 0 4px; }
+    .md-output h4,.md-output h5 { font-size: 13px; font-weight: 700; margin: 8px 0 2px; }
+    .md-output p { margin: 4px 0; }
+    .md-output ul,.md-output ol { margin: 4px 0 4px 18px; padding: 0; }
+    .md-output li { margin: 2px 0; }
+    .md-output strong { font-weight: 700; }
+    .md-output em { font-style: italic; }
+    .md-output code { background: #f1f5f9; padding: 1px 5px; border-radius: 3px; font-size: 11px; font-family: monospace; }
+    .md-output pre { background: #f1f5f9; padding: 10px 12px; border-radius: 6px; overflow-x: auto;
+                     font-size: 11px; font-family: monospace; margin: 6px 0; }
+    .md-output blockquote { border-left: 3px solid #cbd5e1; margin: 4px 0; padding: 4px 10px; color: #64748b; }
+    .md-output table { border-collapse: collapse; font-size: 12px; margin: 6px 0; }
+    .md-output th,.md-output td { border: 1px solid #e2e8f0; padding: 4px 8px; }
+    .md-output th { background: #f8fafc; font-weight: 700; }
+    .json-output { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;
+                   padding: 10px 12px; font-size: 11px; font-family: monospace; white-space: pre-wrap;
+                   color: #1e293b; line-height: 1.55; margin: 4px 0; overflow-x: auto; max-height: 300px; overflow-y: auto; }
 
     /* ── Refine with AI button ── */
     .btn-refine { background: #ede9fe; color: #5b21b6; border: 1.5px solid #c4b5fd; }
@@ -315,11 +336,11 @@
           {% if action.display_data %}
           <table class="details-table">
             {% for item in action.display_data %}
-            <tr><td>{{ item.label }}</td><td>{{ item.value }}</td></tr>
+            <tr><td>{{ item.label }}</td><td class="dd-value">{{ item.value }}</td></tr>
             {% endfor %}
           </table>
           {% endif %}
-          {% if action.reasoning %}<div class="reasoning-box">{{ action.reasoning }}</div>{% endif %}
+          {% if action.reasoning %}<div class="reasoning-box auto-format">{{ action.reasoning }}</div>{% endif %}
           {% set state_fields = action.expected_state.items() | list | selectattr(0, 'ne', 'resource_id') | list if action.expected_state else [] %}
           {% if state_fields %}
           <div class="section-label">Resource state when proposed</div>
@@ -400,11 +421,11 @@
           {% if action.display_data %}
           <table class="details-table">
             {% for item in action.display_data %}
-            <tr><td>{{ item.label }}</td><td>{{ item.value }}</td></tr>
+            <tr><td>{{ item.label }}</td><td class="dd-value">{{ item.value }}</td></tr>
             {% endfor %}
           </table>
           {% endif %}
-          {% if action.reasoning %}<div class="reasoning-box">{{ action.reasoning }}</div>{% endif %}
+          {% if action.reasoning %}<div class="reasoning-box auto-format">{{ action.reasoning }}</div>{% endif %}
         </div>
         {% if action.drift_details %}
         <div class="drift-info">
@@ -891,6 +912,62 @@ function _closeCanvasUI() {
   }
   Object.assign(_canvas, { actionId: null, sessionId: null, planHeaderId: null, streaming: false, locked: false });
 }
+
+// ── Smart output formatting (markdown / JSON) ─────────────────────────────────
+
+function formatOutput(rawText) {
+  if (!rawText || !rawText.trim()) return '';
+  const t = rawText.trim();
+
+  // Try JSON first — objects and arrays
+  if ((t.startsWith('{') || t.startsWith('[')) && t.length > 2) {
+    try {
+      const parsed = JSON.parse(t);
+      return `<div class="json-output">${JSON.stringify(parsed, null, 2)}</div>`;
+    } catch (_) { /* not JSON */ }
+  }
+
+  // Markdown heuristic — common indicators
+  const mdPattern = /^#{1,6} |^\*\*|^- |\*\*.*\*\*|\|.*\|.*\||^>\s|^```/m;
+  if (mdPattern.test(t)) {
+    return `<div class="md-output">${marked.parse(t)}</div>`;
+  }
+
+  // Plain text — preserve line breaks
+  return rawText.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+}
+
+function postProcessOutputFields() {
+  // Format reasoning boxes
+  document.querySelectorAll('.reasoning-box.auto-format').forEach(el => {
+    const raw = el.textContent;
+    if (raw && raw.trim()) {
+      el.classList.remove('auto-format');
+      el.innerHTML = formatOutput(raw);
+      // Restyle: remove white-space:pre-wrap since md-output handles it
+      if (el.querySelector('.md-output')) el.style.whiteSpace = 'normal';
+    }
+  });
+
+  // Format display_data values
+  document.querySelectorAll('td.dd-value').forEach(el => {
+    const raw = el.textContent;
+    if (!raw || raw.trim().length < 10) return; // skip short plain values
+    const formatted = formatOutput(raw);
+    if (formatted !== raw.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')) {
+      el.innerHTML = formatted;
+    }
+  });
+}
+
+// Run after DOM and marked.js are both ready
+document.addEventListener('DOMContentLoaded', () => {
+  if (typeof marked !== 'undefined') {
+    postProcessOutputFields();
+  } else {
+    window.addEventListener('load', postProcessOutputFields);
+  }
+});
 
 async function approveFromCanvas() {
   if (!_canvas.actionId || _canvas.locked) return;

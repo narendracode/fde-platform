@@ -1,0 +1,89 @@
+{% set fmt_price = namespace(fn=none) %}
+<div class="rp-container">
+
+  <div class="rp-summary">
+    <div class="rp-sum-row">
+      <span class="rp-label">Current price</span>
+      <span class="rp-price">
+        {% if report.recommended_price %}₹{{ "%.1f"|format(report.recommended_price / 100000) }}L{% else %}—{% endif %}
+      </span>
+    </div>
+    <div class="rp-sum-row">
+      <span class="rp-label">Score factor</span>
+      <span>{{ "%.1f"|format((report.score_factor or 0) * 100) }}%</span>
+    </div>
+    <div class="rp-sum-row">
+      <span class="rp-label">Confidence</span>
+      <span class="rp-conf rp-conf-{{ report.confidence or 'low' }}">{{ (report.confidence or 'low')|upper }}</span>
+    </div>
+    <div class="rp-sum-row">
+      <span class="rp-label">Criteria scored</span>
+      <span>{{ total_scored }} / 30</span>
+    </div>
+  </div>
+
+  {% if cat_scores %}
+  <div class="rp-cats">
+    {% for cat, pct in cat_scores.items() %}
+    <div class="rp-cat">
+      <div class="rp-cat-label">{{ cat|title }}</div>
+      <div class="rp-bar-outer">
+        <div class="rp-bar-inner" style="width:{{ pct }}%"></div>
+      </div>
+      <div class="rp-cat-pct">{{ pct }}%</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="rp-scores-title">Top 10 criteria by weight</div>
+  <div class="rp-scores">
+    {% for s in scores %}
+    <div class="rp-score-row" data-score-id="{{ s.score_id }}" data-code="{{ s.criterion_code }}">
+      <div class="rp-score-meta">
+        <span class="rp-code">{{ s.criterion_code }}</span>
+        <span class="rp-name">{{ s.criterion_name }}</span>
+        <span class="rp-src rp-src-{{ s.source }}">{{ s.source }}</span>
+      </div>
+      <div class="rp-score-val">
+        {% set maxscore = 1.0 if s.scoring_type == 'boolean' else 5.0 %}
+        {% set pct = (s.score / maxscore * 100)|round|int %}
+        <div class="rp-bar-outer">
+          <div class="rp-bar-inner" style="width:{{ pct }}%"></div>
+        </div>
+        <span class="rp-num">{{ s.score }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+</div>
+
+<style>
+.rp-container { font-size: 12px; }
+.rp-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px;
+              background: #f9fafb; border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; }
+.rp-sum-row { display: flex; justify-content: space-between; align-items: center; }
+.rp-label { color: #9ca3af; }
+.rp-price { font-size: 16px; font-weight: 800; color: #1a1a2e; }
+.rp-conf-high { color: #16a34a; font-weight: 700; }
+.rp-conf-medium { color: #d97706; font-weight: 700; }
+.rp-conf-low { color: #dc2626; font-weight: 700; }
+.rp-cats { margin-bottom: 12px; }
+.rp-cat { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.rp-cat-label { width: 80px; color: #6b7280; font-size: 11px; }
+.rp-cat-pct { width: 36px; text-align: right; font-weight: 600; color: #374151; }
+.rp-scores-title { font-size: 11px; font-weight: 700; color: #9ca3af;
+                   text-transform: uppercase; letter-spacing: .4px; margin-bottom: 6px; }
+.rp-scores { display: flex; flex-direction: column; gap: 4px; }
+.rp-score-row { padding: 6px 8px; border-radius: 6px; background: #f9fafb; }
+.rp-score-meta { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.rp-code { font-size: 10px; font-weight: 800; color: #7c3aed; }
+.rp-name { flex: 1; color: #374151; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-src-agent { color: #7c3aed; font-size: 10px; font-weight: 600; }
+.rp-src-analyst { color: #16a34a; font-size: 10px; font-weight: 600; }
+.rp-score-val { display: flex; align-items: center; gap: 6px; }
+.rp-bar-outer { flex: 1; height: 5px; background: #e5e7eb; border-radius: 3px; }
+.rp-bar-inner { height: 5px; border-radius: 3px; background: #7c3aed; }
+.rp-num { font-size: 12px; font-weight: 700; color: #1a1a2e; min-width: 18px; text-align: right; }
+</style>

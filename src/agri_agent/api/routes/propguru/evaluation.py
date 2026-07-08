@@ -12,7 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agri_agent.api.dependencies import verify_api_key
 from agri_agent.db.models import (
+    Agent,
     AgentAction,
+    AgentRun,
     PropguruDeal,
     PropguruEvaluationCriteria,
     PropguruEvaluationReport,
@@ -107,6 +109,11 @@ class UpdateScoreRequest(BaseModel):
 class UpdateFinalPriceRequest(BaseModel):
     final_price: float
     analyst_notes: str | None = None
+
+
+class RefineRequest(BaseModel):
+    refinement_request: str
+    requested_by: str = "analyst"
 
 
 class SetBasePriceRequest(BaseModel):
@@ -576,3 +583,76 @@ async def update_final_price(
     await session.commit()
     await session.refresh(report)
     return _report_out(report)
+
+
+@router.post("/evaluations/{report_id}/refine", status_code=202)
+async def trigger_refinement(
+    report_id: str,
+    req: RefineRequest,
+    session: AsyncSession = Depends(get_session),
+    _: str = Depends(verify_api_key),
+):
+    """Trigger the AI refinement agent to update specific scores based on analyst feedback."""
+    try:
+        rid = uuid.UUID(report_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid report_id")
+
+    report = (await session.execute(
+        select(PropguruEvaluationReport).where(PropguruEvaluationReport.id == rid)
+    )).scalar_one_or_none()
+    if not report:
+        raise HTTPException(status_code=404, detail=f"Report '{report_id}' not found")
+
+    if report.status == "approved":
+        raise HTTPException(status_code=422, detail="Cannot refine an approved evaluation")
+
+    agent_result = await session.execute(
+        select(Agent).where(Agent.name == "propguru-evaluation-refiner")
+    )
+    agent = agent_result.scalar_one_or_none()
+    if not agent:
+        raise HTTPException(
+            status_code=404,
+            detail="Agent 'propguru-evaluation-refiner' not found. Seed it first via /api/v1/agents.",
+        )
+    if not agent.is_active:
+        raise HTTPException(
+            status_code=403,
+            detail="Agent 'propguru-evaluation-refiner' is not active. Activate it from the Agents dashboard.",
+        )
+
+    extra_context = {
+        "report_id": str(report.id),
+        "deal_id": str(report.deal_id),
+        "refinement_request": req.refinement_request,
+    }
+    run = AgentRun(
+        agent_id=agent.id,
+        status="pending",
+        input={
+            "message": f"Refine evaluation report {report_id}: {req.refinement_request[:100]}",
+            "extra_context": extra_context,
+        },
+    )
+    session.add(run)
+    await session.commit()
+    await session.refresh(run)
+
+    try:
+        from agri_agent.queue.tasks import run_agent_task
+        run_agent_task.delay(
+            str(run.id),
+            "propguru-evaluation-refiner",
+            req.refinement_request,
+            extra_context,
+        )
+    except Exception:
+        pass
+
+    return {
+        "run_id": str(run.id),
+        "report_id": str(report.id),
+        "status": "queued",
+        "message": "Refinement agent started — poll /api/v1/runs/{run_id} for status",
+    }

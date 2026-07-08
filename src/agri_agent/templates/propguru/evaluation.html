@@ -5,15 +5,63 @@
 <style>
   .main { max-width: 1100px; margin: 0 auto; padding: 24px 28px; }
   h2 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
-  .subtitle { color: #6b7280; font-size: 13px; margin-bottom: 24px; }
+  .subtitle { color: #6b7280; font-size: 13px; margin-bottom: 20px; }
 
-  /* Deal selector */
-  .deal-selector { display: flex; gap: 12px; align-items: center; margin-bottom: 24px; }
-  .deal-selector select { flex: 1; padding: 9px 12px; border: 1px solid #d1d5db;
-                           border-radius: 7px; font-size: 13px; }
-  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px;
-         border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer;
-         border: none; transition: opacity .15s; }
+  /* ── Stage filter tabs ── */
+  .stage-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+  .stage-tab { padding: 6px 16px; border-radius: 20px; font-size: 12px; font-weight: 600;
+               cursor: pointer; border: 1px solid #e5e7eb; background: #fff; color: #6b7280;
+               transition: background .15s, color .15s; white-space: nowrap; }
+  .stage-tab:hover { border-color: #7c3aed; color: #7c3aed; }
+  .stage-tab.active { background: #7c3aed; color: #fff; border-color: #7c3aed; }
+
+  /* ── Lifecycle legend ── */
+  .lifecycle { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px;
+               padding: 16px 20px; margin-bottom: 22px; }
+  .lifecycle-title { font-size: 11px; font-weight: 800; color: #6b7280; text-transform: uppercase;
+                     letter-spacing: .5px; margin-bottom: 12px; }
+  .lifecycle-flow { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; }
+  .lc-step { flex: 1; min-width: 140px; position: relative; }
+  .lc-step + .lc-step::before {
+    content: '→'; position: absolute; left: -10px; top: 50%; transform: translateY(-50%);
+    color: #9ca3af; font-size: 16px; font-weight: 400;
+  }
+  .lc-box { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 12px;
+            height: 100%; box-sizing: border-box; }
+  .lc-badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 10px;
+              font-weight: 800; text-transform: uppercase; letter-spacing: .3px; margin-bottom: 5px; }
+  .lc-badge-lead    { background: #f3f4f6; color: #6b7280; }
+  .lc-badge-running { background: #fef3c7; color: #92400e; }
+  .lc-badge-review  { background: #dbeafe; color: #1e40af; }
+  .lc-badge-ok      { background: #dcfce7; color: #14532d; }
+  .lc-badge-ng      { background: #fee2e2; color: #991b1b; }
+  .lc-who { font-size: 10px; color: #9ca3af; font-weight: 600; margin-bottom: 3px; }
+  .lc-label { font-size: 12px; font-weight: 700; color: #1a1a2e; margin-bottom: 3px; }
+  .lc-desc { font-size: 11px; color: #6b7280; line-height: 1.4; }
+
+  /* ── Deals table ── */
+  .deals-card { background: #fff; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.07);
+                border: 1px solid #e5e7eb; overflow: hidden; margin-bottom: 24px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; padding: 10px 14px; font-size: 10px; font-weight: 700; color: #9ca3af;
+       text-transform: uppercase; background: #fafafa; border-bottom: 1px solid #eee; white-space: nowrap; }
+  td { padding: 11px 14px; border-bottom: 1px solid #f5f5f5; font-size: 13px; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr.deal-row { cursor: pointer; }
+  tr.deal-row:hover td { background: #faf5ff; }
+  tr.deal-row.selected td { background: #f5f3ff; }
+
+  .badge { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 11px; font-weight: 700; }
+  .badge-lead         { background: #f3f4f6; color: #6b7280; }
+  .badge-eval-pending { background: #fef3c7; color: #92400e; }
+  .badge-eval-done    { background: #dbeafe; color: #1e40af; }
+  .badge-listed       { background: #ede9fe; color: #5b21b6; }
+  .badge-sold         { background: #dcfce7; color: #14532d; }
+  .badge-lost         { background: #fee2e2; color: #991b1b; }
+
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px;
+         border-radius: 7px; font-size: 12px; font-weight: 600; cursor: pointer;
+         border: none; transition: opacity .15s; white-space: nowrap; }
   .btn:hover:not(:disabled) { opacity: .85; }
   .btn:disabled { opacity: .5; cursor: not-allowed; }
   .btn-primary { background: #7c3aed; color: #fff; }
@@ -21,35 +69,48 @@
   .btn-danger  { background: #dc2626; color: #fff; }
   .btn-outline { background: #fff; color: #374151; border: 1px solid #d1d5db; }
 
-  /* Run status */
+  /* ── Run status bar ── */
   .run-status { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px;
                 padding: 12px 16px; margin-bottom: 20px; font-size: 13px; color: #92400e;
                 display: none; }
   .run-status.show { display: flex; align-items: center; gap: 10px; }
 
-  /* Report header */
+  /* ── Evaluation report panel ── */
   .report-area { display: none; }
   .report-area.show { display: block; }
+
   .report-header { background: #fff; border-radius: 10px; border: 1px solid #e5e7eb;
                    padding: 22px 26px; margin-bottom: 20px;
                    box-shadow: 0 1px 4px rgba(0,0,0,.07); }
   .price-display { display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px; }
   .price-main { font-size: 32px; font-weight: 800; color: #1a1a2e; }
-  .price-sub { font-size: 14px; color: #6b7280; }
-  .meta-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 18px; }
-  .meta-card { background: #f9fafb; border-radius: 8px; padding: 12px 14px; }
+  .price-sub  { font-size: 14px; color: #6b7280; }
+  .meta-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 18px; }
+  .meta-card  { background: #f9fafb; border-radius: 8px; padding: 12px 14px; }
   .meta-label { font-size: 11px; color: #9ca3af; font-weight: 600; text-transform: uppercase;
                 letter-spacing: .4px; margin-bottom: 4px; }
   .meta-value { font-size: 16px; font-weight: 700; }
-  .confidence-high { color: #16a34a; }
+  .confidence-high   { color: #16a34a; }
   .confidence-medium { color: #d97706; }
-  .confidence-low { color: #dc2626; }
+  .confidence-low    { color: #dc2626; }
   .reasoning-box { background: #f0f9ff; border-left: 3px solid #0ea5e9; border-radius: 6px;
                    padding: 12px 16px; font-size: 13px; color: #0c4a6e; line-height: 1.6;
                    margin-bottom: 16px; white-space: pre-wrap; }
   .action-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 
-  /* Scores panel */
+  .eval-origin { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px;
+          border-radius: 20px; font-size: 11px; font-weight: 700; }
+  .chip-ai      { background: #ede9fe; color: #5b21b6; }
+  .chip-analyst { background: #dcfce7; color: #14532d; }
+
+  .rpt-status-badge { display: inline-block; padding: 3px 10px; border-radius: 8px; font-size: 11px; font-weight: 700; }
+  .rpt-draft    { background: #fef3c7; color: #92400e; }
+  .rpt-pending  { background: #dbeafe; color: #1e40af; }
+  .rpt-approved { background: #dcfce7; color: #14532d; }
+  .rpt-rejected { background: #fee2e2; color: #991b1b; }
+
+  /* ── Scores panel ── */
   .scores-section { background: #fff; border-radius: 10px; border: 1px solid #e5e7eb;
                     padding: 20px 24px; margin-bottom: 20px;
                     box-shadow: 0 1px 4px rgba(0,0,0,.07); }
@@ -59,23 +120,15 @@
   .cat-label { font-size: 11px; font-weight: 800; text-transform: uppercase;
                letter-spacing: .5px; color: #5b21b6; }
   .cat-count { font-size: 11px; color: #9ca3af; }
-  table.scores { width: 100%; border-collapse: collapse; }
-  table.scores th { text-align: left; padding: 7px 10px; font-size: 10px; font-weight: 700;
-                    color: #9ca3af; text-transform: uppercase; border-bottom: 1px solid #f0f0f0; }
-  table.scores td { padding: 9px 10px; border-bottom: 1px solid #f9f9f9; font-size: 12px; }
-  table.scores tr:last-child td { border-bottom: none; }
+  table.scores th { background: #fafafa; }
+  table.scores td { padding: 9px 10px; font-size: 12px; }
   .score-bar-wrap { display: flex; align-items: center; gap: 6px; }
   .score-bar-outer { flex: 1; height: 6px; background: #e5e7eb; border-radius: 3px; max-width: 80px; }
   .score-bar-inner { height: 6px; border-radius: 3px; background: #7c3aed; }
-  .source-agent { color: #7c3aed; font-size: 10px; font-weight: 700; }
-  .source-analyst { color: #16a34a; font-size: 10px; font-weight: 700; }
-
-  /* Badge */
-  .badge { display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 11px; font-weight: 700; }
-  .badge-draft { background: #f3f4f6; color: #6b7280; }
-  .badge-pending { background: #fef3c7; color: #92400e; }
-  .badge-approved { background: #dcfce7; color: #14532d; }
-  .badge-rejected { background: #fee2e2; color: #991b1b; }
+  .src-label { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; font-weight: 700;
+               padding: 2px 6px; border-radius: 10px; }
+  .src-agent   { background: #ede9fe; color: #5b21b6; }
+  .src-analyst { background: #dcfce7; color: #14532d; }
 
   .empty { color: #9ca3af; font-size: 13px; text-align: center; padding: 48px; }
   .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #e5e7eb;
@@ -84,36 +137,136 @@
   #toast { position: fixed; bottom: 24px; right: 24px; background: #1a1a2e; color: white;
            padding: 10px 18px; border-radius: 8px; font-size: 13px; display: none;
            box-shadow: 0 4px 12px rgba(0,0,0,.2); z-index: 999; }
+
+  /* ── Refinement canvas ── */
+  .canvas-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 100; display: none; }
+  .canvas-backdrop.show { display: block; }
+  .canvas-panel { position: fixed; top: 0; right: -480px; width: 460px; height: 100vh;
+                  background: #fff; z-index: 101; box-shadow: -4px 0 24px rgba(0,0,0,.18);
+                  display: flex; flex-direction: column; transition: right .25s ease; overflow: hidden; }
+  .canvas-panel.open { right: 0; }
+  .canvas-header { padding: 18px 20px 14px; border-bottom: 1px solid #e5e7eb;
+                   display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+  .canvas-title { font-size: 15px; font-weight: 700; color: #1a1a2e; }
+  .canvas-close { background: none; border: none; font-size: 22px; cursor: pointer;
+                  color: #9ca3af; line-height: 1; padding: 0; }
+  .canvas-close:hover { color: #374151; }
+  .canvas-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
+  .canvas-footer { padding: 14px 20px; border-top: 1px solid #e5e7eb; flex-shrink: 0; }
+  .canvas-label { font-size: 12px; font-weight: 600; color: #374151; margin-bottom: 6px; }
+  .canvas-textarea { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid #d1d5db;
+                     border-radius: 8px; font-size: 13px; line-height: 1.5; resize: vertical;
+                     min-height: 90px; font-family: inherit; color: #1a1a2e; }
+  .canvas-textarea:focus { outline: none; border-color: #7c3aed; box-shadow: 0 0 0 3px rgba(124,58,237,.1); }
+  .canvas-hint { font-size: 11px; color: #9ca3af; margin-top: 4px; line-height: 1.4; }
+  .canvas-section { margin-top: 16px; }
+  .canvas-run-bar { background: #fffbeb; border: 1px solid #fde68a; border-radius: 7px;
+                    padding: 10px 14px; font-size: 12px; color: #92400e; display: none;
+                    align-items: center; gap: 8px; margin-top: 12px; }
+  .canvas-run-bar.show { display: flex; }
+  .canvas-result-box { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 7px;
+                       padding: 12px 14px; font-size: 12px; color: #14532d; display: none;
+                       line-height: 1.5; white-space: pre-wrap; margin-top: 12px; }
+  .canvas-result-box.show { display: block; }
+  .btn-refine { background: #7c3aed; color: #fff; border: none; padding: 10px 18px;
+                border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer;
+                display: inline-flex; align-items: center; gap: 6px; transition: opacity .15s; }
+  .btn-refine:hover:not(:disabled) { opacity: .85; }
+  .btn-refine:disabled { opacity: .5; cursor: not-allowed; }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="main">
   <h2>Property Evaluation</h2>
-  <p class="subtitle">Review evaluation reports, approve or reject, and refine with AI</p>
+  <p class="subtitle">AI-driven property scoring across 30 criteria · Analyst review &amp; refinement</p>
 
-  <!-- Deal selector -->
-  <div class="deal-selector">
-    <select id="deal-select" onchange="onDealChange()">
-      <option value="">— Select a deal —</option>
-    </select>
-    <button class="btn btn-primary" onclick="triggerEvaluation()" id="eval-btn" disabled>
-      ▶ Start Evaluation
-    </button>
+  <!-- Stage filter tabs -->
+  <div class="stage-tabs">
+    <div class="stage-tab active" data-stage="" onclick="setStage(this, '')">All Deals</div>
+    <div class="stage-tab" data-stage="lead" onclick="setStage(this, 'lead')">Not Evaluated</div>
+    <div class="stage-tab" data-stage="evaluation_pending" onclick="setStage(this, 'evaluation_pending')">Evaluation Pending</div>
+    <div class="stage-tab" data-stage="evaluation_done" onclick="setStage(this, 'evaluation_done')">Evaluation Done</div>
   </div>
 
-  <!-- Run status bar -->
+  <!-- Evaluation lifecycle legend -->
+  <div class="lifecycle">
+    <div class="lifecycle-title">Evaluation Lifecycle — How it works</div>
+    <div class="lifecycle-flow">
+
+      <div class="lc-step">
+        <div class="lc-box">
+          <div class="lc-badge lc-badge-lead">Step 1</div>
+          <div class="lc-who">Deal Manager</div>
+          <div class="lc-label">Start Evaluation</div>
+          <div class="lc-desc">Manager clicks "▶ Evaluate". A Celery task is queued to run the 4-agent AI pipeline.</div>
+        </div>
+      </div>
+
+      <div class="lc-step">
+        <div class="lc-box">
+          <div class="lc-badge lc-badge-running">Step 2</div>
+          <div class="lc-who">🤖 AI Agents (automated)</div>
+          <div class="lc-label">Pipeline Runs</div>
+          <div class="lc-desc">
+            4 agents run in sequence:<br>
+            <strong>Data Collector</strong> — reads property attributes, scores 10 criteria<br>
+            <strong>Market Analyst</strong> — fetches locality comps, sets base price<br>
+            <strong>Scorer</strong> — scores 20 location &amp; amenity criteria<br>
+            <strong>Evaluator</strong> — calculates price, raises approval request
+          </div>
+        </div>
+      </div>
+
+      <div class="lc-step">
+        <div class="lc-box">
+          <div class="lc-badge lc-badge-review">Step 3</div>
+          <div class="lc-who">👤 Analyst (you)</div>
+          <div class="lc-label">Review &amp; Decide</div>
+          <div class="lc-desc">
+            Review AI-recommended price, score breakdown, and reasoning.<br>
+            Optionally use <strong>✦ Refine with AI</strong> to correct individual scores before deciding.
+          </div>
+        </div>
+      </div>
+
+      <div class="lc-step">
+        <div class="lc-box">
+          <div class="lc-badge lc-badge-ok">✓ Approve</div>
+          <div class="lc-who">Outcome A</div>
+          <div class="lc-label">Deal Advances</div>
+          <div class="lc-desc">Final price is locked. Deal stage moves to <em>evaluation_done</em>. Ready for listing.</div>
+        </div>
+      </div>
+
+      <div class="lc-step">
+        <div class="lc-box">
+          <div class="lc-badge lc-badge-ng">✗ Reject</div>
+          <div class="lc-who">Outcome B</div>
+          <div class="lc-label">Re-evaluate</div>
+          <div class="lc-desc">Report is rejected. Manager can re-trigger the AI pipeline with updated inputs.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Deals table -->
+  <div class="deals-card">
+    <div id="deals-table"><div class="empty"><span class="spinner"></span></div></div>
+  </div>
+
+  <!-- Run status bar (shown while pipeline runs) -->
   <div class="run-status" id="run-status">
     <span class="spinner"></span>
-    <span id="run-status-text">Evaluation pipeline running…</span>
+    <span id="run-status-text">AI evaluation pipeline running…</span>
   </div>
 
-  <!-- Report area -->
+  <!-- Evaluation report panel (shown when a deal row is clicked) -->
   <div class="report-area" id="report-area">
 
-    <!-- Report header -->
     <div class="report-header">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
         <div>
           <div style="font-size:12px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">
             <span id="rpt-deal-code">—</span> · Evaluation Report
@@ -121,6 +274,11 @@
           <div id="rpt-status-badge"></div>
         </div>
         <div style="font-size:12px;color:#9ca3af" id="rpt-date">—</div>
+      </div>
+
+      <div class="eval-origin">
+        <span class="chip chip-ai">🤖 AI Evaluation</span>
+        <span class="chip chip-analyst" id="rpt-refined-chip" style="display:none">👤 Analyst Refined</span>
       </div>
 
       <div class="price-display">
@@ -150,13 +308,13 @@
       <div class="reasoning-box" id="rpt-reasoning" style="display:none"></div>
 
       <div class="action-row" id="action-row">
-        <button class="btn btn-success" id="approve-btn" onclick="approveReport()">✓ Approve</button>
-        <button class="btn btn-danger" id="reject-btn" onclick="rejectReport()">✗ Reject</button>
-        <span style="color:#9ca3af;font-size:12px;margin-left:6px">Approval sets deal stage → evaluation_done</span>
+        <button class="btn btn-success" onclick="approveReport()">✓ Approve</button>
+        <button class="btn btn-danger"  onclick="rejectReport()">✗ Reject</button>
+        <button class="btn btn-outline" id="refine-btn" onclick="openCanvas()" style="display:none">✦ Refine with AI</button>
+        <span style="color:#9ca3af;font-size:12px;margin-left:6px">Approval locks the price and advances the deal</span>
       </div>
     </div>
 
-    <!-- Scores -->
     <div class="scores-section">
       <div class="scores-title">Evaluation Scores (30 Criteria)</div>
       <div id="scores-body"><div class="empty"><span class="spinner"></span></div></div>
@@ -164,9 +322,44 @@
 
   </div>
 
-  <!-- Empty state -->
-  <div id="empty-state" class="empty" style="background:#fff;border-radius:10px;border:1px solid #e5e7eb">
-    Select a deal above to view or start an evaluation
+  <!-- Empty / no-deal-selected state -->
+  <div id="empty-state" class="empty"
+       style="background:#fff;border-radius:10px;border:1px solid #e5e7eb;display:none">
+    Click a deal row above to view its evaluation report
+  </div>
+</div>
+
+<!-- Refinement canvas -->
+<div class="canvas-backdrop" id="canvas-backdrop" onclick="closeCanvas()"></div>
+<div class="canvas-panel" id="canvas-panel">
+  <div class="canvas-header">
+    <div class="canvas-title">✦ Refine with AI</div>
+    <button class="canvas-close" onclick="closeCanvas()">×</button>
+  </div>
+  <div class="canvas-body">
+    <div class="canvas-label">Refinement instructions</div>
+    <textarea class="canvas-textarea" id="canvas-instruction"
+      placeholder="Describe what to change and why. Examples:
+• CRIT-001 (Swimming pool) should be 1 — we confirmed pool is present at site visit
+• Re-score all amenity criteria for a premium Whitefield society
+• CRIT-015 (Metro) should be 4 — station is 800m not 1.2km"></textarea>
+    <div class="canvas-hint">The AI will update the criteria you specify and recalculate the recommended price.</div>
+
+    <div class="canvas-run-bar" id="canvas-run-bar">
+      <span class="spinner"></span>
+      <span id="canvas-run-text">AI refinement agent running…</span>
+    </div>
+    <div class="canvas-result-box" id="canvas-result-box"></div>
+
+    <div class="canvas-section">
+      <div class="canvas-label" style="margin-bottom:8px">Current scores snapshot</div>
+      <div id="canvas-preview-body"><div class="empty" style="padding:24px">Loading…</div></div>
+    </div>
+  </div>
+  <div class="canvas-footer">
+    <button class="btn-refine" id="canvas-submit-btn" onclick="submitRefinement()">
+      ✦ Apply Refinement
+    </button>
   </div>
 </div>
 
@@ -174,16 +367,33 @@
 
 <script>
 const H = { 'X-API-Key': '{{ api_key }}', 'Content-Type': 'application/json' };
+let _allDeals = [];
+let _activeStage = '';
 let _currentDeal = null;
 let _currentReport = null;
 let _pollTimer = null;
 
-const CAT_LABELS = { amenity: 'Amenities', location: 'Location Connectivity', property: 'Property Attributes', society: 'Building / Society' };
-const STATUS_BADGE = {
-  draft: '<span class="badge badge-draft">Draft</span>',
-  pending_review: '<span class="badge badge-pending">Pending Review</span>',
-  approved: '<span class="badge badge-approved">Approved</span>',
-  rejected: '<span class="badge badge-rejected">Rejected</span>',
+const STAGE_BADGE = {
+  lead:               '<span class="badge badge-lead">Lead</span>',
+  evaluation_pending: '<span class="badge badge-eval-pending">⏳ Eval Pending</span>',
+  evaluation_done:    '<span class="badge badge-eval-done">✓ Eval Done</span>',
+  listed:             '<span class="badge badge-listed">Listed</span>',
+  sold:               '<span class="badge badge-sold">Sold</span>',
+  lost:               '<span class="badge badge-lost">Lost</span>',
+};
+
+const RPT_STATUS = {
+  draft:          '<span class="rpt-status-badge rpt-draft">🤖 AI Running</span>',
+  pending_review: '<span class="rpt-status-badge rpt-pending">⏳ Awaiting Analyst Review</span>',
+  approved:       '<span class="rpt-status-badge rpt-approved">✓ Approved by Analyst</span>',
+  rejected:       '<span class="rpt-status-badge rpt-rejected">✗ Rejected by Analyst</span>',
+};
+
+const CAT_LABELS = {
+  amenity:  'Amenities',
+  location: 'Location Connectivity',
+  property: 'Property Attributes',
+  society:  'Building / Society',
 };
 
 function toast(msg, ok = true) {
@@ -193,81 +403,129 @@ function toast(msg, ok = true) {
   t.style.display = 'block';
   setTimeout(() => t.style.display = 'none', 3500);
 }
-
 function fmt(n) { return n != null ? '₹' + (n/100000).toFixed(1) + 'L' : '—'; }
 
-async function loadDealSelect() {
+// ── Stage filter ───────────────────────────────────────────────────────────────
+
+function setStage(el, stage) {
+  _activeStage = stage;
+  document.querySelectorAll('.stage-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  renderDealsTable();
+}
+
+function renderDealsTable() {
+  const deals = _activeStage
+    ? _allDeals.filter(d => d.stage === _activeStage)
+    : _allDeals;
+
+  if (!deals.length) {
+    document.getElementById('deals-table').innerHTML =
+      '<div class="empty">No deals match this filter</div>';
+    return;
+  }
+
+  document.getElementById('deals-table').innerHTML = `
+    <table>
+      <thead><tr>
+        <th>Deal</th><th>Property</th><th>Locality / Size</th>
+        <th>Channel Partner</th><th>Stage</th><th>Action</th>
+      </tr></thead>
+      <tbody>${deals.map(d => {
+        const prop = d.property || {};
+        const cp   = d.sourcing_cp || {};
+        const size = prop.bedrooms ? prop.bedrooms + ' BHK' : (prop.carpet_area ? prop.carpet_area + ' sqft' : '');
+        const actionHtml = d.stage === 'lead'
+          ? `<button class="btn btn-success" style="font-size:11px;padding:5px 12px"
+               onclick="event.stopPropagation();triggerEval('${d.id}','${d.deal_code}',this)">▶ Evaluate</button>`
+          : (d.stage === 'evaluation_pending' || d.stage === 'evaluation_done')
+            ? `<span style="font-size:11px;color:#6b7280">click row to view</span>`
+            : '—';
+        return `<tr class="deal-row" id="row-${d.id}" onclick="selectDeal('${d.id}')">
+          <td><strong>${d.deal_code}</strong></td>
+          <td style="color:#6b7280;font-size:12px">${prop.property_code || '—'}</td>
+          <td>${prop.locality || '—'} <span style="color:#9ca3af;font-size:11px">${size}</span></td>
+          <td style="font-size:12px;color:#6b7280">${cp.name || '—'}</td>
+          <td>${STAGE_BADGE[d.stage] || d.stage}</td>
+          <td>${actionHtml}</td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>`;
+}
+
+async function loadDeals() {
+  document.getElementById('deals-table').innerHTML = '<div class="empty"><span class="spinner"></span></div>';
   const r = await fetch('/api/v1/propguru/deals', { headers: H });
-  if (!r.ok) return;
-  const deals = await r.json();
-  const sel = document.getElementById('deal-select');
-  sel.innerHTML = '<option value="">— Select a deal —</option>' + deals.map(d => {
-    const prop = d.property || {};
-    return `<option value="${d.id}">${d.deal_code} — ${prop.locality || ''} (${d.stage})</option>`;
-  }).join('');
+  if (!r.ok) { document.getElementById('deals-table').innerHTML = '<div class="empty">Failed to load deals</div>'; return; }
+  _allDeals = await r.json();
+  renderDealsTable();
 
   // Auto-select from URL param
   const params = new URLSearchParams(window.location.search);
   const dealParam = params.get('deal_id');
-  if (dealParam) {
-    sel.value = dealParam;
-    onDealChange();
-  }
+  if (dealParam) selectDeal(dealParam);
 }
 
-async function onDealChange() {
-  const dealId = document.getElementById('deal-select').value;
+// ── Deal selection → load evaluation ──────────────────────────────────────────
+
+async function selectDeal(dealId) {
+  // Highlight selected row
+  document.querySelectorAll('.deal-row').forEach(r => r.classList.remove('selected'));
+  const row = document.getElementById(`row-${dealId}`);
+  if (row) row.classList.add('selected');
+
   clearInterval(_pollTimer);
-  _currentDeal = null;
-  _currentReport = null;
+  _currentDeal = _allDeals.find(d => d.id === dealId) || null;
+
+  // If we only have the id (e.g. from URL param), fetch deal
+  if (!_currentDeal) {
+    const dr = await fetch(`/api/v1/propguru/deals/${dealId}`, { headers: H });
+    if (dr.ok) _currentDeal = await dr.json();
+  }
+
   document.getElementById('report-area').classList.remove('show');
-  document.getElementById('empty-state').style.display = 'block';
   document.getElementById('run-status').classList.remove('show');
-  document.getElementById('eval-btn').disabled = !dealId;
+  document.getElementById('empty-state').style.display = 'none';
+  document.getElementById('scores-body').innerHTML = '<div class="empty"><span class="spinner"></span></div>';
 
-  if (!dealId) return;
-
-  // Load deal
-  const dr = await fetch(`/api/v1/propguru/deals/${dealId}`, { headers: H });
-  if (!dr.ok) return;
-  _currentDeal = await dr.json();
-
-  // Try to load evaluation report
+  // Try to load existing evaluation report
   const er = await fetch(`/api/v1/propguru/deals/${dealId}/evaluation`, { headers: H });
   if (er.ok) {
     _currentReport = await er.json();
     renderReport(_currentReport);
   } else {
-    document.getElementById('empty-state').style.display = 'block';
-    document.getElementById('empty-state').textContent = `No evaluation report for ${_currentDeal.deal_code} yet. Click "Start Evaluation" to run the agent pipeline.`;
+    const stage = _currentDeal?.stage || '';
+    const emptyEl = document.getElementById('empty-state');
+    emptyEl.style.display = 'block';
+    if (stage === 'lead') {
+      emptyEl.textContent = `No evaluation report yet for ${_currentDeal?.deal_code}. Click "▶ Evaluate" in the table above to start the AI pipeline.`;
+    } else {
+      emptyEl.textContent = `No evaluation report found for this deal.`;
+    }
   }
 }
 
-async function triggerEvaluation() {
-  if (!_currentDeal) return;
-  if (!confirm(`Start evaluation pipeline for ${_currentDeal.deal_code}?`)) return;
-
-  const btn = document.getElementById('eval-btn');
+async function triggerEval(dealId, dealCode, btn) {
+  if (!confirm(`Start AI evaluation pipeline for ${dealCode}?\n\nThis will run 4 agents: data collector, market analyst, scorer, and evaluator (~2–5 min).`)) return;
   btn.disabled = true;
-  btn.textContent = '…';
+  btn.innerHTML = '<span class="spinner"></span>';
 
-  const r = await fetch(`/api/v1/propguru/deals/${_currentDeal.id}/evaluate`, {
-    method: 'POST',
-    headers: H,
-    body: JSON.stringify({}),
+  const r = await fetch(`/api/v1/propguru/deals/${dealId}/evaluate`, {
+    method: 'POST', headers: H, body: JSON.stringify({}),
   });
   const d = await r.json();
-  btn.disabled = false;
-  btn.innerHTML = '▶ Start Evaluation';
-
   if (r.ok) {
     toast(`Pipeline started — Run ${d.run_id.slice(0,8)}`);
-    showRunStatus('Evaluation pipeline running…');
-    // Poll for the report to appear
-    _pollTimer = setInterval(() => pollForReport(_currentDeal.id), 5000);
+    showRunStatus('AI evaluation pipeline running… (typically 2–5 minutes)');
+    // Reload deals so stage updates, then start polling for report
+    await loadDeals();
+    _currentDeal = _allDeals.find(dd => dd.id === dealId) || _currentDeal;
+    _pollTimer = setInterval(() => pollForReport(dealId), 5000);
   } else {
     toast(d.detail || 'Failed to start evaluation', false);
     btn.disabled = false;
+    btn.textContent = '▶ Evaluate';
   }
 }
 
@@ -275,7 +533,6 @@ function showRunStatus(msg) {
   const el = document.getElementById('run-status');
   document.getElementById('run-status-text').textContent = msg;
   el.classList.add('show');
-  document.getElementById('empty-state').style.display = 'none';
 }
 
 async function pollForReport(dealId) {
@@ -285,86 +542,93 @@ async function pollForReport(dealId) {
     if (_currentReport.status !== 'draft') {
       clearInterval(_pollTimer);
       document.getElementById('run-status').classList.remove('show');
+      loadDeals(); // refresh stage badges in table
     }
     renderReport(_currentReport);
   }
 }
 
+// ── Render report ──────────────────────────────────────────────────────────────
+
 async function renderReport(report) {
   document.getElementById('empty-state').style.display = 'none';
   document.getElementById('report-area').classList.add('show');
 
-  const dealCode = _currentDeal ? _currentDeal.deal_code : '—';
-  document.getElementById('rpt-deal-code').textContent = dealCode;
-  document.getElementById('rpt-status-badge').innerHTML = STATUS_BADGE[report.status] || report.status;
-  document.getElementById('rpt-date').textContent = report.created_at ? new Date(report.created_at).toLocaleDateString('en-IN') : '';
+  document.getElementById('rpt-deal-code').textContent = _currentDeal?.deal_code || '—';
+  document.getElementById('rpt-status-badge').innerHTML = RPT_STATUS[report.status] || `<span class="rpt-status-badge">${report.status}</span>`;
+  document.getElementById('rpt-date').textContent = report.created_at
+    ? new Date(report.created_at).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })
+    : '';
 
   document.getElementById('rpt-price').textContent = report.recommended_price
-    ? `₹${(report.recommended_price / 100000).toFixed(1)}L`
-    : '—';
-  document.getElementById('rpt-base').textContent = fmt(report.base_price);
-  document.getElementById('rpt-score').textContent = report.score_factor != null
-    ? `${(report.score_factor * 100).toFixed(1)}%` : '—';
+    ? `₹${(report.recommended_price/100000).toFixed(1)}L` : '—';
+  document.getElementById('rpt-base').textContent    = fmt(report.base_price);
+  document.getElementById('rpt-score').textContent   = report.score_factor != null
+    ? `${(report.score_factor*100).toFixed(1)}%` : '—';
   document.getElementById('rpt-premium').textContent = report.price_premium_pct != null
     ? `+${report.price_premium_pct}%` : '—';
 
   const conf = report.confidence || '—';
   const confEl = document.getElementById('rpt-confidence');
-  confEl.textContent = conf;
+  confEl.textContent = conf.charAt(0).toUpperCase() + conf.slice(1);
   confEl.className = `meta-value confidence-${conf}`;
 
-  const reasoning = report.agent_reasoning;
   const rb = document.getElementById('rpt-reasoning');
-  if (reasoning) { rb.textContent = reasoning; rb.style.display = 'block'; }
-  else { rb.style.display = 'none'; }
+  if (report.agent_reasoning) { rb.textContent = report.agent_reasoning; rb.style.display = 'block'; }
+  else rb.style.display = 'none';
 
-  // Action row
   const actionRow = document.getElementById('action-row');
+  const refineBtn = document.getElementById('refine-btn');
   if (report.status === 'approved' || report.status === 'rejected') {
     actionRow.style.display = 'none';
+    refineBtn.style.display = 'none';
   } else {
     actionRow.style.display = 'flex';
+    refineBtn.style.display = report.status === 'pending_review' ? 'inline-flex' : 'none';
   }
 
-  // Load scores
   await loadScores(report.id);
 }
 
 async function loadScores(reportId) {
   const r = await fetch(`/api/v1/propguru/evaluations/${reportId}/scores`, { headers: H });
-  if (!r.ok) { document.getElementById('scores-body').innerHTML = '<div class="empty">Could not load scores</div>'; return; }
+  if (!r.ok) {
+    document.getElementById('scores-body').innerHTML = '<div class="empty">Could not load scores</div>';
+    return;
+  }
   const data = await r.json();
-
-  const cats = ['amenity', 'location', 'property', 'society'];
   const groups = data.groups || {};
+  const cats   = ['amenity','location','property','society'];
   let html = '';
+  let hasAnalyst = false;
 
   cats.forEach(cat => {
     const items = groups[cat] || [];
     if (!items.length) return;
+    if (items.some(s => s.source === 'analyst')) hasAnalyst = true;
     html += `<div class="category-block">
       <div class="cat-header">
         <span class="cat-label">${CAT_LABELS[cat]}</span>
         <span class="cat-count">${items.length} criteria</span>
       </div>
       <table class="scores">
-        <thead><tr><th>Criterion</th><th>Score</th><th>Raw Value</th><th>Source</th><th>Notes</th></tr></thead>
+        <thead><tr><th>Criterion</th><th>Score</th><th>Raw Value</th><th>Scored by</th><th>Notes</th></tr></thead>
         <tbody>`;
     items.forEach(s => {
       const crit = s.criterion || {};
-      const maxScore = crit.scoring_type === 'boolean' ? 1.0 : 5.0;
-      const pct = Math.round((s.score / maxScore) * 100);
+      const max  = crit.scoring_type === 'boolean' ? 1.0 : 5.0;
+      const pct  = Math.round((s.score/max)*100);
+      const srcClass = s.source === 'analyst' ? 'src-analyst' : 'src-agent';
+      const srcLabel = s.source === 'analyst' ? '👤 Analyst' : '🤖 AI Agent';
       html += `<tr>
-        <td><strong>${crit.criterion_code || '?'}</strong> ${crit.name || ''}</td>
-        <td>
-          <div class="score-bar-wrap">
-            <div class="score-bar-outer"><div class="score-bar-inner" style="width:${pct}%"></div></div>
-            <span style="font-size:12px;font-weight:700">${s.score}</span>
-          </div>
-        </td>
-        <td style="color:#6b7280">${s.raw_value || '—'}</td>
-        <td><span class="source-${s.source}">${s.source}</span></td>
-        <td style="color:#9ca3af;font-size:11px;max-width:200px">${s.notes || ''}</td>
+        <td><strong>${crit.criterion_code||'?'}</strong> ${crit.name||''}</td>
+        <td><div class="score-bar-wrap">
+          <div class="score-bar-outer"><div class="score-bar-inner" style="width:${pct}%"></div></div>
+          <span style="font-size:12px;font-weight:700">${s.score}</span>
+        </div></td>
+        <td style="color:#6b7280">${s.raw_value||'—'}</td>
+        <td><span class="src-label ${srcClass}">${srcLabel}</span></td>
+        <td style="color:#9ca3af;font-size:11px;max-width:200px">${s.notes||''}</td>
       </tr>`;
     });
     html += '</tbody></table></div>';
@@ -372,23 +636,22 @@ async function loadScores(reportId) {
 
   if (!html) html = '<div class="empty">No scores yet — pipeline may still be running</div>';
   document.getElementById('scores-body').innerHTML = html;
+  document.getElementById('rpt-refined-chip').style.display = hasAnalyst ? 'inline-flex' : 'none';
 }
 
 async function approveReport() {
   if (!_currentReport) return;
-  if (!confirm('Approve this evaluation? The deal will advance to evaluation_done.')) return;
+  if (!confirm('Approve this evaluation? The deal will advance to evaluation_done and the final price will be locked.')) return;
   const r = await fetch(`/api/v1/propguru/evaluations/${_currentReport.id}/approve`, {
-    method: 'PATCH',
-    headers: H,
-    body: JSON.stringify({ approved_by: 'analyst' }),
+    method: 'PATCH', headers: H, body: JSON.stringify({ approved_by: 'analyst' }),
   });
   const d = await r.json();
   if (r.ok) {
     toast(`Approved — deal stage → ${d.deal_stage}, price set to ${fmt(d.final_price)}`);
     _currentReport.status = 'approved';
-    document.getElementById('rpt-status-badge').innerHTML = STATUS_BADGE['approved'];
+    document.getElementById('rpt-status-badge').innerHTML = RPT_STATUS['approved'];
     document.getElementById('action-row').style.display = 'none';
-    loadDealSelect();
+    loadDeals();
   } else {
     toast(d.detail || 'Approval failed', false);
   }
@@ -398,20 +661,106 @@ async function rejectReport() {
   if (!_currentReport) return;
   const reason = prompt('Rejection reason (optional):');
   const r = await fetch(`/api/v1/propguru/evaluations/${_currentReport.id}/reject`, {
-    method: 'PATCH',
-    headers: H,
-    body: JSON.stringify({ reason }),
+    method: 'PATCH', headers: H, body: JSON.stringify({ reason }),
   });
   if (r.ok) {
-    toast('Evaluation rejected — re-trigger to run pipeline again');
+    toast('Evaluation rejected — re-trigger AI pipeline from the Deals page or table above');
     _currentReport.status = 'rejected';
-    document.getElementById('rpt-status-badge').innerHTML = STATUS_BADGE['rejected'];
+    document.getElementById('rpt-status-badge').innerHTML = RPT_STATUS['rejected'];
     document.getElementById('action-row').style.display = 'none';
   } else {
     toast('Rejection failed', false);
   }
 }
 
-loadDealSelect();
+// ── Refinement canvas ──────────────────────────────────────────────────────────
+
+let _refineRunId = null;
+let _refinePollTimer = null;
+
+async function openCanvas() {
+  if (!_currentReport) return;
+  document.getElementById('canvas-backdrop').classList.add('show');
+  document.getElementById('canvas-panel').classList.add('open');
+  document.getElementById('canvas-run-bar').classList.remove('show');
+  document.getElementById('canvas-result-box').classList.remove('show');
+  document.getElementById('canvas-result-box').textContent = '';
+  document.getElementById('canvas-instruction').value = '';
+  document.getElementById('canvas-submit-btn').disabled = false;
+  await loadCanvasPreview();
+}
+
+function closeCanvas() {
+  document.getElementById('canvas-backdrop').classList.remove('show');
+  document.getElementById('canvas-panel').classList.remove('open');
+  clearInterval(_refinePollTimer);
+  _refineRunId = null;
+}
+
+async function loadCanvasPreview() {
+  if (!_currentReport) return;
+  const el = document.getElementById('canvas-preview-body');
+  el.innerHTML = '<div class="empty" style="padding:16px"><span class="spinner"></span></div>';
+  const r = await fetch(`/propguru/evaluation/${_currentReport.id}/refine-preview`, { headers: H });
+  if (r.ok) el.innerHTML = await r.text();
+  else el.innerHTML = '<div class="empty" style="padding:12px;color:#dc2626">Could not load preview</div>';
+}
+
+async function submitRefinement() {
+  if (!_currentReport) return;
+  const instruction = document.getElementById('canvas-instruction').value.trim();
+  if (!instruction) { toast('Please enter refinement instructions', false); return; }
+
+  const btn = document.getElementById('canvas-submit-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Sending…';
+
+  const r = await fetch(`/api/v1/propguru/evaluations/${_currentReport.id}/refine`, {
+    method: 'POST', headers: H,
+    body: JSON.stringify({ refinement_request: instruction, requested_by: 'analyst' }),
+  });
+  const d = await r.json();
+  if (!r.ok) {
+    toast(d.detail || 'Failed to start refinement', false);
+    btn.disabled = false; btn.textContent = '✦ Apply Refinement';
+    return;
+  }
+
+  _refineRunId = d.run_id;
+  document.getElementById('canvas-run-bar').classList.add('show');
+  btn.innerHTML = '✦ Apply Refinement';
+  _refinePollTimer = setInterval(pollRefineRun, 4000);
+}
+
+async function pollRefineRun() {
+  if (!_refineRunId) return;
+  const r = await fetch(`/api/v1/runs/${_refineRunId}`, { headers: H });
+  if (!r.ok) return;
+  const run = await r.json();
+  if (run.status === 'running' || run.status === 'pending') return;
+
+  clearInterval(_refinePollTimer); _refinePollTimer = null;
+  document.getElementById('canvas-run-bar').classList.remove('show');
+  document.getElementById('canvas-submit-btn').disabled = false;
+
+  const box = document.getElementById('canvas-result-box');
+  if (run.status === 'completed') {
+    box.textContent = (run.output?.text) || JSON.stringify(run.output||'', null, 2);
+    box.style.cssText = '';
+    box.classList.add('show');
+    toast('Refinement complete — scores updated');
+    await loadScores(_currentReport.id);
+    await loadCanvasPreview();
+    const er = await fetch(`/api/v1/propguru/deals/${_currentDeal.id}/evaluation`, { headers: H });
+    if (er.ok) { _currentReport = await er.json(); renderReport(_currentReport); }
+  } else {
+    box.style.background = '#fef2f2'; box.style.borderColor = '#fecaca'; box.style.color = '#991b1b';
+    box.textContent = `Refinement failed: ${run.error || run.status}`;
+    box.classList.add('show');
+    toast('Refinement failed — see canvas for details', false);
+  }
+}
+
+loadDeals();
 </script>
 {% endblock %}

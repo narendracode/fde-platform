@@ -63,6 +63,10 @@ from agri_agent.agent.tools.propguru.evaluation import (
     propguru_score_proximity,
     propguru_propose_evaluation,
 )
+from agri_agent.agent.tools.propguru.refiner import (
+    propguru_get_report_scores,
+    propguru_update_score,
+)
 
 _TOOL_REGISTRY: dict[str, BaseTool] = {
     "calculator": calculator,
@@ -113,6 +117,8 @@ _TOOL_REGISTRY: dict[str, BaseTool] = {
     "propguru_set_base_price": propguru_set_base_price,
     "propguru_score_proximity": propguru_score_proximity,
     "propguru_propose_evaluation": propguru_propose_evaluation,
+    "propguru_get_report_scores": propguru_get_report_scores,
+    "propguru_update_score": propguru_update_score,
 }
 
 
