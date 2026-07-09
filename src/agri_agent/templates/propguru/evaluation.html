@@ -502,7 +502,7 @@ function renderDealsTable() {
           : hasReport
             ? `<span style="font-size:11px;color:#6b7280">click row to view</span>`
             : '—';
-        return `<tr class="deal-row" id="row-${d.id}" onclick="selectDeal('${d.id}')">
+        return `<tr class="deal-row" id="row-${d.id}" onclick="selectDeal('${d.id}',{scroll:true})">
           <td><strong>${d.deal_code}</strong></td>
           <td>
             <div style="font-size:13px;font-weight:500;color:#1a1a2e">${addr}</div>
@@ -525,23 +525,29 @@ async function loadDeals() {
   _allDeals = await r.json();
   renderDealsTable();
 
-  // Auto-select from URL param
+  // Auto-select from URL param — await so the report is fully rendered before returning
   const params = new URLSearchParams(window.location.search);
   const dealParam = params.get('deal_id');
-  if (dealParam) selectDeal(dealParam);
+  const refineParam = params.get('refine');
+  if (dealParam) await selectDeal(dealParam, { scroll: !refineParam });
+  // Auto-open refine canvas if URL says so (skipUrlUpdate — URL already has ?refine=1)
+  if (refineParam === '1' && _currentReport) await openRefineCanvas({ skipUrlUpdate: true });
 }
 
 // ── Deal selection → load evaluation ──────────────────────────────────────────
 
-async function selectDeal(dealId) {
+async function selectDeal(dealId, { scroll = false } = {}) {
   // Update URL so the page is bookmarkable / shareable
   const cur = new URLSearchParams(window.location.search).get('deal_id');
   if (cur !== dealId) history.pushState({ deal_id: dealId }, '', `?deal_id=${dealId}`);
 
-  // Highlight selected row
+  // Highlight selected row (and bring it into view when deep-linking)
   document.querySelectorAll('.deal-row').forEach(r => r.classList.remove('selected'));
   const row = document.getElementById(`row-${dealId}`);
-  if (row) row.classList.add('selected');
+  if (row) {
+    row.classList.add('selected');
+    if (scroll) row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
 
   clearInterval(_pollTimer);
   _currentDeal = _allDeals.find(d => d.id === dealId) || null;
@@ -561,7 +567,10 @@ async function selectDeal(dealId) {
   const er = await fetch(`/api/v1/propguru/deals/${dealId}/evaluation`, { headers: H });
   if (er.ok) {
     _currentReport = await er.json();
-    renderReport(_currentReport);
+    await renderReport(_currentReport);
+    if (scroll) {
+      document.getElementById('report-area').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   } else {
     const stage = _currentDeal?.stage || '';
     const emptyEl = document.getElementById('empty-state');
@@ -574,6 +583,7 @@ async function selectDeal(dealId) {
     } else {
       emptyEl.textContent = `No evaluation report found for ${code}.`;
     }
+    if (scroll) emptyEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 }
 
@@ -798,7 +808,7 @@ const _rc = {
   streaming: false, locked: false,
 };
 
-async function openRefineCanvas() {
+async function openRefineCanvas({ skipUrlUpdate = false } = {}) {
   if (!_currentReport) return;
 
   // Look up the pending action for this report
@@ -827,6 +837,13 @@ async function openRefineCanvas() {
   document.getElementById('refine-overlay').classList.add('open');
   document.body.style.overflow = 'hidden';
   document.getElementById('refine-btn').disabled = true;
+
+  // Push URL state so canvas is bookmarkable / survives refresh
+  if (!skipUrlUpdate) {
+    const sp = new URLSearchParams(window.location.search);
+    sp.set('refine', '1');
+    history.pushState({ deal_id: _currentDeal?.id, refine: true }, '', `?${sp}`);
+  }
 
   await _refreshCanvasPreview();
 
@@ -882,11 +899,22 @@ async function closeRefineCanvas() {
   _rcCloseUI();
 }
 
-function _rcCloseUI() {
+function _rcCloseUI({ updateUrl = true } = {}) {
   document.getElementById('refine-overlay').classList.remove('open');
   document.body.style.overflow = '';
   document.getElementById('refine-btn').disabled = false;
   Object.assign(_rc, { actionId: null, sessionId: null, reportId: null, streaming: false, locked: false });
+
+  // Remove refine param from URL (replaceState — no new history entry)
+  if (updateUrl) {
+    const sp = new URLSearchParams(window.location.search);
+    sp.delete('refine');
+    history.replaceState(
+      _currentDeal?.id ? { deal_id: _currentDeal.id } : null,
+      '',
+      _currentDeal?.id ? `?deal_id=${_currentDeal.id}` : window.location.pathname
+    );
+  }
 }
 
 function _rcAppend(role, text, isStreaming = false) {
@@ -1090,11 +1118,33 @@ async function rejectFromCanvas() {
   }
 }
 
-// Restore selected deal when user navigates back/forward
+// Handle browser back / forward across all three URL states:
+//   /evaluation                       → nothing selected
+//   /evaluation?deal_id=X             → deal report visible
+//   /evaluation?deal_id=X&refine=1    → refine canvas open
 window.addEventListener('popstate', e => {
-  const dealId = e.state?.deal_id || new URLSearchParams(window.location.search).get('deal_id');
-  if (dealId) selectDeal(dealId);
-  else {
+  const sp = new URLSearchParams(window.location.search);
+  const dealId = e.state?.deal_id || sp.get('deal_id');
+  const shouldRefine = !!(e.state?.refine || sp.get('refine') === '1');
+  const canvasOpen = document.getElementById('refine-overlay').classList.contains('open');
+
+  if (shouldRefine && dealId) {
+    // Canvas should be open
+    if (!canvasOpen) {
+      if (_currentDeal?.id === dealId && _currentReport) {
+        openRefineCanvas({ skipUrlUpdate: true });
+      } else {
+        selectDeal(dealId, { scroll: false })
+          .then(() => _currentReport && openRefineCanvas({ skipUrlUpdate: true }));
+      }
+    }
+  } else if (dealId) {
+    // Report should be visible, canvas closed
+    if (canvasOpen) _rcCloseUI({ updateUrl: false });
+    if (_currentDeal?.id !== dealId) selectDeal(dealId, { scroll: true });
+  } else {
+    // Nothing selected
+    if (canvasOpen) _rcCloseUI({ updateUrl: false });
     document.querySelectorAll('.deal-row').forEach(r => r.classList.remove('selected'));
     document.getElementById('report-area').classList.remove('show');
     document.getElementById('empty-state').style.display = 'none';
