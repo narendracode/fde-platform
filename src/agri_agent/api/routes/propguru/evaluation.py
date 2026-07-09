@@ -386,15 +386,15 @@ async def calculate_price(
             select(PropguruEvaluationCriteria).where(PropguruEvaluationCriteria.id == s.criterion_id)
         )).scalar_one_or_none()
         if crit:
-            # Normalize score to 0-1 range
+            # Normalize score to 0-1 range; clamp defensively against out-of-range agent values
             if crit.scoring_type == "boolean":
-                normalized = s.score  # already 0 or 1
+                normalized = min(1.0, max(0.0, s.score))
             elif crit.scoring_type == "scale_1_5":
-                normalized = (s.score - 1) / 4.0 if s.score >= 1 else 0.0
+                normalized = min(1.0, max(0.0, (s.score - 1) / 4.0))
             elif crit.scoring_type == "proximity_km":
-                normalized = s.score / 5.0  # score is 1-5 proximity band
+                normalized = min(1.0, max(0.0, s.score / 5.0))
             else:
-                normalized = s.score
+                normalized = min(1.0, max(0.0, s.score))
             weighted_sum += crit.weight * normalized
             total_weight += crit.weight
 

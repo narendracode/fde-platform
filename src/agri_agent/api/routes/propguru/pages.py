@@ -112,11 +112,11 @@ async def propguru_evaluation_refine_preview(
             cat_totals[cat] = {"weighted_sum": 0.0, "total_weight": 0.0, "count": 0}
         w = item["weight"]
         if item["scoring_type"] == "boolean":
-            norm = item["score"]
+            norm = min(1.0, max(0.0, item["score"]))
         elif item["scoring_type"] == "scale_1_5":
-            norm = (item["score"] - 1) / 4.0 if item["score"] >= 1 else 0.0
-        else:
-            norm = item["score"] / 5.0
+            norm = min(1.0, max(0.0, (item["score"] - 1) / 4.0))
+        else:  # proximity_km
+            norm = min(1.0, max(0.0, item["score"] / 5.0))
         cat_totals[cat]["weighted_sum"] += w * norm
         cat_totals[cat]["total_weight"] += w
         cat_totals[cat]["count"] += 1
