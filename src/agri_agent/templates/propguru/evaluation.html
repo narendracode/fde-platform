@@ -122,8 +122,8 @@
   .cat-count { font-size: 11px; color: #9ca3af; }
   table.scores th { background: #fafafa; }
   table.scores td { padding: 9px 10px; font-size: 12px; }
-  .score-bar-wrap { display: flex; align-items: center; gap: 6px; }
-  .score-bar-outer { flex: 1; height: 6px; background: #e5e7eb; border-radius: 3px; max-width: 80px; }
+  .score-bar-wrap { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .score-bar-outer { width: 72px; flex-shrink: 0; height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
   .score-bar-inner { height: 6px; border-radius: 3px; background: #7c3aed; }
   .src-label { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; font-weight: 700;
                padding: 2px 6px; border-radius: 10px; }
@@ -534,6 +534,10 @@ async function loadDeals() {
 // ── Deal selection → load evaluation ──────────────────────────────────────────
 
 async function selectDeal(dealId) {
+  // Update URL so the page is bookmarkable / shareable
+  const cur = new URLSearchParams(window.location.search).get('deal_id');
+  if (cur !== dealId) history.pushState({ deal_id: dealId }, '', `?deal_id=${dealId}`);
+
   // Highlight selected row
   document.querySelectorAll('.deal-row').forEach(r => r.classList.remove('selected'));
   const row = document.getElementById(`row-${dealId}`);
@@ -687,7 +691,13 @@ async function loadScores(reportId) {
         <span class="cat-count">${items.length} criteria</span>
       </div>
       <table class="scores">
-        <thead><tr><th>Criterion</th><th>Score</th><th>Raw Value</th><th>Scored by</th><th>Notes</th></tr></thead>
+        <thead><tr>
+          <th>Criterion</th>
+          <th style="width:120px">Score</th>
+          <th style="width:160px">Raw Value</th>
+          <th style="width:110px">Scored by</th>
+          <th>Notes</th>
+        </tr></thead>
         <tbody>`;
     items.forEach(s => {
       const crit = s.criterion || {};
@@ -1079,6 +1089,18 @@ async function rejectFromCanvas() {
     toast('Rejection failed', false);
   }
 }
+
+// Restore selected deal when user navigates back/forward
+window.addEventListener('popstate', e => {
+  const dealId = e.state?.deal_id || new URLSearchParams(window.location.search).get('deal_id');
+  if (dealId) selectDeal(dealId);
+  else {
+    document.querySelectorAll('.deal-row').forEach(r => r.classList.remove('selected'));
+    document.getElementById('report-area').classList.remove('show');
+    document.getElementById('empty-state').style.display = 'none';
+    _currentDeal = null; _currentReport = null;
+  }
+});
 
 loadDeals();
 </script>

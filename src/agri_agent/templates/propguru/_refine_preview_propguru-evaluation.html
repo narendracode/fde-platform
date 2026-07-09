@@ -60,30 +60,37 @@
 </div>
 
 <style>
-.rp-container { font-size: 12px; }
+.rp-container { font-size: 12px; width: 100%; box-sizing: border-box; }
 .rp-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px;
               background: #f9fafb; border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; }
-.rp-sum-row { display: flex; justify-content: space-between; align-items: center; }
-.rp-label { color: #9ca3af; }
+.rp-sum-row { display: flex; justify-content: space-between; align-items: center; min-width: 0; }
+.rp-label { color: #9ca3af; white-space: nowrap; }
 .rp-price { font-size: 16px; font-weight: 800; color: #1a1a2e; }
 .rp-conf-high { color: #16a34a; font-weight: 700; }
 .rp-conf-medium { color: #d97706; font-weight: 700; }
 .rp-conf-low { color: #dc2626; font-weight: 700; }
+
+/* Category score bars */
 .rp-cats { margin-bottom: 12px; }
-.rp-cat { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
-.rp-cat-label { width: 80px; color: #6b7280; font-size: 11px; }
-.rp-cat-pct { width: 36px; text-align: right; font-weight: 600; color: #374151; }
+.rp-cat { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; min-width: 0; }
+.rp-cat-label { width: 72px; flex-shrink: 0; color: #6b7280; font-size: 11px; }
+.rp-cat-pct { width: 32px; flex-shrink: 0; text-align: right; font-weight: 600; color: #374151; font-size: 11px; }
+
+/* Per-criterion score rows */
 .rp-scores-title { font-size: 11px; font-weight: 700; color: #9ca3af;
                    text-transform: uppercase; letter-spacing: .4px; margin-bottom: 6px; }
 .rp-scores { display: flex; flex-direction: column; gap: 4px; }
-.rp-score-row { padding: 6px 8px; border-radius: 6px; background: #f9fafb; }
-.rp-score-meta { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
-.rp-code { font-size: 10px; font-weight: 800; color: #7c3aed; }
-.rp-name { flex: 1; color: #374151; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rp-src-agent { color: #7c3aed; font-size: 10px; font-weight: 600; }
-.rp-src-analyst { color: #16a34a; font-size: 10px; font-weight: 600; }
-.rp-score-val { display: flex; align-items: center; gap: 6px; }
-.rp-bar-outer { flex: 1; height: 5px; background: #e5e7eb; border-radius: 3px; }
+.rp-score-row { padding: 6px 8px; border-radius: 6px; background: #f9fafb; overflow: hidden; min-width: 0; }
+.rp-score-meta { display: flex; align-items: center; gap: 5px; margin-bottom: 4px; min-width: 0; overflow: hidden; }
+.rp-code { font-size: 10px; font-weight: 800; color: #7c3aed; flex-shrink: 0; }
+.rp-name { flex: 1; min-width: 0; color: #374151; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-src { flex-shrink: 0; font-size: 10px; font-weight: 600; }
+.rp-src-agent { color: #7c3aed; }
+.rp-src-analyst { color: #16a34a; }
+.rp-score-val { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; }
+
+/* Shared bar styles — overflow: hidden clips the fill at the track boundary */
+.rp-bar-outer { flex: 1; min-width: 0; height: 5px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
 .rp-bar-inner { height: 5px; border-radius: 3px; background: #7c3aed; }
-.rp-num { font-size: 12px; font-weight: 700; color: #1a1a2e; min-width: 18px; text-align: right; }
+.rp-num { font-size: 12px; font-weight: 700; color: #1a1a2e; width: 24px; flex-shrink: 0; text-align: right; }
 </style>
