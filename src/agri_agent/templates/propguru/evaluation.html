@@ -125,6 +125,10 @@
   .score-bar-wrap { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
   .score-bar-outer { width: 72px; flex-shrink: 0; height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
   .score-bar-inner { height: 6px; border-radius: 3px; background: #7c3aed; }
+  .bool-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px;
+                border-radius: 10px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+  .bool-yes { background: #dcfce7; color: #14532d; }
+  .bool-no  { background: #f3f4f6; color: #6b7280; }
   .src-label { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; font-weight: 700;
                padding: 2px 6px; border-radius: 10px; }
   .src-agent   { background: #ede9fe; color: #5b21b6; }
@@ -711,16 +715,19 @@ async function loadScores(reportId) {
         <tbody>`;
     items.forEach(s => {
       const crit = s.criterion || {};
-      const max  = crit.scoring_type === 'boolean' ? 1.0 : 5.0;
-      const pct  = Math.round((s.score/max)*100);
+      const isBoolean = crit.scoring_type === 'boolean';
+      const pct = isBoolean ? 0 : Math.round((s.score / 5.0) * 100);
       const srcClass = s.source === 'analyst' ? 'src-analyst' : 'src-agent';
       const srcLabel = s.source === 'analyst' ? '👤 Analyst' : '🤖 AI Agent';
+      const scoreCell = isBoolean
+        ? `<span class="bool-badge ${s.score > 0 ? 'bool-yes' : 'bool-no'}">${s.score > 0 ? '✓ Yes' : '✗ No'}</span>`
+        : `<div class="score-bar-wrap">
+            <div class="score-bar-outer"><div class="score-bar-inner" style="width:${pct}%"></div></div>
+            <span style="font-size:12px;font-weight:700">${Number.isInteger(s.score) ? s.score : s.score.toFixed(1)} <span style="font-weight:400;color:#9ca3af;font-size:10px">/ 5</span></span>
+           </div>`;
       html += `<tr>
         <td><strong>${crit.criterion_code||'?'}</strong> ${crit.name||''}</td>
-        <td><div class="score-bar-wrap">
-          <div class="score-bar-outer"><div class="score-bar-inner" style="width:${pct}%"></div></div>
-          <span style="font-size:12px;font-weight:700">${s.score}</span>
-        </div></td>
+        <td>${scoreCell}</td>
         <td style="color:#6b7280">${s.raw_value||'—'}</td>
         <td><span class="src-label ${srcClass}">${srcLabel}</span></td>
         <td style="color:#9ca3af;font-size:11px;max-width:200px">${s.notes||''}</td>

@@ -74,6 +74,26 @@ def _score_out(s: PropguruEvaluationScore, criterion: PropguruEvaluationCriteria
     return entry
 
 
+# ── Score validation ───────────────────────────────────────────────────────────
+
+def _validate_score(score: float, scoring_type: str, code: str = "") -> None:
+    """Raise 422 if score is outside the valid range for the criterion type."""
+    loc = f" for {code}" if code else ""
+    if scoring_type == "boolean":
+        if score not in (0.0, 1.0):
+            raise HTTPException(
+                status_code=422,
+                detail=f"Boolean criterion{loc} requires 0 (absent) or 1 (present), got {score}. "
+                       f"Do not use a scale — this is a yes/no field.",
+            )
+    elif scoring_type in ("scale_1_5", "proximity_km"):
+        if not (1.0 <= score <= 5.0):
+            raise HTTPException(
+                status_code=422,
+                detail=f"Criterion{loc} ({scoring_type}) score must be between 1 and 5, got {score}.",
+            )
+
+
 # ── Pydantic schemas ───────────────────────────────────────────────────────────
 
 class ApproveRequest(BaseModel):
@@ -272,12 +292,19 @@ async def save_evaluation_score(
     try:
         cid = uuid.UUID(req.criterion_id)
     except ValueError:
-        crit = (await session.execute(
+        crit_lookup = (await session.execute(
             select(PropguruEvaluationCriteria).where(PropguruEvaluationCriteria.criterion_code == req.criterion_id)
         )).scalar_one_or_none()
-        if not crit:
+        if not crit_lookup:
             raise HTTPException(status_code=404, detail=f"Criterion '{req.criterion_id}' not found")
-        cid = crit.id
+        cid = crit_lookup.id
+
+    # Validate score against criterion type before writing
+    crit = (await session.execute(
+        select(PropguruEvaluationCriteria).where(PropguruEvaluationCriteria.id == cid)
+    )).scalar_one_or_none()
+    if crit:
+        _validate_score(req.score, crit.scoring_type, crit.criterion_code)
 
     # Upsert: update existing score if present
     existing = (await session.execute(
@@ -335,6 +362,13 @@ async def update_score(
     if not score:
         raise HTTPException(status_code=404, detail="Score not found")
 
+    # Validate before writing
+    crit = (await session.execute(
+        select(PropguruEvaluationCriteria).where(PropguruEvaluationCriteria.id == score.criterion_id)
+    )).scalar_one_or_none()
+    if crit:
+        _validate_score(req.score, crit.scoring_type, crit.criterion_code)
+
     score.score = req.score
     if req.raw_value is not None:
         score.raw_value = req.raw_value
@@ -344,10 +378,6 @@ async def update_score(
     score.updated_at = datetime.now(timezone.utc)
     await session.commit()
     await session.refresh(score)
-
-    crit = (await session.execute(
-        select(PropguruEvaluationCriteria).where(PropguruEvaluationCriteria.id == score.criterion_id)
-    )).scalar_one_or_none()
     return _score_out(score, crit)
 
 

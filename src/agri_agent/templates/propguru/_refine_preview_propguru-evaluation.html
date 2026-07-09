@@ -46,12 +46,17 @@
         <span class="rp-src rp-src-{{ s.source }}">{{ s.source }}</span>
       </div>
       <div class="rp-score-val">
-        {% set maxscore = 1.0 if s.scoring_type == 'boolean' else 5.0 %}
-        {% set pct = (s.score / maxscore * 100)|round|int %}
-        <div class="rp-bar-outer">
-          <div class="rp-bar-inner" style="width:{{ pct }}%"></div>
-        </div>
-        <span class="rp-num">{{ s.score }}</span>
+        {% if s.scoring_type == 'boolean' %}
+          <span class="rp-bool {% if s.score > 0 %}rp-bool-yes{% else %}rp-bool-no{% endif %}">
+            {% if s.score > 0 %}✓ Yes{% else %}✗ No{% endif %}
+          </span>
+        {% else %}
+          {% set pct = [((s.score / 5.0) * 100)|round|int, 100]|min %}
+          <div class="rp-bar-outer">
+            <div class="rp-bar-inner" style="width:{{ pct }}%"></div>
+          </div>
+          <span class="rp-num">{{ "%g"|format(s.score) }}<span style="font-weight:400;color:#9ca3af;font-size:9px">/5</span></span>
+        {% endif %}
       </div>
     </div>
     {% endfor %}
@@ -92,5 +97,8 @@
 /* Shared bar styles — overflow: hidden clips the fill at the track boundary */
 .rp-bar-outer { flex: 1; min-width: 0; height: 5px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
 .rp-bar-inner { height: 5px; border-radius: 3px; background: #7c3aed; }
-.rp-num { font-size: 12px; font-weight: 700; color: #1a1a2e; width: 24px; flex-shrink: 0; text-align: right; }
+.rp-num { font-size: 12px; font-weight: 700; color: #1a1a2e; width: 30px; flex-shrink: 0; text-align: right; }
+.rp-bool { flex-shrink: 0; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 10px; }
+.rp-bool-yes { background: #dcfce7; color: #14532d; }
+.rp-bool-no  { background: #f3f4f6; color: #6b7280; }
 </style>
