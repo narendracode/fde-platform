@@ -336,6 +336,11 @@ def propguru_propose_evaluation(
         if resp.status_code not in (200, 201):
             return json.dumps({"error": f"Failed to create HITL action: {resp.text}"})
         data = resp.json()
+
+        # Transition report to pending_review so the analyst UI shows the correct state
+        c.patch(f"/api/v1/propguru/evaluations/{report_id}/status",
+                json={"status": "pending_review"})
+
         return json.dumps({
             "success": True,
             "action_id": data.get("id"),

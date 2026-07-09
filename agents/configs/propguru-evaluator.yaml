@@ -9,6 +9,9 @@ agent:
 
   feature_flags:
     human_in_the_loop: true
+    enable_refinement: true
+    refinement_agent: "propguru-evaluation-refiner"
+    refinement_preview: "propguru-evaluation"
 
   inputs:
     deal_id:
@@ -78,8 +81,3 @@ agent:
     log_inputs: true
     log_outputs: true
     log_tool_calls: true
-
-  feature_flags:
-    enable_refinement: true
-    refinement_agent: "propguru-evaluation-refiner"
-    refinement_preview: "propguru-evaluation"

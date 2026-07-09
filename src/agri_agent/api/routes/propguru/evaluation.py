@@ -116,6 +116,10 @@ class RefineRequest(BaseModel):
     requested_by: str = "analyst"
 
 
+class UpdateStatusRequest(BaseModel):
+    status: str
+
+
 class SetBasePriceRequest(BaseModel):
     market_rate_per_sqft: float
     base_price: float
@@ -585,6 +589,44 @@ async def update_final_price(
     return _report_out(report)
 
 
+_ALLOWED_STATUS_TRANSITIONS = {
+    "draft": {"pending_review"},
+    "pending_review": {"draft", "approved", "rejected"},
+}
+
+
+@router.patch("/evaluations/{report_id}/status")
+async def update_report_status(
+    report_id: str,
+    req: UpdateStatusRequest,
+    session: AsyncSession = Depends(get_session),
+    _: str = Depends(verify_api_key),
+):
+    """Internal: update evaluation report status (used by the evaluator agent after creating the HITL action)."""
+    try:
+        rid = uuid.UUID(report_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid report_id")
+
+    report = (await session.execute(
+        select(PropguruEvaluationReport).where(PropguruEvaluationReport.id == rid)
+    )).scalar_one_or_none()
+    if not report:
+        raise HTTPException(status_code=404, detail=f"Report '{report_id}' not found")
+
+    allowed = _ALLOWED_STATUS_TRANSITIONS.get(report.status, set())
+    if req.status not in allowed:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Cannot transition report from '{report.status}' to '{req.status}'",
+        )
+
+    report.status = req.status
+    await session.commit()
+    await session.refresh(report)
+    return _report_out(report)
+
+
 @router.post("/evaluations/{report_id}/refine", status_code=202)
 async def trigger_refinement(
     report_id: str,
@@ -655,4 +697,49 @@ async def trigger_refinement(
         "report_id": str(report.id),
         "status": "queued",
         "message": "Refinement agent started — poll /api/v1/runs/{run_id} for status",
+    }
+
+
+@router.get("/evaluations/{report_id}/action")
+async def get_evaluation_action(
+    report_id: str,
+    session: AsyncSession = Depends(get_session),
+    _: str = Depends(verify_api_key),
+):
+    """Return the most recent pending AgentAction for this evaluation report.
+
+    Used by the evaluation UI to obtain the action_id before opening the
+    conversational refine canvas (which operates on actions, not reports).
+    Returns 404 if no pending_review action exists for this report.
+    """
+    try:
+        rid = uuid.UUID(report_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid report_id")
+
+    report = (await session.execute(
+        select(PropguruEvaluationReport).where(PropguruEvaluationReport.id == rid)
+    )).scalar_one_or_none()
+    if not report:
+        raise HTTPException(status_code=404, detail=f"Report '{report_id}' not found")
+
+    action = (await session.execute(
+        select(AgentAction)
+        .where(AgentAction.approval_action["url_params"]["report_id"].as_string() == report_id)
+        .where(AgentAction.status == "pending_review")
+        .order_by(desc(AgentAction.created_at))
+        .limit(1)
+    )).scalar_one_or_none()
+
+    if not action:
+        raise HTTPException(
+            status_code=404,
+            detail="No pending approval action found for this report. The evaluation may not have completed or was already decided.",
+        )
+
+    return {
+        "action_id": str(action.id),
+        "status": action.status,
+        "title": action.title,
+        "enable_refinement": True,
     }

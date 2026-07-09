@@ -814,8 +814,10 @@ async def refine_message(
     except FileNotFoundError:
         raise HTTPException(500, detail=f"Refinement agent config '{refine_session.refinement_agent}' not found")
 
-    # Extract plan_header_id from action
-    plan_header_id = (action.approval_action or {}).get("url_params", {}).get("plan_header_id", "")
+    # Extract url_params from the action for context injection
+    url_params = (action.approval_action or {}).get("url_params", {})
+    plan_header_id = url_params.get("plan_header_id", "")
+    report_id_ctx = url_params.get("report_id", "")
 
     # Build conversation history text
     history_parts = []
@@ -825,7 +827,12 @@ async def refine_message(
     history_text = "\n\n".join(history_parts) if history_parts else "(none — this is the first message)"
 
     # Build full message with context injection
-    context_lines = f"  plan_header_id: {plan_header_id}" if plan_header_id else ""
+    context_parts = []
+    if plan_header_id:
+        context_parts.append(f"  plan_header_id: {plan_header_id}")
+    if report_id_ctx:
+        context_parts.append(f"  report_id: {report_id_ctx}")
+    context_lines = "\n".join(context_parts)
     full_user_message = (
         f"[Runtime context]\n{context_lines}\n\n"
         f"[Conversation history so far]\n{history_text}\n\n"

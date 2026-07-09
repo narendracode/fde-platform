@@ -170,7 +170,7 @@ async function loadDeals() {
   document.getElementById('deals-table').innerHTML = `
     <table>
       <thead><tr>
-        <th>Deal</th><th>Property</th><th>Type</th><th>Locality</th>
+        <th>Deal</th><th>Address</th><th>Type</th><th>Size</th>
         <th>Channel Partner</th><th>Stage</th><th>Acq. Price</th><th>Actions</th>
       </tr></thead>
       <tbody>${data.map(d => {
@@ -178,13 +178,18 @@ async function loadDeals() {
         const cp = d.sourcing_cp || {};
         const price = d.target_acquisition_price;
         const priceFmt = price ? '₹' + (price/100000).toFixed(1) + 'L' : '—';
-        const canEval = ['lead', 'evaluation_pending'].includes(d.stage);
+        const addr = prop.address_line1 || prop.property_code || '—';
+        const cityLine = [prop.locality, prop.city, prop.pincode].filter(Boolean).join(', ');
+        const size = [prop.bedrooms ? prop.bedrooms + ' BHK' : '', prop.carpet_area_sqft ? prop.carpet_area_sqft + ' sqft' : ''].filter(Boolean).join(' · ');
         return `<tr>
           <td><strong>${d.deal_code}</strong></td>
-          <td>${prop.property_code || '—'}</td>
-          <td style="text-transform:capitalize">${(prop.property_type || '').replace('_', ' ')}</td>
-          <td>${prop.locality || '—'} <span style="color:#9ca3af;font-size:11px">${prop.bedrooms ? prop.bedrooms + 'BHK' : ''}</span></td>
-          <td>${cp.name || '—'}</td>
+          <td>
+            <div style="font-size:13px;font-weight:500;color:#1a1a2e">${addr}</div>
+            <div style="font-size:11px;color:#9ca3af;margin-top:2px">${cityLine}</div>
+          </td>
+          <td style="text-transform:capitalize;font-size:12px">${(prop.property_type || '').replace('_', ' ')}</td>
+          <td style="font-size:12px;color:#374151">${size || '—'}</td>
+          <td style="font-size:12px">${cp.name || '—'}</td>
           <td><span class="badge ${STAGE_CLASSES[d.stage] || ''}">${STAGE_LABELS[d.stage] || d.stage}</span></td>
           <td>${priceFmt}</td>
           <td>
@@ -234,9 +239,11 @@ async function openCreateModal() {
   const props = await propsResp.json();
   const cps = await cpsResp.json();
 
-  document.getElementById('f-property').innerHTML = props.map(p =>
-    `<option value="${p.id}">${p.property_code} — ${p.locality} (${p.bedrooms}BHK)</option>`
-  ).join('');
+  document.getElementById('f-property').innerHTML = props.map(p => {
+    const addr = p.address_line1 || p.property_code;
+    const label = `${addr}, ${p.locality}, ${p.city}${p.bedrooms ? ' · ' + p.bedrooms + 'BHK' : ''}`;
+    return `<option value="${p.id}">${label}</option>`;
+  }).join('');
   document.getElementById('f-cp').innerHTML = cps.map(c =>
     `<option value="${c.id}">${c.cp_code} — ${c.name} (${c.commission_pct}%)</option>`
   ).join('');

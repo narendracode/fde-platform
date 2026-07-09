@@ -225,20 +225,22 @@ async function loadProperties() {
   document.getElementById('properties-table').innerHTML = `
     <table>
       <thead><tr>
-        <th>Code</th><th>Locality</th><th>City</th><th>Type</th>
-        <th>Beds</th><th>Carpet (sqft)</th><th>Floor</th><th>Age (yrs)</th><th>Facing</th>
+        <th>Address</th><th>City</th><th>Type</th>
+        <th>Size</th><th>Floor</th><th>Age (yrs)</th><th>Facing</th><th>Pincode</th>
       </tr></thead>
       <tbody>${data.map(p => `
         <tr>
-          <td><strong>${p.property_code}</strong></td>
-          <td>${p.locality || '—'}</td>
+          <td>
+            <div style="font-weight:600;font-size:13px">${p.address_line1 || p.property_code}</div>
+            <div style="font-size:11px;color:#9ca3af;margin-top:2px">${p.locality || ''}</div>
+          </td>
           <td>${p.city || '—'}</td>
           <td>${p.property_type === 'apartment' ? '🏢 Apartment' : p.property_type === 'independent_house' ? '🏠 Ind. House' : p.property_type || '—'}</td>
-          <td>${p.bedrooms != null ? p.bedrooms + ' BHK' : '—'}</td>
-          <td>${p.carpet_area_sqft != null ? p.carpet_area_sqft.toLocaleString() : '—'}</td>
+          <td style="white-space:nowrap">${p.bedrooms != null ? p.bedrooms + ' BHK' : '—'}${p.carpet_area_sqft != null ? ' · ' + p.carpet_area_sqft.toLocaleString() + ' sqft' : ''}</td>
           <td>${p.floor_number != null ? p.floor_number + '/' + (p.total_floors || '?') : '—'}</td>
-          <td>${p.building_age_years != null ? p.building_age_years : '—'}</td>
+          <td>${p.building_age_years != null ? p.building_age_years + ' yr' : '—'}</td>
           <td style="text-transform:capitalize">${p.facing || '—'}</td>
+          <td style="font-size:12px;color:#9ca3af">${p.pincode || '—'}</td>
         </tr>`).join('')}
       </tbody>
     </table>`;

@@ -138,41 +138,101 @@
            padding: 10px 18px; border-radius: 8px; font-size: 13px; display: none;
            box-shadow: 0 4px 12px rgba(0,0,0,.2); z-index: 999; }
 
-  /* ── Refinement canvas ── */
-  .canvas-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 100; display: none; }
-  .canvas-backdrop.show { display: block; }
-  .canvas-panel { position: fixed; top: 0; right: -480px; width: 460px; height: 100vh;
-                  background: #fff; z-index: 101; box-shadow: -4px 0 24px rgba(0,0,0,.18);
-                  display: flex; flex-direction: column; transition: right .25s ease; overflow: hidden; }
-  .canvas-panel.open { right: 0; }
-  .canvas-header { padding: 18px 20px 14px; border-bottom: 1px solid #e5e7eb;
-                   display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
-  .canvas-title { font-size: 15px; font-weight: 700; color: #1a1a2e; }
-  .canvas-close { background: none; border: none; font-size: 22px; cursor: pointer;
-                  color: #9ca3af; line-height: 1; padding: 0; }
-  .canvas-close:hover { color: #374151; }
-  .canvas-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
-  .canvas-footer { padding: 14px 20px; border-top: 1px solid #e5e7eb; flex-shrink: 0; }
-  .canvas-label { font-size: 12px; font-weight: 600; color: #374151; margin-bottom: 6px; }
-  .canvas-textarea { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid #d1d5db;
-                     border-radius: 8px; font-size: 13px; line-height: 1.5; resize: vertical;
-                     min-height: 90px; font-family: inherit; color: #1a1a2e; }
-  .canvas-textarea:focus { outline: none; border-color: #7c3aed; box-shadow: 0 0 0 3px rgba(124,58,237,.1); }
-  .canvas-hint { font-size: 11px; color: #9ca3af; margin-top: 4px; line-height: 1.4; }
-  .canvas-section { margin-top: 16px; }
-  .canvas-run-bar { background: #fffbeb; border: 1px solid #fde68a; border-radius: 7px;
-                    padding: 10px 14px; font-size: 12px; color: #92400e; display: none;
-                    align-items: center; gap: 8px; margin-top: 12px; }
-  .canvas-run-bar.show { display: flex; }
-  .canvas-result-box { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 7px;
-                       padding: 12px 14px; font-size: 12px; color: #14532d; display: none;
-                       line-height: 1.5; white-space: pre-wrap; margin-top: 12px; }
-  .canvas-result-box.show { display: block; }
-  .btn-refine { background: #7c3aed; color: #fff; border: none; padding: 10px 18px;
-                border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer;
-                display: inline-flex; align-items: center; gap: 6px; transition: opacity .15s; }
-  .btn-refine:hover:not(:disabled) { opacity: .85; }
-  .btn-refine:disabled { opacity: .5; cursor: not-allowed; }
+  /* ── Refine canvas overlay (full-screen, two-pane) ── */
+  #refine-overlay {
+    position: fixed; inset: 0; z-index: 500; display: none;
+    background: rgba(17,24,39,.45); backdrop-filter: blur(2px);
+  }
+  #refine-overlay.open { display: flex; }
+  #refine-preview-pane {
+    width: 42%; height: 100%; background: #f8f9fb; border-right: 1px solid #e5e7eb;
+    overflow: hidden; display: flex; flex-direction: column;
+  }
+  #refine-preview-header {
+    padding: 14px 16px; background: #fff; border-bottom: 1px solid #e5e7eb;
+    font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+    color: #6b7280; flex-shrink: 0;
+  }
+  #refine-preview-body { flex: 1; overflow-y: auto; padding: 12px; }
+  #refine-chat-pane {
+    width: 58%; height: 100%; background: #fff; display: flex; flex-direction: column;
+  }
+  #refine-chat-header {
+    padding: 14px 18px; border-bottom: 1px solid #e5e7eb; flex-shrink: 0;
+    display: flex; align-items: center; gap: 10px;
+  }
+  #refine-chat-title {
+    flex: 1; font-size: 14px; font-weight: 700; color: #1a1a2e;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+  }
+  #refine-approve-btn {
+    background: #16a34a; color: #fff; border: none; padding: 7px 14px;
+    border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+  }
+  #refine-approve-btn:hover { background: #15803d; }
+  #refine-approve-btn:disabled { background: #86efac; cursor: not-allowed; }
+  #refine-reject-btn {
+    background: #fff; color: #dc2626; border: 1.5px solid #dc2626;
+    padding: 7px 14px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+  }
+  #refine-reject-btn:hover { background: #dc2626; color: #fff; }
+  #refine-reject-btn:disabled { opacity: .5; cursor: not-allowed; }
+  #refine-close-btn {
+    background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb;
+    padding: 7px 12px; border-radius: 7px; font-size: 13px; cursor: pointer;
+  }
+  #refine-close-btn:hover { background: #e5e7eb; }
+  #refine-messages {
+    flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px;
+  }
+  .refine-msg { max-width: 88%; display: flex; flex-direction: column; gap: 4px; }
+  .refine-msg.user { align-self: flex-end; align-items: flex-end; }
+  .refine-msg.assistant { align-self: flex-start; align-items: flex-start; }
+  .refine-bubble {
+    padding: 10px 14px; border-radius: 14px; font-size: 13px; line-height: 1.55;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .refine-msg.user .refine-bubble { background: #ede9fe; color: #1e1b4b; border-radius: 14px 14px 4px 14px; }
+  .refine-msg.assistant .refine-bubble { background: #f1f5f9; color: #1a1a2e; border-radius: 14px 14px 14px 4px; }
+  .refine-role { font-size: 11px; font-weight: 600; color: #94a3b8; padding: 0 4px; }
+  .tool-badge {
+    display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 7px;
+    border-radius: 20px; background: #fef3c7; color: #92400e; margin: 2px 2px 0 0;
+    font-family: monospace; border: 1px solid #fde68a;
+  }
+  .tool-badges { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 4px; }
+  .thinking-dot {
+    display: inline-block; width: 6px; height: 6px; background: #94a3b8;
+    border-radius: 50%; margin: 0 1px; animation: blink 1.2s infinite;
+  }
+  .thinking-dot:nth-child(2) { animation-delay: .2s; }
+  .thinking-dot:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%,80%,100% { opacity:.2; } 40% { opacity:1; } }
+  #refine-locked-banner {
+    padding: 10px 16px; background: #dcfce7; border-top: 1px solid #bbf7d0;
+    font-size: 13px; color: #15803d; font-weight: 600; text-align: center;
+    display: none; flex-shrink: 0;
+  }
+  #refine-input-area { padding: 14px 18px; border-top: 1px solid #e5e7eb; flex-shrink: 0; }
+  #refine-input-row { display: flex; gap: 8px; align-items: flex-end; }
+  #refine-input {
+    flex: 1; padding: 9px 12px; border: 1px solid #d1d5db; border-radius: 8px;
+    font-size: 13px; font-family: inherit; resize: none; outline: none;
+    min-height: 40px; max-height: 120px; overflow-y: auto; line-height: 1.5;
+  }
+  #refine-input:focus { border-color: #7c3aed; box-shadow: 0 0 0 2px rgba(124,58,237,.12); }
+  #refine-send-btn {
+    background: #7c3aed; color: #fff; border: none; padding: 9px 16px;
+    border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+  }
+  #refine-send-btn:hover { background: #6d28d9; }
+  #refine-send-btn:disabled { background: #c4b5fd; cursor: not-allowed; }
+  .btn-open-refine {
+    background: #ede9fe; color: #5b21b6; border: 1.5px solid #c4b5fd;
+    padding: 7px 14px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .btn-open-refine:hover { background: #ddd6fe; }
+  .btn-open-refine:disabled { opacity: .5; cursor: not-allowed; }
 </style>
 {% endblock %}
 
@@ -270,8 +330,8 @@
     <div class="report-header">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
         <div>
-          <div style="font-size:12px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">
-            <span id="rpt-deal-code">—</span> · Evaluation Report
+          <div style="font-size:12px;color:#9ca3af;font-weight:500;margin-bottom:4px">
+            <span id="rpt-deal-code" style="color:#374151;font-weight:600"></span>
           </div>
           <div id="rpt-status-badge"></div>
         </div>
@@ -312,7 +372,7 @@
       <div class="action-row" id="action-row">
         <button class="btn btn-success" onclick="approveReport()">✓ Approve</button>
         <button class="btn btn-danger"  onclick="rejectReport()">✗ Reject</button>
-        <button class="btn btn-outline" id="refine-btn" onclick="openCanvas()" style="display:none">✦ Refine with AI</button>
+        <button class="btn-open-refine" id="refine-btn" onclick="openRefineCanvas()" style="display:none">✦ Refine with AI</button>
         <span style="color:#9ca3af;font-size:12px;margin-left:6px">Approval locks the price and advances the deal</span>
       </div>
     </div>
@@ -331,37 +391,33 @@
   </div>
 </div>
 
-<!-- Refinement canvas -->
-<div class="canvas-backdrop" id="canvas-backdrop" onclick="closeCanvas()"></div>
-<div class="canvas-panel" id="canvas-panel">
-  <div class="canvas-header">
-    <div class="canvas-title">✦ Refine with AI</div>
-    <button class="canvas-close" onclick="closeCanvas()">×</button>
-  </div>
-  <div class="canvas-body">
-    <div class="canvas-label">Refinement instructions</div>
-    <textarea class="canvas-textarea" id="canvas-instruction"
-      placeholder="Describe what to change and why. Examples:
-• CRIT-001 (Swimming pool) should be 1 — we confirmed pool is present at site visit
-• Re-score all amenity criteria for a premium Whitefield society
-• CRIT-015 (Metro) should be 4 — station is 800m not 1.2km"></textarea>
-    <div class="canvas-hint">The AI will update the criteria you specify and recalculate the recommended price.</div>
-
-    <div class="canvas-run-bar" id="canvas-run-bar">
-      <span class="spinner"></span>
-      <span id="canvas-run-text">AI refinement agent running…</span>
-    </div>
-    <div class="canvas-result-box" id="canvas-result-box"></div>
-
-    <div class="canvas-section">
-      <div class="canvas-label" style="margin-bottom:8px">Current scores snapshot</div>
-      <div id="canvas-preview-body"><div class="empty" style="padding:24px">Loading…</div></div>
+<!-- Conversational refine overlay (full-screen, two-pane) -->
+<div id="refine-overlay">
+  <!-- Left pane: live score preview -->
+  <div id="refine-preview-pane">
+    <div id="refine-preview-header">Current Scores Snapshot</div>
+    <div id="refine-preview-body">
+      <div class="empty">Loading…</div>
     </div>
   </div>
-  <div class="canvas-footer">
-    <button class="btn-refine" id="canvas-submit-btn" onclick="submitRefinement()">
-      ✦ Apply Refinement
-    </button>
+  <!-- Right pane: chat -->
+  <div id="refine-chat-pane">
+    <div id="refine-chat-header">
+      <div id="refine-chat-title">✦ Refine with AI</div>
+      <button id="refine-approve-btn" onclick="approveFromCanvas()">✓ Approve</button>
+      <button id="refine-reject-btn"  onclick="rejectFromCanvas()">✗ Reject</button>
+      <button id="refine-close-btn"   onclick="closeRefineCanvas()">✕ Close</button>
+    </div>
+    <div id="refine-messages"></div>
+    <div id="refine-locked-banner">✓ Decision made — conversation locked</div>
+    <div id="refine-input-area">
+      <div id="refine-input-row">
+        <textarea id="refine-input" rows="1"
+          placeholder="Ask a question or give an instruction — e.g. 'CRIT-001 should be 1, pool is present at site visit'…"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendRefineMessage();}"></textarea>
+        <button id="refine-send-btn" onclick="sendRefineMessage()">Send</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -430,13 +486,15 @@ function renderDealsTable() {
   document.getElementById('deals-table').innerHTML = `
     <table>
       <thead><tr>
-        <th>Deal</th><th>Property</th><th>Locality / Size</th>
+        <th>Deal</th><th>Address</th><th>Size</th>
         <th>Channel Partner</th><th>Stage</th><th>Action</th>
       </tr></thead>
       <tbody>${deals.map(d => {
         const prop = d.property || {};
         const cp   = d.sourcing_cp || {};
-        const size = prop.bedrooms ? prop.bedrooms + ' BHK' : (prop.carpet_area ? prop.carpet_area + ' sqft' : '');
+        const addr = prop.address_line1 || prop.property_code || '—';
+        const cityLine = [prop.locality, prop.city].filter(Boolean).join(', ');
+        const size = [prop.bedrooms ? prop.bedrooms + ' BHK' : '', prop.carpet_area_sqft ? prop.carpet_area_sqft + ' sqft' : ''].filter(Boolean).join(' · ');
         const hasReport = ['evaluation_pending','evaluation_done','listed','sold'].includes(d.stage);
         const actionHtml = d.stage === 'lead'
           ? `<button class="btn btn-success" style="font-size:11px;padding:5px 12px"
@@ -446,8 +504,11 @@ function renderDealsTable() {
             : '—';
         return `<tr class="deal-row" id="row-${d.id}" onclick="selectDeal('${d.id}')">
           <td><strong>${d.deal_code}</strong></td>
-          <td style="color:#6b7280;font-size:12px">${prop.property_code || '—'}</td>
-          <td>${prop.locality || '—'} <span style="color:#9ca3af;font-size:11px">${size}</span></td>
+          <td>
+            <div style="font-size:13px;font-weight:500;color:#1a1a2e">${addr}</div>
+            <div style="font-size:11px;color:#9ca3af;margin-top:2px">${cityLine}</div>
+          </td>
+          <td style="font-size:12px;color:#374151;white-space:nowrap">${size || '—'}</td>
           <td style="font-size:12px;color:#6b7280">${cp.name || '—'}</td>
           <td>${STAGE_BADGE[d.stage] || d.stage}</td>
           <td>${actionHtml}</td>
@@ -560,7 +621,11 @@ async function renderReport(report) {
   document.getElementById('empty-state').style.display = 'none';
   document.getElementById('report-area').classList.add('show');
 
-  document.getElementById('rpt-deal-code').textContent = _currentDeal?.deal_code || '—';
+  const prop = _currentDeal?.property || {};
+  const addr = prop.address_line1 || '';
+  const cityLine = [prop.locality, prop.city, prop.pincode].filter(Boolean).join(', ');
+  const propSummary = addr ? `${addr}, ${cityLine}` : (_currentDeal?.deal_code || '—');
+  document.getElementById('rpt-deal-code').textContent = propSummary;
   document.getElementById('rpt-status-badge').innerHTML = RPT_STATUS[report.status] || `<span class="rpt-status-badge">${report.status}</span>`;
   document.getElementById('rpt-date').textContent = report.created_at
     ? new Date(report.created_at).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })
@@ -590,7 +655,11 @@ async function renderReport(report) {
     refineBtn.style.display = 'none';
   } else {
     actionRow.style.display = 'flex';
-    refineBtn.style.display = report.status === 'pending_review' ? 'inline-flex' : 'none';
+    // Show Refine when report has a price (pipeline done) regardless of exact status —
+    // draft with recommended_price means the evaluator ran but the status transition was missed
+    const canRefine = report.status === 'pending_review' ||
+                      (report.status === 'draft' && report.recommended_price);
+    refineBtn.style.display = canRefine ? 'inline-flex' : 'none';
   }
 
   await loadScores(report.id);
@@ -645,125 +714,369 @@ async function loadScores(reportId) {
   document.getElementById('rpt-refined-chip').style.display = hasAnalyst ? 'inline-flex' : 'none';
 }
 
+async function _lookupActionId(reportId) {
+  const ar = await fetch(`/api/v1/propguru/evaluations/${reportId}/action`, { headers: H });
+  if (!ar.ok) return null;
+  return (await ar.json()).action_id;
+}
+
 async function approveReport() {
   if (!_currentReport) return;
   if (!confirm('Approve this evaluation? The deal will advance to evaluation_done and the final price will be locked.')) return;
-  const r = await fetch(`/api/v1/propguru/evaluations/${_currentReport.id}/approve`, {
-    method: 'PATCH', headers: H, body: JSON.stringify({ approved_by: 'analyst' }),
-  });
-  const d = await r.json();
-  if (r.ok) {
-    toast(`Approved — deal stage → ${d.deal_stage}, price set to ${fmt(d.final_price)}`);
+
+  // Prefer going through the action's approve endpoint so the inbox is settled
+  const actionId = await _lookupActionId(_currentReport.id);
+  let ok = false, resultDetail = '';
+  if (actionId) {
+    const r = await fetch(`/api/v1/actions/${actionId}/approve`, {
+      method: 'POST', headers: H, body: JSON.stringify({}),
+    });
+    ok = r.ok;
+    if (!ok) resultDetail = (await r.json().catch(()=>({}))).detail || 'Approval failed';
+  } else {
+    // Fallback: no action (already approved once, or seeded deal) — call report endpoint directly
+    const r = await fetch(`/api/v1/propguru/evaluations/${_currentReport.id}/approve`, {
+      method: 'PATCH', headers: H, body: JSON.stringify({ approved_by: 'analyst' }),
+    });
+    ok = r.ok;
+    if (!ok) resultDetail = (await r.json().catch(()=>({}))).detail || 'Approval failed';
+  }
+
+  if (ok) {
+    toast('✓ Evaluation approved — deal advancing to evaluation_done');
     _currentReport.status = 'approved';
     document.getElementById('rpt-status-badge').innerHTML = RPT_STATUS['approved'];
     document.getElementById('action-row').style.display = 'none';
     loadDeals();
   } else {
-    toast(d.detail || 'Approval failed', false);
+    toast(resultDetail, false);
   }
 }
 
 async function rejectReport() {
   if (!_currentReport) return;
-  const reason = prompt('Rejection reason (optional):');
-  const r = await fetch(`/api/v1/propguru/evaluations/${_currentReport.id}/reject`, {
-    method: 'PATCH', headers: H, body: JSON.stringify({ reason }),
-  });
-  if (r.ok) {
+  const reason = prompt('Rejection reason (optional):') ?? '';
+
+  const actionId = await _lookupActionId(_currentReport.id);
+  let ok = false;
+  if (actionId) {
+    const r = await fetch(`/api/v1/actions/${actionId}/reject`, {
+      method: 'POST', headers: H, body: JSON.stringify({ note: reason }),
+    });
+    ok = r.ok;
+    if (!ok) toast((await r.json().catch(()=>({}))).detail || 'Rejection failed', false);
+  } else {
+    const r = await fetch(`/api/v1/propguru/evaluations/${_currentReport.id}/reject`, {
+      method: 'PATCH', headers: H, body: JSON.stringify({ reason }),
+    });
+    ok = r.ok;
+    if (!ok) toast((await r.json().catch(()=>({}))).detail || 'Rejection failed', false);
+  }
+
+  if (ok) {
     toast('Evaluation rejected — re-trigger AI pipeline from the Deals page or table above');
     _currentReport.status = 'rejected';
     document.getElementById('rpt-status-badge').innerHTML = RPT_STATUS['rejected'];
     document.getElementById('action-row').style.display = 'none';
-  } else {
-    toast('Rejection failed', false);
   }
 }
 
-// ── Refinement canvas ──────────────────────────────────────────────────────────
+// ── Conversational Refine canvas ──────────────────────────────────────────────
 
-let _refineRunId = null;
-let _refinePollTimer = null;
+const _rc = {
+  actionId: null, sessionId: null, reportId: null,
+  streaming: false, locked: false,
+};
 
-async function openCanvas() {
+async function openRefineCanvas() {
   if (!_currentReport) return;
-  document.getElementById('canvas-backdrop').classList.add('show');
-  document.getElementById('canvas-panel').classList.add('open');
-  document.getElementById('canvas-run-bar').classList.remove('show');
-  document.getElementById('canvas-result-box').classList.remove('show');
-  document.getElementById('canvas-result-box').textContent = '';
-  document.getElementById('canvas-instruction').value = '';
-  document.getElementById('canvas-submit-btn').disabled = false;
-  await loadCanvasPreview();
-}
 
-function closeCanvas() {
-  document.getElementById('canvas-backdrop').classList.remove('show');
-  document.getElementById('canvas-panel').classList.remove('open');
-  clearInterval(_refinePollTimer);
-  _refineRunId = null;
-}
-
-async function loadCanvasPreview() {
-  if (!_currentReport) return;
-  const el = document.getElementById('canvas-preview-body');
-  el.innerHTML = '<div class="empty" style="padding:16px"><span class="spinner"></span></div>';
-  const r = await fetch(`/propguru/evaluation/${_currentReport.id}/refine-preview`, { headers: H });
-  if (r.ok) el.innerHTML = await r.text();
-  else el.innerHTML = '<div class="empty" style="padding:12px;color:#dc2626">Could not load preview</div>';
-}
-
-async function submitRefinement() {
-  if (!_currentReport) return;
-  const instruction = document.getElementById('canvas-instruction').value.trim();
-  if (!instruction) { toast('Please enter refinement instructions', false); return; }
-
-  const btn = document.getElementById('canvas-submit-btn');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Sending…';
-
-  const r = await fetch(`/api/v1/propguru/evaluations/${_currentReport.id}/refine`, {
-    method: 'POST', headers: H,
-    body: JSON.stringify({ refinement_request: instruction, requested_by: 'analyst' }),
-  });
-  const d = await r.json();
-  if (!r.ok) {
-    toast(d.detail || 'Failed to start refinement', false);
-    btn.disabled = false; btn.textContent = '✦ Apply Refinement';
+  // Look up the pending action for this report
+  const ar = await fetch(`/api/v1/propguru/evaluations/${_currentReport.id}/action`, { headers: H });
+  if (!ar.ok) {
+    const e = await ar.json().catch(() => ({}));
+    toast(e.detail || 'No pending action found for this report — evaluation may not have completed yet', false);
     return;
   }
+  const action = await ar.json();
 
-  _refineRunId = d.run_id;
-  document.getElementById('canvas-run-bar').classList.add('show');
-  btn.innerHTML = '✦ Apply Refinement';
-  _refinePollTimer = setInterval(pollRefineRun, 4000);
+  Object.assign(_rc, {
+    actionId: action.action_id,
+    reportId: _currentReport.id,
+    sessionId: null, streaming: false, locked: false,
+  });
+
+  document.getElementById('refine-chat-title').textContent =
+    action.title || `Refine — ${_currentDeal?.deal_code || ''}`;
+  document.getElementById('refine-messages').innerHTML = '';
+  document.getElementById('refine-locked-banner').style.display = 'none';
+  document.getElementById('refine-input-area').style.display = 'block';
+  document.getElementById('refine-approve-btn').disabled = false;
+  document.getElementById('refine-approve-btn').textContent = '✓ Approve';
+  document.getElementById('refine-reject-btn').disabled = false;
+  document.getElementById('refine-overlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  document.getElementById('refine-btn').disabled = true;
+
+  await _refreshCanvasPreview();
+
+  try {
+    const sr = await fetch(`/api/v1/actions/${_rc.actionId}/refine/start`, {
+      method: 'POST', headers: H, body: JSON.stringify({}),
+    });
+    if (!sr.ok) throw new Error('Failed to start refine session');
+    const sess = await sr.json();
+    _rc.sessionId = sess.session_id;
+
+    const mr = await fetch(`/api/v1/actions/${_rc.actionId}/refine/messages`, { headers: H });
+    if (mr.ok) {
+      const { messages: msgs } = await mr.json();
+      if (msgs.length === 0) {
+        _rcAppend('assistant',
+          `Hello! I can help you refine the evaluation for ${_currentDeal?.deal_code || 'this deal'}.\n\n` +
+          `You can:\n• Ask me to update specific scores (e.g. "CRIT-001 should be 1 — pool is confirmed present")\n` +
+          `• Ask questions about the scoring (e.g. "Why is CRIT-015 scored 2?")\n` +
+          `• Ask me to recalculate after updates\n\nWhat would you like to change?`
+        );
+      } else {
+        msgs.forEach(m => {
+          const el = _rcAppend(m.role, m.content);
+          if (m.role === 'assistant' && m.tool_calls?.length) {
+            const badges = document.createElement('div');
+            badges.className = 'tool-badges';
+            m.tool_calls.forEach(tc => {
+              const b = document.createElement('span');
+              b.className = 'tool-badge';
+              b.textContent = tc.tool || tc.name || '';
+              badges.appendChild(b);
+            });
+            el.appendChild(badges);
+          }
+        });
+      }
+    }
+    document.getElementById('refine-input').focus();
+  } catch (e) {
+    _rcAppend('assistant', 'Failed to start session. Please close and try again.');
+    console.error(e);
+  }
 }
 
-async function pollRefineRun() {
-  if (!_refineRunId) return;
-  const r = await fetch(`/api/v1/runs/${_refineRunId}`, { headers: H });
-  if (!r.ok) return;
-  const run = await r.json();
-  if (run.status === 'running' || run.status === 'pending') return;
+async function closeRefineCanvas() {
+  if (_rc.streaming) { toast('Please wait for the AI to finish', false); return; }
+  if (_rc.sessionId && _rc.actionId) {
+    await fetch(`/api/v1/actions/${_rc.actionId}/refine/close`, {
+      method: 'POST', headers: H, body: JSON.stringify({}),
+    }).catch(() => {});
+  }
+  _rcCloseUI();
+}
 
-  clearInterval(_refinePollTimer); _refinePollTimer = null;
-  document.getElementById('canvas-run-bar').classList.remove('show');
-  document.getElementById('canvas-submit-btn').disabled = false;
+function _rcCloseUI() {
+  document.getElementById('refine-overlay').classList.remove('open');
+  document.body.style.overflow = '';
+  document.getElementById('refine-btn').disabled = false;
+  Object.assign(_rc, { actionId: null, sessionId: null, reportId: null, streaming: false, locked: false });
+}
 
-  const box = document.getElementById('canvas-result-box');
-  if (run.status === 'completed') {
-    box.textContent = (run.output?.text) || JSON.stringify(run.output||'', null, 2);
-    box.style.cssText = '';
-    box.classList.add('show');
-    toast('Refinement complete — scores updated');
-    await loadScores(_currentReport.id);
-    await loadCanvasPreview();
-    const er = await fetch(`/api/v1/propguru/deals/${_currentDeal.id}/evaluation`, { headers: H });
-    if (er.ok) { _currentReport = await er.json(); renderReport(_currentReport); }
+function _rcAppend(role, text, isStreaming = false) {
+  const msgsEl = document.getElementById('refine-messages');
+  const wrapper = document.createElement('div');
+  wrapper.className = `refine-msg ${role}`;
+
+  const roleLabel = document.createElement('div');
+  roleLabel.className = 'refine-role';
+  roleLabel.textContent = role === 'user' ? 'You' : 'AI Assistant';
+
+  const bubble = document.createElement('div');
+  bubble.className = 'refine-bubble';
+  if (isStreaming) {
+    bubble.innerHTML = '<span class="thinking-dot"></span><span class="thinking-dot"></span><span class="thinking-dot"></span>';
   } else {
-    box.style.background = '#fef2f2'; box.style.borderColor = '#fecaca'; box.style.color = '#991b1b';
-    box.textContent = `Refinement failed: ${run.error || run.status}`;
-    box.classList.add('show');
-    toast('Refinement failed — see canvas for details', false);
+    bubble.textContent = text;
+  }
+
+  if (role === 'user') {
+    wrapper.appendChild(bubble);
+    wrapper.appendChild(roleLabel);
+  } else {
+    wrapper.appendChild(roleLabel);
+    wrapper.appendChild(bubble);
+  }
+
+  msgsEl.appendChild(wrapper);
+  msgsEl.scrollTop = msgsEl.scrollHeight;
+  return wrapper;
+}
+
+async function sendRefineMessage() {
+  const input = document.getElementById('refine-input');
+  const content = input.value.trim();
+  if (!content || _rc.streaming || _rc.locked || !_rc.actionId) return;
+
+  input.value = '';
+  input.style.height = 'auto';
+  _rc.streaming = true;
+  document.getElementById('refine-send-btn').disabled = true;
+  input.disabled = true;
+
+  _rcAppend('user', content);
+  const assistantEl = _rcAppend('assistant', '', true);
+  const bubble = assistantEl.querySelector('.refine-bubble');
+  const toolBadgesEl = document.createElement('div');
+  toolBadgesEl.className = 'tool-badges';
+
+  try {
+    const resp = await fetch(`/api/v1/actions/${_rc.actionId}/refine/message`, {
+      method: 'POST', headers: H, body: JSON.stringify({ content }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      bubble.innerHTML = '';
+      bubble.textContent = `Error: ${err.detail || 'Unknown error'}`;
+      return;
+    }
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let responseText = '';
+    let hadTools = false;
+    bubble.innerHTML = '';
+
+    const handleEvt = async (evt) => {
+      if (evt.type === 'token') {
+        responseText += evt.content;
+        bubble.textContent = responseText;
+        document.getElementById('refine-messages').scrollTop = 99999;
+      } else if (evt.type === 'tool_use') {
+        hadTools = true;
+        if (!assistantEl.contains(toolBadgesEl)) assistantEl.appendChild(toolBadgesEl);
+        const badge = document.createElement('span');
+        badge.className = 'tool-badge';
+        badge.textContent = evt.tool || '';
+        toolBadgesEl.appendChild(badge);
+      } else if (evt.type === 'done') {
+        await _refreshCanvasPreview();
+        await loadScores(_rc.reportId);
+      } else if (evt.type === 'error') {
+        bubble.textContent = `Error: ${evt.detail || evt.message || 'Unknown error'}`;
+      }
+    };
+
+    const processBuffer = async (flush = false) => {
+      const parts = buffer.split('\n\n');
+      buffer = flush ? '' : parts.pop();
+      for (const part of parts) {
+        for (const line of part.split('\n')) {
+          if (!line.startsWith('data: ')) continue;
+          let evt;
+          try { evt = JSON.parse(line.slice(6)); } catch { continue; }
+          await handleEvt(evt);
+        }
+      }
+    };
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) { await processBuffer(true); break; }
+      buffer += decoder.decode(value, { stream: true });
+      await processBuffer();
+    }
+
+    if (!responseText && hadTools) bubble.textContent = 'Done.';
+  } catch (e) {
+    bubble.innerHTML = '';
+    bubble.textContent = 'Connection error. Please try again.';
+    console.error(e);
+  } finally {
+    _rc.streaming = false;
+    document.getElementById('refine-send-btn').disabled = _rc.locked;
+    input.disabled = _rc.locked;
+    if (!_rc.locked) input.focus();
+  }
+}
+
+async function _refreshCanvasPreview() {
+  if (!_rc.reportId) return;
+  const el = document.getElementById('refine-preview-body');
+  el.innerHTML = '<div class="empty"><span class="spinner"></span></div>';
+  const r = await fetch(`/propguru/evaluation/${_rc.reportId}/refine-preview`, { headers: H });
+  if (r.ok) el.innerHTML = await r.text();
+  else el.innerHTML = '<div class="empty" style="color:#dc2626">Preview unavailable</div>';
+}
+
+async function approveFromCanvas() {
+  if (!_rc.actionId || _rc.locked || _rc.streaming) return;
+  const btn = document.getElementById('refine-approve-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Approving…';
+
+  try {
+    if (_rc.sessionId) {
+      await fetch(`/api/v1/actions/${_rc.actionId}/refine/close`, {
+        method: 'POST', headers: H, body: JSON.stringify({}),
+      }).catch(() => {});
+    }
+    const resp = await fetch(`/api/v1/actions/${_rc.actionId}/approve`, {
+      method: 'POST', headers: H, body: JSON.stringify({}),
+    });
+    if (resp.ok) {
+      btn.textContent = '✓ Approved';
+      _rc.locked = true;
+      document.getElementById('refine-locked-banner').style.display = 'block';
+      document.getElementById('refine-input-area').style.display = 'none';
+      document.getElementById('refine-reject-btn').disabled = true;
+      toast('✓ Evaluation approved');
+      _currentReport && (_currentReport.status = 'approved');
+      setTimeout(async () => {
+        _rcCloseUI();
+        await loadDeals();
+        if (_currentReport) renderReport(_currentReport);
+      }, 2000);
+    } else {
+      const err = await resp.json().catch(() => ({}));
+      toast(err.detail?.error || err.detail?.message || err.detail || 'Approval failed', false);
+      btn.disabled = false;
+      btn.textContent = '✓ Approve';
+    }
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = '✓ Approve';
+    toast('Approval failed', false);
+  }
+}
+
+async function rejectFromCanvas() {
+  if (!_rc.actionId || _rc.locked || _rc.streaming) return;
+  const reason = prompt('Rejection reason (optional):') ?? '';
+  const btn = document.getElementById('refine-reject-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Rejecting…';
+
+  try {
+    const resp = await fetch(`/api/v1/propguru/evaluations/${_rc.reportId}/reject`, {
+      method: 'PATCH', headers: H, body: JSON.stringify({ reason }),
+    });
+    if (resp.ok) {
+      toast('Evaluation rejected');
+      _rc.locked = true;
+      document.getElementById('refine-locked-banner').textContent = '✗ Evaluation rejected — conversation locked';
+      document.getElementById('refine-locked-banner').style.cssText = 'display:block;background:#fee2e2;border-top-color:#fecaca;color:#991b1b;';
+      document.getElementById('refine-input-area').style.display = 'none';
+      document.getElementById('refine-approve-btn').disabled = true;
+      _currentReport && (_currentReport.status = 'rejected');
+      setTimeout(() => { _rcCloseUI(); if (_currentReport) renderReport(_currentReport); }, 2000);
+    } else {
+      const err = await resp.json().catch(() => ({}));
+      toast(err.detail || 'Rejection failed', false);
+      btn.disabled = false;
+      btn.textContent = '✗ Reject';
+    }
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = '✗ Reject';
+    toast('Rejection failed', false);
   }
 }
 

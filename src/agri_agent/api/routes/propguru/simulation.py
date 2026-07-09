@@ -72,16 +72,16 @@ _CRITERIA = [
 ]
 
 _PROPERTIES = [
-    {"property_code": "PROP-001", "address_line1": "Prestige Tech Park Road", "city": "Bengaluru", "locality": "Whitefield", "pincode": "560066", "property_type": "apartment", "carpet_area_sqft": 1250.0, "built_up_area_sqft": 1480.0, "bedrooms": 3, "bathrooms": 2, "floor_number": 8, "total_floors": 15, "building_age_years": 5, "facing": "east", "latitude": 12.9698, "longitude": 77.7500},
-    {"property_code": "PROP-002", "address_line1": "80 Feet Road, 5th Block", "city": "Bengaluru", "locality": "Koramangala", "pincode": "560034", "property_type": "apartment", "carpet_area_sqft": 950.0, "built_up_area_sqft": 1100.0, "bedrooms": 2, "bathrooms": 2, "floor_number": 3, "total_floors": 10, "building_age_years": 8, "facing": "north", "latitude": 12.9352, "longitude": 77.6245},
-    {"property_code": "PROP-003", "address_line1": "Hill Road, Bandra", "city": "Mumbai", "locality": "Bandra West", "pincode": "400050", "property_type": "apartment", "carpet_area_sqft": 1800.0, "built_up_area_sqft": 2100.0, "bedrooms": 4, "bathrooms": 3, "floor_number": 12, "total_floors": 20, "building_age_years": 3, "facing": "west", "latitude": 19.0544, "longitude": 72.8272},
-    {"property_code": "PROP-004", "address_line1": "Andheri Kurla Road", "city": "Mumbai", "locality": "Andheri East", "pincode": "400069", "property_type": "apartment", "carpet_area_sqft": 1100.0, "built_up_area_sqft": 1300.0, "bedrooms": 3, "bathrooms": 2, "floor_number": 6, "total_floors": 18, "building_age_years": 7, "facing": "south", "latitude": 19.1136, "longitude": 72.8697},
-    {"property_code": "PROP-005", "address_line1": "Sohna Road, Sector 49", "city": "Gurgaon", "locality": "Gurgaon Sector 49", "pincode": "122018", "property_type": "apartment", "carpet_area_sqft": 850.0, "built_up_area_sqft": 1010.0, "bedrooms": 2, "bathrooms": 2, "floor_number": 4, "total_floors": 12, "building_age_years": 10, "facing": "east", "latitude": 28.4089, "longitude": 77.0420},
-    {"property_code": "PROP-006", "address_line1": "ITPL Main Road", "city": "Bengaluru", "locality": "Whitefield", "pincode": "560048", "property_type": "independent_house", "carpet_area_sqft": 2400.0, "built_up_area_sqft": 2800.0, "bedrooms": 4, "bathrooms": 4, "floor_number": None, "total_floors": None, "building_age_years": 15, "facing": "east", "latitude": 12.9780, "longitude": 77.7480},
-    {"property_code": "PROP-007", "address_line1": "Sarjapur Road, 7th Block", "city": "Bengaluru", "locality": "Koramangala", "pincode": "560034", "property_type": "apartment", "carpet_area_sqft": 1400.0, "built_up_area_sqft": 1650.0, "bedrooms": 3, "bathrooms": 3, "floor_number": 10, "total_floors": 12, "building_age_years": 2, "facing": "north", "latitude": 12.9328, "longitude": 77.6227},
-    {"property_code": "PROP-008", "address_line1": "Versova Road", "city": "Mumbai", "locality": "Andheri East", "pincode": "400053", "property_type": "apartment", "carpet_area_sqft": 780.0, "built_up_area_sqft": 920.0, "bedrooms": 2, "bathrooms": 1, "floor_number": 2, "total_floors": 8, "building_age_years": 12, "facing": "west", "latitude": 19.1200, "longitude": 72.8380},
-    {"property_code": "PROP-009", "address_line1": "Golf Course Extension Road", "city": "Gurgaon", "locality": "Gurgaon Sector 49", "pincode": "122018", "property_type": "apartment", "carpet_area_sqft": 2100.0, "built_up_area_sqft": 2450.0, "bedrooms": 4, "bathrooms": 4, "floor_number": 15, "total_floors": 22, "building_age_years": 1, "facing": "east", "latitude": 28.4150, "longitude": 77.0560},
-    {"property_code": "PROP-010", "address_line1": "Kothrud Main Road", "city": "Pune", "locality": "Kothrud", "pincode": "411038", "property_type": "independent_house", "carpet_area_sqft": 1800.0, "built_up_area_sqft": 2100.0, "bedrooms": 3, "bathrooms": 3, "floor_number": None, "total_floors": None, "building_age_years": 20, "facing": "north", "latitude": 18.5074, "longitude": 73.8077},
+    {"property_code": "PROP-001", "address_line1": "Flat 803, Prestige Tech Vista, Prestige Tech Park Road", "city": "Bengaluru", "locality": "Whitefield", "pincode": "560066", "property_type": "apartment", "carpet_area_sqft": 1250.0, "built_up_area_sqft": 1480.0, "bedrooms": 3, "bathrooms": 2, "floor_number": 8, "total_floors": 15, "building_age_years": 5, "facing": "east", "latitude": 12.9698, "longitude": 77.7500},
+    {"property_code": "PROP-002", "address_line1": "A-304, Sobha Daffodil Apartments, 80 Feet Road, 5th Block", "city": "Bengaluru", "locality": "Koramangala", "pincode": "560034", "property_type": "apartment", "carpet_area_sqft": 950.0, "built_up_area_sqft": 1100.0, "bedrooms": 2, "bathrooms": 2, "floor_number": 3, "total_floors": 10, "building_age_years": 8, "facing": "north", "latitude": 12.9352, "longitude": 77.6245},
+    {"property_code": "PROP-003", "address_line1": "1202, Sea Crest Towers, Hill Road", "city": "Mumbai", "locality": "Bandra West", "pincode": "400050", "property_type": "apartment", "carpet_area_sqft": 1800.0, "built_up_area_sqft": 2100.0, "bedrooms": 4, "bathrooms": 3, "floor_number": 12, "total_floors": 20, "building_age_years": 3, "facing": "west", "latitude": 19.0544, "longitude": 72.8272},
+    {"property_code": "PROP-004", "address_line1": "604, Raheja Heights, Andheri Kurla Road", "city": "Mumbai", "locality": "Andheri East", "pincode": "400069", "property_type": "apartment", "carpet_area_sqft": 1100.0, "built_up_area_sqft": 1300.0, "bedrooms": 3, "bathrooms": 2, "floor_number": 6, "total_floors": 18, "building_age_years": 7, "facing": "south", "latitude": 19.1136, "longitude": 72.8697},
+    {"property_code": "PROP-005", "address_line1": "A-407, DLF The Crest, Sohna Road, Sector 49", "city": "Gurgaon", "locality": "Gurgaon Sector 49", "pincode": "122018", "property_type": "apartment", "carpet_area_sqft": 850.0, "built_up_area_sqft": 1010.0, "bedrooms": 2, "bathrooms": 2, "floor_number": 4, "total_floors": 12, "building_age_years": 10, "facing": "east", "latitude": 28.4089, "longitude": 77.0420},
+    {"property_code": "PROP-006", "address_line1": "No. 24, 3rd Main, Krishnarajapura, ITPL Main Road", "city": "Bengaluru", "locality": "Whitefield", "pincode": "560048", "property_type": "independent_house", "carpet_area_sqft": 2400.0, "built_up_area_sqft": 2800.0, "bedrooms": 4, "bathrooms": 4, "floor_number": None, "total_floors": None, "building_age_years": 15, "facing": "east", "latitude": 12.9780, "longitude": 77.7480},
+    {"property_code": "PROP-007", "address_line1": "1004, Brigade Cosmopolis, Sarjapur Road, 7th Block", "city": "Bengaluru", "locality": "Koramangala", "pincode": "560034", "property_type": "apartment", "carpet_area_sqft": 1400.0, "built_up_area_sqft": 1650.0, "bedrooms": 3, "bathrooms": 3, "floor_number": 10, "total_floors": 12, "building_age_years": 2, "facing": "north", "latitude": 12.9328, "longitude": 77.6227},
+    {"property_code": "PROP-008", "address_line1": "205, Ocean Pearl CHS, Versova Road", "city": "Mumbai", "locality": "Andheri East", "pincode": "400053", "property_type": "apartment", "carpet_area_sqft": 780.0, "built_up_area_sqft": 920.0, "bedrooms": 2, "bathrooms": 1, "floor_number": 2, "total_floors": 8, "building_age_years": 12, "facing": "west", "latitude": 19.1200, "longitude": 72.8380},
+    {"property_code": "PROP-009", "address_line1": "1502, Emaar Gurgaon Greens, Golf Course Extension Road, Sector 49", "city": "Gurgaon", "locality": "Gurgaon Sector 49", "pincode": "122018", "property_type": "apartment", "carpet_area_sqft": 2100.0, "built_up_area_sqft": 2450.0, "bedrooms": 4, "bathrooms": 4, "floor_number": 15, "total_floors": 22, "building_age_years": 1, "facing": "east", "latitude": 28.4150, "longitude": 77.0560},
+    {"property_code": "PROP-010", "address_line1": "Plot No. 7, Shivdurga Society, Kothrud Main Road", "city": "Pune", "locality": "Kothrud", "pincode": "411038", "property_type": "independent_house", "carpet_area_sqft": 1800.0, "built_up_area_sqft": 2100.0, "bedrooms": 3, "bathrooms": 3, "floor_number": None, "total_floors": None, "building_age_years": 20, "facing": "north", "latitude": 18.5074, "longitude": 73.8077},
 ]
 
 _MARKET_COMPS = [
@@ -138,13 +138,13 @@ async def _seed_master_data(session: AsyncSession) -> dict[str, Any]:
     await session.flush()
     counts["market_comps"] = len(_MARKET_COMPS)
 
-    # 5. Deals (5 across various stages for demo variety)
+    # 5. Deals — all start as fresh leads so the full pipeline can be demoed
     _deals = [
-        {"deal_code": "DEAL-001", "property_code": "PROP-001", "cp_code": "CP-001", "stage": "evaluation_pending", "sourcing_cp_commission_pct": 2.0, "lead_source": "channel_partner", "notes": "3BHK Whitefield — ready for evaluation"},
+        {"deal_code": "DEAL-001", "property_code": "PROP-001", "cp_code": "CP-001", "stage": "lead", "sourcing_cp_commission_pct": 2.0, "lead_source": "channel_partner", "notes": "3BHK Whitefield — fresh lead"},
         {"deal_code": "DEAL-002", "property_code": "PROP-002", "cp_code": "CP-003", "stage": "lead", "sourcing_cp_commission_pct": 2.0, "lead_source": "channel_partner", "notes": "2BHK Koramangala — fresh lead"},
-        {"deal_code": "DEAL-003", "property_code": "PROP-003", "cp_code": "CP-004", "stage": "evaluation_done", "sourcing_cp_commission_pct": 2.5, "lead_source": "channel_partner", "target_acquisition_price": 6_48_00_000.0, "notes": "4BHK Bandra — evaluation approved"},
-        {"deal_code": "DEAL-004", "property_code": "PROP-007", "cp_code": "CP-007", "stage": "listed", "sourcing_cp_commission_pct": 2.25, "lead_source": "channel_partner", "target_acquisition_price": 1_82_00_000.0, "notes": "3BHK Koramangala — listed with distribution CPs"},
-        {"deal_code": "DEAL-005", "property_code": "PROP-005", "cp_code": "CP-001", "stage": "lead", "sourcing_cp_commission_pct": 2.0, "lead_source": "channel_partner", "notes": "2BHK Gurgaon — awaiting basic info"},
+        {"deal_code": "DEAL-003", "property_code": "PROP-003", "cp_code": "CP-004", "stage": "lead", "sourcing_cp_commission_pct": 2.5, "lead_source": "channel_partner", "notes": "4BHK Bandra West — fresh lead"},
+        {"deal_code": "DEAL-004", "property_code": "PROP-007", "cp_code": "CP-007", "stage": "lead", "sourcing_cp_commission_pct": 2.25, "lead_source": "channel_partner", "notes": "3BHK Koramangala — fresh lead"},
+        {"deal_code": "DEAL-005", "property_code": "PROP-005", "cp_code": "CP-001", "stage": "lead", "sourcing_cp_commission_pct": 2.0, "lead_source": "channel_partner", "notes": "2BHK Gurgaon — fresh lead"},
     ]
     for d in _deals:
         prop_id = prop_map.get(d.pop("property_code"))
@@ -261,7 +261,7 @@ async def run_scenario(
         property_id=prop.id,
         sourcing_cp_id=cp.id,
         sourcing_cp_commission_pct=cp.commission_pct,
-        stage="evaluation_pending",
+        stage="lead",
         lead_source="channel_partner",
         notes=notes,
     )

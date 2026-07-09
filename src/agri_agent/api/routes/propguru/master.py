@@ -117,6 +117,22 @@ class UpdateChannelPartner(BaseModel):
     commission_pct: float | None = None
 
 
+class UpdateProperty(BaseModel):
+    address_line1: str | None = None
+    city: str | None = None
+    locality: str | None = None
+    pincode: str | None = None
+    property_type: str | None = None
+    carpet_area_sqft: float | None = None
+    built_up_area_sqft: float | None = None
+    bedrooms: int | None = None
+    bathrooms: int | None = None
+    floor_number: int | None = None
+    total_floors: int | None = None
+    building_age_years: int | None = None
+    facing: str | None = None
+
+
 class UpdateCriterion(BaseModel):
     weight: float | None = None
     description: str | None = None
@@ -263,6 +279,27 @@ async def get_property(
         prop = (await session.execute(select(PropguruProperty).where(PropguruProperty.property_code == property_id))).scalar_one_or_none()
     if not prop:
         raise HTTPException(status_code=404, detail=f"Property '{property_id}' not found")
+    return _property_out(prop)
+
+
+@router.patch("/properties/{property_id}")
+async def update_property(
+    property_id: str,
+    req: UpdateProperty,
+    session: AsyncSession = Depends(get_session),
+    _: str = Depends(verify_api_key),
+):
+    try:
+        uid = uuid.UUID(property_id)
+        prop = (await session.execute(select(PropguruProperty).where(PropguruProperty.id == uid))).scalar_one_or_none()
+    except ValueError:
+        prop = (await session.execute(select(PropguruProperty).where(PropguruProperty.property_code == property_id))).scalar_one_or_none()
+    if not prop:
+        raise HTTPException(status_code=404, detail=f"Property '{property_id}' not found")
+    for field, value in req.model_dump(exclude_none=True).items():
+        setattr(prop, field, value)
+    await session.commit()
+    await session.refresh(prop)
     return _property_out(prop)
 
 
