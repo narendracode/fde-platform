@@ -38,7 +38,7 @@ help:
 # ── Infrastructure ─────────────────────────────────────────────────────────────
 up:
 	cp -n .env.example .env 2>/dev/null || true
-	chmod +x scripts/init_postgres.sh scripts/start_api.sh scripts/start_worker.sh
+	chmod +x scripts/start_api.sh scripts/start_worker.sh
 	docker compose up --build
 	@echo ""
 	@echo "✓ Agent API    → http://localhost:8000/docs"

@@ -148,7 +148,7 @@ agent:
 
 ---
 
-### 2. Config Loader (`src/agri_agent/config/loader.py`)
+### 2. Config Loader (`src/fde_agent/config/loader.py`)
 
 **What it is:** A Python module that reads YAML files and validates them into typed
 Pydantic models (`AgentConfig`, `ModelConfig`, `ToolConfig`, etc.).
@@ -163,7 +163,7 @@ Pydantic models (`AgentConfig`, `ModelConfig`, `ToolConfig`, etc.).
 
 ---
 
-### 3. Pydantic Settings (`src/agri_agent/config/settings.py`)
+### 3. Pydantic Settings (`src/fde_agent/config/settings.py`)
 
 **What it is:** A `pydantic-settings` class that reads all runtime secrets and
 environment variables from `.env` or the container environment.
@@ -180,7 +180,7 @@ environment variables from `.env` or the container environment.
 
 ---
 
-### 4. LangGraph ReAct Agent (`src/agri_agent/agent/react_agent.py`)
+### 4. LangGraph ReAct Agent (`src/fde_agent/agent/react_agent.py`)
 
 **What it is:** The execution core. Takes a loaded `AgentConfig` and a user message,
 builds a LangGraph compiled graph, and runs it.
@@ -223,7 +223,7 @@ in the system prompt. This allows agents to branch behaviour (e.g. `human_in_the
 
 ---
 
-### 5. Tool Registry (`src/agri_agent/agent/tools/`)
+### 5. Tool Registry (`src/fde_agent/agent/tools/`)
 
 **What it is:** A dictionary mapping tool names (as used in YAML) to LangChain
 `@tool`-decorated Python functions.
@@ -272,13 +272,13 @@ in the system prompt. This allows agents to branch behaviour (e.g. `human_in_the
 See the HITL section for full details.
 
 **How new tools are added:**
-1. Write a `@tool`-decorated function in `src/agri_agent/agent/tools/`
+1. Write a `@tool`-decorated function in `src/fde_agent/agent/tools/`
 2. Register it in `_TOOL_REGISTRY` in `tools/__init__.py`
 3. Reference it by name in any agent's YAML config
 
 ---
 
-### 6. FastAPI Service (`src/agri_agent/api/`)
+### 6. FastAPI Service (`src/fde_agent/api/`)
 
 **What it is:** The HTTP interface to the platform.
 
@@ -360,7 +360,7 @@ decision came from a human via the approvals UI; no free-text field is exposed.
 
 ---
 
-### 7. Database Layer (`src/agri_agent/db/`)
+### 7. Database Layer (`src/fde_agent/db/`)
 
 **What it is:** SQLAlchemy ORM models backed by PostgreSQL.
 
@@ -543,7 +543,7 @@ The HITL system is the core platform feature that decouples agent decision-makin
 domain-specific review workflows. See `docs/generic-hitl-design.md` for the full design
 rationale and failure case analysis. This section documents the implementation.
 
-#### The `propose_action` Tool (`src/agri_agent/agent/tools/platform.py`)
+#### The `propose_action` Tool (`src/fde_agent/agent/tools/platform.py`)
 
 A single platform tool that replaces all domain-specific `recommend_*` tools. The agent
 calls it with everything the human needs to evaluate and execute the action:
@@ -702,7 +702,7 @@ POST /refine/close
 
 ---
 
-### 9. Task Queue — Celery + Redis (`src/agri_agent/queue/`)
+### 9. Task Queue — Celery + Redis (`src/fde_agent/queue/`)
 
 **What it is:** An async job queue that decouples the API from agent execution.
 
@@ -845,7 +845,7 @@ POST /api/v1/actions/{id}/approve
 ```
 docker-compose.yml defines 6 services:
 
-  postgres   ─ Single instance, one database: agri_agent
+  postgres   ─ Single instance, one database: fde_agent
                Tables: agents, agent_runs, agent_actions, orders, platform_settings
 
   redis      ─ Single instance, three logical DBs:
@@ -853,16 +853,16 @@ docker-compose.yml defines 6 services:
                db/1  Celery broker (task queue)
                db/2  Celery result backend
 
-  api        ─ FastAPI + Uvicorn (agri_agent.api.app:app)
+  api        ─ FastAPI + Uvicorn (fde_agent.api.app:app)
                reads: agents/configs/*.yaml (mounted read-only)
-               reads/writes: postgres/agri_agent
+               reads/writes: postgres/fde_agent
                publishes: redis/db/1 (Celery tasks)
                sends OTLP traces: jaeger:4318
                exposes: :8000
 
   worker     ─ Celery worker (4 processes)
                reads: agents/configs/*.yaml (mounted read-only)
-               reads/writes: postgres/agri_agent
+               reads/writes: postgres/fde_agent
                consumes: redis/db/1 (Celery tasks)
                writes: redis/db/2 (task results)
                sends OTLP traces: jaeger:4318

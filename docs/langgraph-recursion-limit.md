@@ -111,7 +111,7 @@ guardrails:
 ```
 
 ```python
-# src/agri_agent/agent/react_agent.py
+# src/fde_agent/agent/react_agent.py
 runnable_config = RunnableConfig(
     recursion_limit=config.guardrails.max_iterations,
     ...

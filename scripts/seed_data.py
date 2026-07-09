@@ -14,9 +14,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy import select
 
-from agri_agent.config.loader import list_agent_configs
-from agri_agent.config.settings import settings
-from agri_agent.db.models import Agent, Base
+from fde_agent.config.loader import list_agent_configs
+from fde_agent.config.settings import settings
+from fde_agent.db.models import Agent, Base
 
 
 async def seed():

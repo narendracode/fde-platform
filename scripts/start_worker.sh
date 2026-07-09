@@ -9,5 +9,5 @@ echo "--- [1/2] Waiting for PostgreSQL..."
 uv run python scripts/wait_for_db.py
 
 echo "--- [2/2] Starting Celery worker..."
-exec uv run celery -A agri_agent.queue.celery_app worker \
+exec uv run celery -A fde_agent.queue.celery_app worker \
     --loglevel=info --concurrency=4 -Q agent_runs,celery

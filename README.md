@@ -18,6 +18,6 @@ make seed              # seed demo agents
 ## Run an agent locally (no Docker)
 
 ```bash
-uv run agri-agent list
-uv run agri-agent run pharma-outreach "Run outreach for Mumbai"
+uv run fde-agent list
+uv run fde-agent run pharma-outreach "Run outreach for Mumbai"
 ```

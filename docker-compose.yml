@@ -2,19 +2,19 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-agri}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agripass}
-      POSTGRES_DB: ${POSTGRES_DB:-agri_agent}
+      POSTGRES_USER: ${POSTGRES_USER:-fde}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fdepass}
+      POSTGRES_DB: ${POSTGRES_DB:-fde_agent}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     healthcheck:
-      # Checks that the specific agri_agent database exists and accepts queries —
+      # Checks that the specific fde_agent database exists and accepts queries —
       # stronger than pg_isready which only checks the server socket.
       test:
         - "CMD-SHELL"
-        - "psql -U ${POSTGRES_USER:-agri} -d ${POSTGRES_DB:-agri_agent} -c 'SELECT 1' -q --no-align --tuples-only"
+        - "psql -U ${POSTGRES_USER:-fde} -d ${POSTGRES_DB:-fde_agent} -c 'SELECT 1' -q --no-align --tuples-only"
       interval: 5s
       timeout: 5s
       retries: 10
@@ -39,8 +39,8 @@ services:
       dockerfile: Dockerfile
       target: api
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-agri}:${POSTGRES_PASSWORD:-agripass}@postgres:5432/agri_agent
-      DATABASE_URL_SYNC: postgresql://${POSTGRES_USER:-agri}:${POSTGRES_PASSWORD:-agripass}@postgres:5432/agri_agent
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-fde}:${POSTGRES_PASSWORD:-fdepass}@postgres:5432/fde_agent
+      DATABASE_URL_SYNC: postgresql://${POSTGRES_USER:-fde}:${POSTGRES_PASSWORD:-fdepass}@postgres:5432/fde_agent
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
@@ -49,16 +49,16 @@ services:
       TAVILY_API_KEY: ${TAVILY_API_KEY:-}
       LANGCHAIN_TRACING_V2: ${LANGSMITH_TRACING:-false}
       LANGCHAIN_API_KEY: ${LANGSMITH_API_KEY:-}
-      LANGCHAIN_PROJECT: ${LANGSMITH_PROJECT:-agri-agent-api}
+      LANGCHAIN_PROJECT: ${LANGSMITH_PROJECT:-fde-agent-api}
       LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
       LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
-      LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-agri-agent-api}
+      LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-fde-agent-api}
       LANGSMITH_ENDPOINT: ${LANGSMITH_ENDPOINT:-https://api.smith.langchain.com}
       API_KEY: ${API_KEY:-dev-secret-key-change-in-prod}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       COMPANIES_TO_SHOW: ${COMPANIES_TO_SHOW:-sandhar,fundly}
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
-      OTEL_SERVICE_NAME: agri-agent-api
+      OTEL_SERVICE_NAME: fde-agent-api
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
       JAEGER_UI_URL: ${JAEGER_UI_URL:-http://localhost:16686}
     ports:
@@ -81,8 +81,8 @@ services:
       dockerfile: Dockerfile
       target: worker
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-agri}:${POSTGRES_PASSWORD:-agripass}@postgres:5432/agri_agent
-      DATABASE_URL_SYNC: postgresql://${POSTGRES_USER:-agri}:${POSTGRES_PASSWORD:-agripass}@postgres:5432/agri_agent
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-fde}:${POSTGRES_PASSWORD:-fdepass}@postgres:5432/fde_agent
+      DATABASE_URL_SYNC: postgresql://${POSTGRES_USER:-fde}:${POSTGRES_PASSWORD:-fdepass}@postgres:5432/fde_agent
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
@@ -91,15 +91,15 @@ services:
       TAVILY_API_KEY: ${TAVILY_API_KEY:-}
       LANGCHAIN_TRACING_V2: ${LANGSMITH_TRACING:-false}
       LANGCHAIN_API_KEY: ${LANGSMITH_API_KEY:-}
-      LANGCHAIN_PROJECT: ${LANGSMITH_PROJECT:-agri-agent-worker}
+      LANGCHAIN_PROJECT: ${LANGSMITH_PROJECT:-fde-agent-worker}
       LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
       LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
-      LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-agri-agent-worker}
+      LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-fde-agent-worker}
       LANGSMITH_ENDPOINT: ${LANGSMITH_ENDPOINT:-https://api.smith.langchain.com}
       API_KEY: ${API_KEY:-dev-secret-key-change-in-prod}
       API_BASE_URL: http://api:8000
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
-      OTEL_SERVICE_NAME: agri-agent-worker
+      OTEL_SERVICE_NAME: fde-agent-worker
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
       JAEGER_UI_URL: ${JAEGER_UI_URL:-http://localhost:16686}
     depends_on:

@@ -239,7 +239,7 @@ Controls the two feature flags:
 
 ## 7. Tools Design
 
-New file: `src/agri_agent/agent/tools/dispatch.py`
+New file: `src/fde_agent/agent/tools/dispatch.py`
 
 Five tools, all making HTTP calls to the Orders API:
 

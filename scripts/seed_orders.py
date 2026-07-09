@@ -22,8 +22,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from agri_agent.config.settings import settings
-from agri_agent.db.models import Order
+from fde_agent.config.settings import settings
+from fde_agent.db.models import Order
 
 engine = create_engine(settings.database_url_sync)
 

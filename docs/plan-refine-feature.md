@@ -380,7 +380,7 @@ agent:
 
 The `context_hub` field instructs the platform endpoint to pull the system prompt and domain context from LangSmith Hub before invoking the agent. `plan_header_id` is extracted from the AgentAction's `display_data` at session start and injected as `extra_context`.
 
-### 8.3 New tool file: `src/agri_agent/agent/tools/sandhar/plan_refiner.py`
+### 8.3 New tool file: `src/fde_agent/agent/tools/sandhar/plan_refiner.py`
 
 Six focused tools. All operate against a specific `plan_header_id` passed via agent context:
 
@@ -456,7 +456,7 @@ Server-side guard: `POST /sandhar/plan/generate` checks for an active `agent_ref
 
 ### 9.2 LangSmith — per-turn trace enrichment
 
-LangSmith tracing is already active (`LANGCHAIN_TRACING_V2`, `LANGCHAIN_API_KEY`, project `agri-agent-poc`). Refiner turns land in the **same project**, distinguished by tags.
+LangSmith tracing is already active (`LANGCHAIN_TRACING_V2`, `LANGCHAIN_API_KEY`, project `fde-agent-poc`). Refiner turns land in the **same project**, distinguished by tags.
 
 **Run-level tags written on every turn:**
 
@@ -472,7 +472,7 @@ LangSmith tracing is already active (`LANGCHAIN_TRACING_V2`, `LANGCHAIN_API_KEY`
 
 ### 9.3 LangSmith — Annotation Queues
 
-Sessions are auto-queued for annotation based on outcome signals. All queues filter on `feature = refine` within the shared `agri-agent-poc` project.
+Sessions are auto-queued for annotation based on outcome signals. All queues filter on `feature = refine` within the shared `fde-agent-poc` project.
 
 | Trigger | Queue | Annotator task |
 |---|---|---|
@@ -553,7 +553,7 @@ misallocation) → sandhar/planning-supervisor-system also updated
 
 ### 9.7 LangSmith setup (one-time)
 
-No new project. One-time tasks in the `agri-agent-poc` project:
+No new project. One-time tasks in the `fde-agent-poc` project:
 1. Define three annotation queues with filter `feature = refine` (§9.3)
 2. Create Hub artifacts `sandhar/plan-refiner-system` and `sandhar/planning-domain-context` with initial content tagged `:latest` / `v1.0`
 
@@ -579,13 +579,13 @@ Files modified:
 - `templates/approvals.html` — add canvas component + button
 - `templates/sandhar/plan.html` — add `action_id` usage + Refine button
 - `sandhar-planning-supervisor.yaml` — 3 new `feature_flags` lines
-- `src/agri_agent/api/routes/actions.py` — new refine sub-routes added
+- `src/fde_agent/api/routes/actions.py` — new refine sub-routes added
 - `GET /api/v1/sandhar/plan/versions` — add `action_id` to response (small addition)
 
 Files created:
 - `alembic/versions/XXXX_add_agent_refine_tables.py`
 - `agents/configs/sandhar-plan-refiner.yaml`
-- `src/agri_agent/agent/tools/sandhar/plan_refiner.py`
+- `src/fde_agent/agent/tools/sandhar/plan_refiner.py`
 - `templates/sandhar/_refine_preview_sandhar-plan.html`
 
 ---
@@ -607,12 +607,12 @@ The work is split into three phases ordered strictly by dependency. Each phase p
 | # | File | What |
 |---|---|---|
 | 1.1 | `alembic/versions/XXXX_add_agent_refine_tables.py` | Migration: create `agent_refine_session` and `agent_refine_message` tables (§5.1, §5.2) |
-| 1.2 | `src/agri_agent/db/models.py` | Add `AgentRefineSession` and `AgentRefineMessage` SQLAlchemy model classes |
-| 1.3 | `src/agri_agent/api/routes/actions.py` | Extend `_action_out()` to include `enable_refinement`, `refinement_agent`, `refinement_preview` from the action's agent `feature_flags` — same pattern as `track_resource_state` at line 166 |
-| 1.4 | `src/agri_agent/api/routes/actions.py` | Add `POST /{action_id}/refine/start` — creates session, validates action status, auto-registers + auto-activates the `refinement_agent` if not already active (§6.1) |
-| 1.5 | `src/agri_agent/api/routes/actions.py` | Add `GET /{action_id}/refine/messages` — returns message list for the active session (§6.3) |
-| 1.6 | `src/agri_agent/api/routes/actions.py` | Add `POST /{action_id}/refine/close` — sets session status to `closed`; no reversal detection yet (added in Phase 2) |
-| 1.7 | `src/agri_agent/api/routes/sandhar/planning.py` | Add `action_id` field to `GET /plan/versions` response — queries `agent_actions` for a `pending_review` action whose `display_data` references this plan header (§8.6) |
+| 1.2 | `src/fde_agent/db/models.py` | Add `AgentRefineSession` and `AgentRefineMessage` SQLAlchemy model classes |
+| 1.3 | `src/fde_agent/api/routes/actions.py` | Extend `_action_out()` to include `enable_refinement`, `refinement_agent`, `refinement_preview` from the action's agent `feature_flags` — same pattern as `track_resource_state` at line 166 |
+| 1.4 | `src/fde_agent/api/routes/actions.py` | Add `POST /{action_id}/refine/start` — creates session, validates action status, auto-registers + auto-activates the `refinement_agent` if not already active (§6.1) |
+| 1.5 | `src/fde_agent/api/routes/actions.py` | Add `GET /{action_id}/refine/messages` — returns message list for the active session (§6.3) |
+| 1.6 | `src/fde_agent/api/routes/actions.py` | Add `POST /{action_id}/refine/close` — sets session status to `closed`; no reversal detection yet (added in Phase 2) |
+| 1.7 | `src/fde_agent/api/routes/sandhar/planning.py` | Add `action_id` field to `GET /plan/versions` response — queries `agent_actions` for a `pending_review` action whose `display_data` references this plan header (§8.6) |
 
 #### Dependencies between tasks
 ```
@@ -647,10 +647,10 @@ The work is split into three phases ordered strictly by dependency. Each phase p
 |---|---|---|
 | 2.1 | LangSmith Hub (ops) | Create `sandhar/plan-refiner-system:latest` with initial system prompt content (§8.5); create `sandhar/planning-domain-context:v1.0` with Sandhar line/shift/WO domain knowledge |
 | 2.2 | `agents/configs/sandhar-plan-refiner.yaml` | New agent config — `type: react`, `companies: [sandhar]`, `context_hub` fields pointing to Hub artifacts, `inputs: plan_header_id` (§8.2) |
-| 2.3 | `src/agri_agent/agent/tools/sandhar/plan_refiner.py` | 6 refiner tools: `sandhar_refine_get_plan`, `sandhar_refine_update_qty`, `sandhar_refine_move_wo`, `sandhar_refine_add_wo`, `sandhar_refine_remove_wo`, `sandhar_refine_explain_constraint` (§8.3) |
-| 2.4 | `src/agri_agent/api/routes/actions.py` | Add `POST /{action_id}/refine/message` — SSE streaming endpoint: validate session, persist user message, pull prompts from Context Hub, extract `plan_header_id` from `AgentAction.display_data`, invoke `refinement_agent` with conversation history, stream tokens as SSE events (`token` / `tool_use` / `done`), persist assistant message row with `tool_calls`, `context_snapshot`, token counts, `langsmith_run_id`, write LangSmith tags (`feature=refine`, `refinement_agent`, `session_id`, `turn_index`) (§6.2) |
-| 2.5 | `src/agri_agent/api/routes/actions.py` | Update `POST /{action_id}/refine/close` — add reversal detection: diff consecutive `context_snapshot` JSON pairs, retroactively apply `outcome` feedback tag to LangSmith runs in the session (`approved` / `reversed` / `closed`) |
-| 2.6 | `src/agri_agent/api/routes/sandhar/planning.py` | Re-generate hard guard: `POST /plan/generate` queries for an `active` `agent_refine_session` on any `pending_review` action linked to the plan header → returns 422 with `"A refinement session is active"` detail (§8.7) |
+| 2.3 | `src/fde_agent/agent/tools/sandhar/plan_refiner.py` | 6 refiner tools: `sandhar_refine_get_plan`, `sandhar_refine_update_qty`, `sandhar_refine_move_wo`, `sandhar_refine_add_wo`, `sandhar_refine_remove_wo`, `sandhar_refine_explain_constraint` (§8.3) |
+| 2.4 | `src/fde_agent/api/routes/actions.py` | Add `POST /{action_id}/refine/message` — SSE streaming endpoint: validate session, persist user message, pull prompts from Context Hub, extract `plan_header_id` from `AgentAction.display_data`, invoke `refinement_agent` with conversation history, stream tokens as SSE events (`token` / `tool_use` / `done`), persist assistant message row with `tool_calls`, `context_snapshot`, token counts, `langsmith_run_id`, write LangSmith tags (`feature=refine`, `refinement_agent`, `session_id`, `turn_index`) (§6.2) |
+| 2.5 | `src/fde_agent/api/routes/actions.py` | Update `POST /{action_id}/refine/close` — add reversal detection: diff consecutive `context_snapshot` JSON pairs, retroactively apply `outcome` feedback tag to LangSmith runs in the session (`approved` / `reversed` / `closed`) |
+| 2.6 | `src/fde_agent/api/routes/sandhar/planning.py` | Re-generate hard guard: `POST /plan/generate` queries for an `active` `agent_refine_session` on any `pending_review` action linked to the plan header → returns 422 with `"A refinement session is active"` detail (§8.7) |
 
 #### Dependencies between tasks
 ```
@@ -668,7 +668,7 @@ The work is split into three phases ordered strictly by dependency. Each phase p
 - `POST /api/v1/actions/{id}/refine/message` with `{"content": "Move WO-0003 to Line 2"}` → SSE stream of token events → `event: done`
 - Corresponding `sandhar_plan_detail` row updated in DB (WO on new line)
 - `agent_refine_message` row persisted with non-null `tool_calls` and `context_snapshot`
-- LangSmith `agri-agent-poc` project shows trace with tags `feature=refine`, `refinement_agent=sandhar-plan-refiner`, `session_id=<uuid>`, `turn_index=1`
+- LangSmith `fde-agent-poc` project shows trace with tags `feature=refine`, `refinement_agent=sandhar-plan-refiner`, `session_id=<uuid>`, `turn_index=1`
 - Closing the session after an AI reversal sets `outcome=reversed` tag on the relevant LangSmith run
 - `POST /sandhar/plan/generate` with an active refine session → 422
 
@@ -684,7 +684,7 @@ The work is split into three phases ordered strictly by dependency. Each phase p
 
 | # | File | What |
 |---|---|---|
-| 3.1 | LangSmith (ops, pre-launch) | Define 3 annotation queues in `agri-agent-poc` project with filter `feature = refine`: `refine-complex` (> 3 turns), `refine-reversals` (reversed outcome), `refine-abandoned` (closed without approve) (§9.3) |
+| 3.1 | LangSmith (ops, pre-launch) | Define 3 annotation queues in `fde-agent-poc` project with filter `feature = refine`: `refine-complex` (> 3 turns), `refine-reversals` (reversed outcome), `refine-abandoned` (closed without approve) (§9.3) |
 | 3.2 | `templates/approvals.html` | CSS: `.btn-refine`, split-screen canvas layout, chat bubble styles (user/assistant), tool-use badge, locked state dimming |
 | 3.3 | `templates/approvals.html` | HTML: canvas panel structure — header bar (title + Approve + Close), preview pane (partial slot), message list, input row |
 | 3.4 | `templates/approvals.html` | JS — `openRefineCanvas(actionId)`: call `start`, store `session_id` + `refinement_preview`, slide panel in, render welcome message |
@@ -762,4 +762,4 @@ Phase 3 ── Canvas UI + Go-Live
 | 9 | Agent activation | **Auto-register + auto-activate** on first `start` call | §6.1 |
 | 10 | Hub artifact visibility | **Public** for POC phase | §9.5 |
 | 11 | Hub prompt pinning ownership | Pinned hash changes require **PR + eval pass** | §9.5 |
-| 12 | LangSmith project | **Same project** (`agri-agent-poc`), tags for separation | §9.2, §9.7 |
+| 12 | LangSmith project | **Same project** (`fde-agent-poc`), tags for separation | §9.2, §9.7 |

@@ -311,9 +311,9 @@ agents/configs/
 
 ## 6. Tool Catalogue
 
-Parallel to `src/agri_agent/agent/tools/sandhar/`, create:
+Parallel to `src/fde_agent/agent/tools/sandhar/`, create:
 ```
-src/agri_agent/agent/tools/propguru/
+src/fde_agent/agent/tools/propguru/
     __init__.py
     deals.py        # deal + property read tools
     evaluation.py   # scoring, pricing, proposal tools
@@ -352,7 +352,7 @@ src/agri_agent/agent/tools/propguru/
 All routes under `/api/v1/propguru/` prefix. Follows Sandhar route pattern.
 
 ```
-src/agri_agent/api/routes/propguru/
+src/fde_agent/api/routes/propguru/
     __init__.py
     pages.py          # HTML pages
     master.py         # CRUD for CPs, criteria, properties
@@ -402,7 +402,7 @@ src/agri_agent/api/routes/propguru/
 ## 8. UI Pages
 
 ```
-src/agri_agent/templates/propguru/
+src/fde_agent/templates/propguru/
     dashboard.html       # Pipeline overview: deal count by stage, recent evaluations
     deals.html           # Deal list with stage badges + "Start Evaluation" button
     evaluation.html      # Evaluation workspace: trigger + review + Refine with AI canvas
@@ -573,7 +573,7 @@ agents/configs/
   propguru-evaluator.yaml
   propguru-evaluation-refiner.yaml
 
-src/agri_agent/
+src/fde_agent/
   db/models.py                               ← append Propguru models
   agent/tools/propguru/
     __init__.py
@@ -688,15 +688,15 @@ Dependencies drive the order: database models must exist before tools can query 
 | Task | Files |
 |---|---|
 | DB migrations 016, 017, 018 | `alembic/versions/016_propguru_master.py` `017_propguru_deals.py` `018_propguru_evaluation.py` |
-| ORM models | Append all 7 Propguru models to `src/agri_agent/db/models.py` |
-| Simulation seed + reset endpoints | `src/agri_agent/api/routes/propguru/simulation.py` |
-| Master data API routes | `src/agri_agent/api/routes/propguru/master.py` (CPs, criteria, properties) |
-| Navigation — `base.html` Propguru block | `src/agri_agent/templates/base.html` |
+| ORM models | Append all 7 Propguru models to `src/fde_agent/db/models.py` |
+| Simulation seed + reset endpoints | `src/fde_agent/api/routes/propguru/simulation.py` |
+| Master data API routes | `src/fde_agent/api/routes/propguru/master.py` (CPs, criteria, properties) |
+| Navigation — `base.html` Propguru block | `src/fde_agent/templates/base.html` |
 | `settings.py` default update | `companies_to_show` default → `"sandhar,fundly,propguru"` |
-| Master Data UI page | `src/agri_agent/templates/propguru/master.html` |
-| Simulation UI page | `src/agri_agent/templates/propguru/simulation.html` |
-| Page routes for master + simulation | `src/agri_agent/api/routes/propguru/pages.py` |
-| Register propguru routers in app | `src/agri_agent/api/app.py` |
+| Master Data UI page | `src/fde_agent/templates/propguru/master.html` |
+| Simulation UI page | `src/fde_agent/templates/propguru/simulation.html` |
+| Page routes for master + simulation | `src/fde_agent/api/routes/propguru/pages.py` |
+| Register propguru routers in app | `src/fde_agent/api/app.py` |
 
 **Verification:** Run `POST /api/v1/propguru/simulation/seed` → visit `/propguru/master` → all 30 criteria, 8 channel partners, 10 properties are visible. Propguru section appears in sidebar when `COMPANIES_TO_SHOW` includes `propguru`.
 
@@ -709,17 +709,17 @@ Dependencies drive the order: database models must exist before tools can query 
 
 | Task | Files |
 |---|---|
-| Deal API routes (CRUD + stage transitions) | `src/agri_agent/api/routes/propguru/deals.py` |
-| Evaluation API routes (trigger, get report, scores, approve, reject) | `src/agri_agent/api/routes/propguru/evaluation.py` |
-| Agent tools — deals | `src/agri_agent/agent/tools/propguru/deals.py` (`propguru_get_deal`, `propguru_get_property_details`, `propguru_list_deals`) |
-| Agent tools — evaluation | `src/agri_agent/agent/tools/propguru/evaluation.py` (`propguru_get_criteria`, `propguru_get_market_comp`, `propguru_save_evaluation_score`, `propguru_calculate_price`, `propguru_propose_evaluation`, `propguru_create_evaluation_report`) |
-| Register propguru tools in tool registry | `src/agri_agent/agent/tools/__init__.py` |
+| Deal API routes (CRUD + stage transitions) | `src/fde_agent/api/routes/propguru/deals.py` |
+| Evaluation API routes (trigger, get report, scores, approve, reject) | `src/fde_agent/api/routes/propguru/evaluation.py` |
+| Agent tools — deals | `src/fde_agent/agent/tools/propguru/deals.py` (`propguru_get_deal`, `propguru_get_property_details`, `propguru_list_deals`) |
+| Agent tools — evaluation | `src/fde_agent/agent/tools/propguru/evaluation.py` (`propguru_get_criteria`, `propguru_get_market_comp`, `propguru_save_evaluation_score`, `propguru_calculate_price`, `propguru_propose_evaluation`, `propguru_create_evaluation_report`) |
+| Register propguru tools in tool registry | `src/fde_agent/agent/tools/__init__.py` |
 | Agent YAML configs — 5 agents | `propguru-evaluation-supervisor.yaml` `propguru-data-collector.yaml` `propguru-market-analyst.yaml` `propguru-scorer.yaml` `propguru-evaluator.yaml` |
-| Deals UI page | `src/agri_agent/templates/propguru/deals.html` |
-| Evaluation UI page (trigger + review + approve/reject, no canvas) | `src/agri_agent/templates/propguru/evaluation.html` |
-| Dashboard UI page | `src/agri_agent/templates/propguru/dashboard.html` |
-| Page routes for dashboard, deals, evaluation | `src/agri_agent/api/routes/propguru/pages.py` (extend from Phase 1) |
-| Scenarios s1-normal, s2-luxury, s3-missing-data, s5-market-drop | `src/agri_agent/api/routes/propguru/simulation.py` (extend from Phase 1) |
+| Deals UI page | `src/fde_agent/templates/propguru/deals.html` |
+| Evaluation UI page (trigger + review + approve/reject, no canvas) | `src/fde_agent/templates/propguru/evaluation.html` |
+| Dashboard UI page | `src/fde_agent/templates/propguru/dashboard.html` |
+| Page routes for dashboard, deals, evaluation | `src/fde_agent/api/routes/propguru/pages.py` (extend from Phase 1) |
+| Scenarios s1-normal, s2-luxury, s3-missing-data, s5-market-drop | `src/fde_agent/api/routes/propguru/simulation.py` (extend from Phase 1) |
 
 **Verification:** Trigger scenario s1-normal → seed a deal → click "Start Evaluation" → watch agent pipeline progress → evaluation report appears with 30 scores and a recommended price → click Approve → deal stage advances to `evaluation_done` → `target_acquisition_price` set on the deal.
 
@@ -732,14 +732,14 @@ Dependencies drive the order: database models must exist before tools can query 
 
 | Task | Files |
 |---|---|
-| Refinement tools | `src/agri_agent/agent/tools/propguru/evaluation_refiner.py` (`propguru_refine_get_evaluation`, `propguru_refine_update_score`, `propguru_refine_explain_score`, `propguru_refine_update_final_price`) |
-| Register refinement tools | `src/agri_agent/agent/tools/__init__.py` |
+| Refinement tools | `src/fde_agent/agent/tools/propguru/evaluation_refiner.py` (`propguru_refine_get_evaluation`, `propguru_refine_update_score`, `propguru_refine_explain_score`, `propguru_refine_update_final_price`) |
+| Register refinement tools | `src/fde_agent/agent/tools/__init__.py` |
 | Refinement agent YAML | `agents/configs/propguru-evaluation-refiner.yaml` |
 | Feature flags on evaluator YAML | `enable_refinement: true`, `refinement_agent: propguru-evaluation-refiner`, `refinement_preview: propguru-evaluation` |
-| Preview partial template | `src/agri_agent/templates/propguru/_refine_preview_propguru-evaluation.html` |
-| Preview server route | `src/agri_agent/api/routes/propguru/pages.py` — `GET /propguru/evaluation/{report_id}/refine-preview` |
-| Refinement canvas UI (SSE chat, deep-link, Back button) | `src/agri_agent/templates/propguru/evaluation.html` (extend from Phase 2) |
-| Scenario s4-analyst-override | `src/agri_agent/api/routes/propguru/simulation.py` |
+| Preview partial template | `src/fde_agent/templates/propguru/_refine_preview_propguru-evaluation.html` |
+| Preview server route | `src/fde_agent/api/routes/propguru/pages.py` — `GET /propguru/evaluation/{report_id}/refine-preview` |
+| Refinement canvas UI (SSE chat, deep-link, Back button) | `src/fde_agent/templates/propguru/evaluation.html` (extend from Phase 2) |
+| Scenario s4-analyst-override | `src/fde_agent/api/routes/propguru/simulation.py` |
 | Test suite | `tests/test_propguru_evaluation.py` `tests/test_propguru_simulation.py` |
 
 **Verification:** Open any `pending_review` evaluation → click "✦ Refine with AI" → canvas opens with score breakdown on the left and chat on the right → type "Metro station is only 0.6 km" → agent updates CRIT-011 score → recommended price updates in preview → click Approve → session saved, deal approved. URL contains `?refine=<action_id>`. Browser Back closes the canvas without ending the session.

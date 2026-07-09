@@ -141,7 +141,7 @@ work exactly as before. The Sandhar module is an additive extension.
 
 All Sandhar tables use the `sandhar_` prefix. This avoids any collision with existing
 Fundly tables and makes it obvious which tables belong to which customer. All tables
-live in the same PostgreSQL database (`agri_agent`) and the same schema (`public`).
+live in the same PostgreSQL database (`fde_agent`) and the same schema (`public`).
 
 ### 3.2 API Routes
 
@@ -150,7 +150,7 @@ authentication applies. No changes to `dependencies.py`.
 
 ### 3.3 Tools
 
-Sandhar tools live in a new sub-package: `src/agri_agent/agent/tools/sandhar/`.
+Sandhar tools live in a new sub-package: `src/fde_agent/agent/tools/sandhar/`.
 They are registered in `_TOOL_REGISTRY` in `tools/__init__.py` alongside existing
 tools — there is no separate registry. Tool names use a `sandhar_` prefix (e.g.
 `sandhar_get_attendance`, `sandhar_get_work_orders`) to avoid name collision.
@@ -171,7 +171,7 @@ independent templates.
 ## 4. New Database Tables
 
 Add an Alembic migration for each group below. All tables are in SQLAlchemy ORM
-(`src/agri_agent/db/models.py`). Migrations go in `alembic/versions/`.
+(`src/fde_agent/db/models.py`). Migrations go in `alembic/versions/`.
 
 ### 4.1 Master Data Tables
 
@@ -512,7 +512,7 @@ UNIQUE INDEX: (kpi_date, shift_code)
 ## 5. New API Endpoints
 
 All endpoints are under `/api/v1/sandhar/` and require the `X-API-Key` header.
-Implement in `src/agri_agent/api/routes/sandhar/` — one file per module.
+Implement in `src/fde_agent/api/routes/sandhar/` — one file per module.
 
 ### 5.1 Master Data (`sandhar/master.py`)
 
@@ -701,12 +701,12 @@ environment flag to prevent accidental use in non-POC deployments.
 
 ## 6. New Tool Registry
 
-Create `src/agri_agent/agent/tools/sandhar/` as a Python package with the following
+Create `src/fde_agent/agent/tools/sandhar/` as a Python package with the following
 files. Register all tools in `_TOOL_REGISTRY` in `tools/__init__.py`.
 
 **File layout:**
 ```
-src/agri_agent/agent/tools/
+src/fde_agent/agent/tools/
   ├── __init__.py             (add sandhar tools to _TOOL_REGISTRY)
   ├── sandhar/
   │   ├── __init__.py
@@ -1237,8 +1237,8 @@ agent:
 
 ## 8. New UI Pages
 
-New Jinja2 templates in `src/agri_agent/templates/sandhar/`. New routes registered
-in `src/agri_agent/api/routes/sandhar/pages.py`.
+New Jinja2 templates in `src/fde_agent/templates/sandhar/`. New routes registered
+in `src/fde_agent/api/routes/sandhar/pages.py`.
 
 ### 8.1 Page Inventory
 
@@ -1499,7 +1499,7 @@ be generated for the next shift.
 
 ### 11.1 Seed Data (`simulation_seed.py`)
 
-Create `src/agri_agent/api/routes/sandhar/simulation_seed.py`. This module contains
+Create `src/fde_agent/api/routes/sandhar/simulation_seed.py`. This module contains
 the canonical mock dataset used by `POST /api/v1/sandhar/simulation/seed`.
 
 **Mock dataset summary (matches PRD Section 13.1):**

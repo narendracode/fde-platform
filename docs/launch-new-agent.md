@@ -145,7 +145,7 @@ agent:
     log_tool_calls: true
 ```
 
-**Available tools** (check `src/agri_agent/agent/tools/__init__.py` for the full list):
+**Available tools** (check `src/fde_agent/agent/tools/__init__.py` for the full list):
 
 | Name | What it does |
 |---|---|
@@ -161,7 +161,7 @@ agent:
 
 Tools are API wrappers written by developers. The Launcher does not generate tool code.
 
-**Step 1** — Implement in `src/agri_agent/agent/tools/my_tool.py`:
+**Step 1** — Implement in `src/fde_agent/agent/tools/my_tool.py`:
 
 ```python
 from langchain_core.tools import tool
@@ -180,10 +180,10 @@ def lookup_order_status(order_id: str) -> str:
     return f"Order {order_id}: {data['status']} — {data['updated_at']}"
 ```
 
-**Step 2** — Register in `src/agri_agent/agent/tools/__init__.py`:
+**Step 2** — Register in `src/fde_agent/agent/tools/__init__.py`:
 
 ```python
-from agri_agent.agent.tools.my_tool import lookup_order_status
+from fde_agent.agent.tools.my_tool import lookup_order_status
 
 _TOOL_REGISTRY: dict[str, BaseTool] = {
     # existing tools ...
@@ -208,10 +208,10 @@ for all future agents.
 
 ```bash
 # List all available agent configs
-uv run agri-agent list
+uv run fde-agent list
 
 # Run the agent from the CLI
-uv run agri-agent run my-agent "Your question here"
+uv run fde-agent run my-agent "Your question here"
 ```
 
 > Requires `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY`) in `.env`.
@@ -313,7 +313,7 @@ curl -s "http://localhost:8000/api/v1/runs/$RUN_ID" \
 
 **Tool not available**
 → The tool name in YAML is not in the registry. Check `GET /api/v1/agents/tools` for the
-current list and add missing tools to `src/agri_agent/agent/tools/__init__.py`.
+current list and add missing tools to `src/fde_agent/agent/tools/__init__.py`.
 
 **Agent responds but doesn't use tools**
 → The system prompt must mention tools are available. LangGraph only calls tools when the

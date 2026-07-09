@@ -8,7 +8,7 @@ YAML manifest, and optionally opens a GitHub PR for CI/CD deployment.
 
 The launcher creates the YAML manifest ONLY.
 Tool implementations (API wrappers) are written by developers separately
-and registered in src/agri_agent/agent/tools/__init__.py.
+and registered in src/fde_agent/agent/tools/__init__.py.
 
 Usage:
     make launch-agent
@@ -152,7 +152,7 @@ def _confirm(question: str) -> bool:
 def _get_available_tools() -> list[dict]:
     """Return [{name, description}] from the live tool registry."""
     try:
-        from agri_agent.agent.tools import list_tools_with_descriptions
+        from fde_agent.agent.tools import list_tools_with_descriptions
         return list_tools_with_descriptions()
     except Exception as exc:
         _warn(f"Could not load tool registry: {exc}")
@@ -582,7 +582,7 @@ def main() -> None:
         epilog="""
 Note: The launcher creates the YAML manifest only.
       Tool implementations are written by developers and registered separately in
-      src/agri_agent/agent/tools/__init__.py before they can be used by agents.
+      src/fde_agent/agent/tools/__init__.py before they can be used by agents.
 
 Examples:
   uv run python scripts/launch_agent.py
@@ -655,8 +655,8 @@ Examples:
     4. Test:           {BOLD}POST  /api/v1/agents/{agent_name}/run{RESET}
 
   If new tools are needed, ask a developer to:
-    • Implement the tool in  src/agri_agent/agent/tools/
-    • Register it in         src/agri_agent/agent/tools/__init__.py
+    • Implement the tool in  src/fde_agent/agent/tools/
+    • Register it in         src/fde_agent/agent/tools/__init__.py
     • Then re-run the Launcher to create a new agent that uses those tools.
 """)
 

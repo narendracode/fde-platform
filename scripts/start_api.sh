@@ -15,5 +15,5 @@ echo "--- [3/4] Seeding agent configs..."
 uv run python scripts/seed_data.py
 
 echo "--- [4/4] Starting API server..."
-exec uv run uvicorn agri_agent.api.app:app \
+exec uv run uvicorn fde_agent.api.app:app \
     --host 0.0.0.0 --port 8000 --reload

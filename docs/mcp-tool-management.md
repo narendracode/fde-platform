@@ -18,7 +18,7 @@ answer, and what the concrete trade-offs are for this platform specifically.
 agents/configs/*.yaml
   └── tools: [{name: "get_pending_orders", enabled: true}, ...]
 
-src/agri_agent/agent/tools/
+src/fde_agent/agent/tools/
   ├── __init__.py       _TOOL_REGISTRY (flat dict, 11 tools)
   ├── calculator.py     (1 tool)
   ├── search.py         (1 tool — wraps Tavily)
