@@ -1,4 +1,4 @@
-# Fundly Agent Platform
+# Agent Platform
 
 A centralized AI agent platform built on LangGraph, FastAPI, PostgreSQL, and Redis.
 
