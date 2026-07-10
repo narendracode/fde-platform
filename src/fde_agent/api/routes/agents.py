@@ -174,6 +174,19 @@ async def deactivate_agent(
     return {"name": agent.name, "is_active": False}
 
 
+@router.get("/{agent_name}/diagram", response_class=PlainTextResponse)
+async def get_agent_diagram(
+    agent_name: str,
+    _: str = Depends(verify_api_key),
+):
+    """Return a Mermaid flowchart diagram of the agent's loop and tool structure."""
+    try:
+        cfg = load_agent_config(agent_name)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Agent config '{agent_name}' not found")
+    return PlainTextResponse(_generate_mermaid(cfg), media_type="text/plain")
+
+
 @router.get("/{agent_name}/yaml", response_class=PlainTextResponse)
 async def get_agent_yaml(
     agent_name: str,
@@ -317,6 +330,134 @@ async def run_agent_async(
     await session.commit()
 
     return {"run_id": str(run.id), "task_id": task.id, "status": "queued"}
+
+
+# ── Diagram generation ────────────────────────────────────────────────────────
+
+def _generate_mermaid(cfg: Any) -> str:
+    """Build a Mermaid flowchart string from an AgentConfig."""
+    lines: list[str] = [
+        "%%{init: {'theme': 'dark', 'themeVariables': {"
+        "'primaryColor': '#1e1b4b', 'primaryTextColor': '#e0e7ff', "
+        "'primaryBorderColor': '#4f46e5', 'lineColor': '#6366f1', "
+        "'secondaryColor': '#0f172a', 'tertiaryColor': '#1e293b', "
+        "'background': '#0f172a', 'mainBkg': '#1e1b4b', "
+        "'nodeBorder': '#4f46e5', 'clusterBkg': '#1e293b', "
+        "'titleColor': '#a5b4fc', 'edgeLabelBackground': '#1e293b', "
+        "'fontFamily': 'SF Mono, Fira Code, monospace'}}}%%",
+        "flowchart TD",
+    ]
+
+    # Start node + inputs
+    if cfg.inputs:
+        inp_label = " / ".join(cfg.inputs.keys())
+        lines += [
+            '    START(["▶ Start"])',
+            '    START --> INPUTS',
+            f'    INPUTS[/"Inputs\\n{inp_label}"/]',
+            '    INPUTS --> AGENT',
+        ]
+    else:
+        lines.append('    START(["▶ Start"]) --> AGENT')
+
+    if cfg.type == "supervisor":
+        lines += _mermaid_supervisor_nodes(cfg)
+    else:
+        lines += _mermaid_react_nodes(cfg)
+
+    return "\n".join(lines)
+
+
+def _mermaid_react_nodes(cfg: Any) -> list[str]:
+    tools = cfg.enabled_tools()
+    max_iter = cfg.guardrails.max_iterations
+    hitl = bool(cfg.feature_flags.get("human_in_the_loop"))
+    refinement = bool(cfg.feature_flags.get("enable_refinement"))
+    model = cfg.model.name
+    cost = cfg.model.max_cost_usd
+
+    lines: list[str] = [
+        f'    subgraph REACT_LOOP ["⚡ ReAct Loop — max {max_iter} iterations"]',
+        f'        AGENT["🧠 {cfg.name}\\n{model}  ·  max ${cost:.2f}"]',
+    ]
+
+    if tools:
+        for i, t in enumerate(tools):
+            lines.append(f'        TOOL_{i}["🔧 {t}"]')
+        tool_ids = " & ".join(f"TOOL_{i}" for i in range(len(tools)))
+        lines.append(f'        AGENT -->|"tool call"| {tool_ids}')
+        for i in range(len(tools)):
+            lines.append(f'        TOOL_{i} -->|"observation"| AGENT')
+
+    lines.append('    end')
+
+    if hitl:
+        lines += [
+            '    AGENT -->|"finish"| HITL{{"👤 HITL Review"}}',
+            '    HITL --> APPROVE(["✅ Approve"])',
+            '    HITL --> REJECT(["❌ Reject"])',
+        ]
+        if refinement:
+            refiner = cfg.feature_flags.get("refinement_agent", "refiner")
+            lines += [
+                f'    HITL --> REFINE(["🔄 Refine with AI\\n{refiner}"])',
+                '    REFINE -->|"feedback"| AGENT',
+            ]
+    else:
+        lines.append('    AGENT -->|"finish"| DONE(["✅ Done"])')
+
+    # Style classes
+    tool_class = ",".join(f"TOOL_{i}" for i in range(len(tools)))
+    lines += [
+        '    classDef agentNode fill:#312e81,stroke:#6366f1,color:#e0e7ff,font-weight:bold',
+        '    classDef toolNode fill:#1e293b,stroke:#475569,color:#94a3b8',
+        '    classDef hitlNode fill:#78350f,stroke:#f59e0b,color:#fef3c7',
+        '    classDef doneNode fill:#14532d,stroke:#22c55e,color:#dcfce7',
+        '    classDef rejectNode fill:#7f1d1d,stroke:#ef4444,color:#fee2e2',
+        '    classDef inputNode fill:#3b0764,stroke:#a855f7,color:#f3e8ff',
+        '    class AGENT agentNode',
+        '    class INPUTS inputNode',
+        '    class HITL hitlNode',
+        '    class APPROVE,DONE doneNode',
+        '    class REJECT rejectNode',
+    ]
+    if tool_class:
+        lines.append(f'    class {tool_class} toolNode')
+
+    return lines
+
+
+def _mermaid_supervisor_nodes(cfg: Any) -> list[str]:
+    max_rounds = cfg.routing.max_rounds
+    model = cfg.model.name
+    cost = cfg.model.max_cost_usd
+
+    lines: list[str] = [
+        f'    subgraph SUP_LOOP ["🎯 Supervisor Loop — max {max_rounds} rounds"]',
+        f'        AGENT{{"🎯 {cfg.name}\\n{model}  ·  max ${cost:.2f}\\nDecide next worker"}}',
+    ]
+
+    for i, worker in enumerate(cfg.workers):
+        lines.append(f'        W{i}["⚡ {worker.agent}"]')
+
+    for i in range(len(cfg.workers)):
+        lines.append(f'        AGENT -->|"step {i + 1}"| W{i}')
+        lines.append(f'        W{i} -->|"result"| AGENT')
+
+    lines += [
+        '    end',
+        '    AGENT -->|"all done"| DONE(["✅ Done"])',
+        '    classDef supNode fill:#312e81,stroke:#6366f1,color:#e0e7ff,font-weight:bold',
+        '    classDef workerNode fill:#1e3a5f,stroke:#3b82f6,color:#bfdbfe',
+        '    classDef doneNode fill:#14532d,stroke:#22c55e,color:#dcfce7',
+        '    class AGENT supNode',
+        '    class DONE doneNode',
+    ]
+    if cfg.workers:
+        worker_class = ",".join(f"W{i}" for i in range(len(cfg.workers)))
+        lines.append(f'    class {worker_class} workerNode')
+
+    return lines
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

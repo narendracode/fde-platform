@@ -74,6 +74,7 @@ async def agents_page(
             "model_name": cfg.model.name if cfg else "—",
             "max_cost_usd": cfg.model.max_cost_usd if cfg else 0,
             "feature_flags": cfg.feature_flags if cfg else {},
+            "agent_type": cfg.type if cfg else "react",
             "has_yaml": cfg is not None,
         })
 

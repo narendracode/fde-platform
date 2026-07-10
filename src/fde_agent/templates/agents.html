@@ -2,6 +2,7 @@
 {% block title %}Agents — AI Agent Platform{% endblock %}
 
 {% block head_extra %}
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
   <style>
     .main { max-width: 1200px; margin: 0 auto; padding: 28px 24px; }
 
@@ -119,8 +120,53 @@
 
     .btn-config { background: #f0f4ff; color: #3730a3; border: 1px solid #c7d2fe; }
     .btn-config:hover { background: #e0e7ff; }
+    .btn-diagram { background: #f5f3ff; color: #6d28d9; border: 1px solid #ddd6fe; }
+    .btn-diagram:hover { background: #ede9fe; }
 
     #yaml-modal .modal { max-width: 780px; }
+
+    /* Diagram — full-screen viewer */
+    .diagram-fs { position: fixed; inset: 0; z-index: 2000; background: #080d1a;
+                  display: none; flex-direction: column; }
+    .diagram-fs.open { display: flex; }
+    .diagram-fs-bar { height: 52px; flex-shrink: 0; background: #1e293b;
+                      border-bottom: 1px solid #334155;
+                      display: flex; align-items: center; gap: 0; padding: 0; }
+    .diagram-fs-close { display: flex; align-items: center; gap: 8px;
+                        padding: 0 18px; height: 100%; border: none; background: none;
+                        color: #94a3b8; font-size: 13px; font-weight: 600; cursor: pointer;
+                        border-right: 1px solid #334155; transition: color .15s, background .15s; }
+    .diagram-fs-close:hover { background: #0f172a; color: #e2e8f0; }
+    .diagram-fs-meta { display: flex; align-items: center; gap: 10px; padding: 0 18px; flex: 1; }
+    .diagram-fs-name { font-family: 'SF Mono', monospace; font-size: 13px; font-weight: 700;
+                       color: #e0e7ff; }
+    .diagram-type-badge { font-size: 10px; font-weight: 700; padding: 2px 9px; border-radius: 20px;
+                          background: #312e81; color: #a5b4fc; border: 1px solid #4f46e5;
+                          font-family: monospace; }
+    .diagram-type-badge.supervisor { background: #1c3a5e; color: #93c5fd; border-color: #3b82f6; }
+    .diagram-fs-controls { display: flex; align-items: center; gap: 6px; padding: 0 16px;
+                           border-left: 1px solid #334155; height: 100%; }
+    .diag-ctrl-btn { background: #0f172a; color: #94a3b8; border: 1px solid #334155;
+                     padding: 4px 11px; border-radius: 6px; font-size: 12px; font-weight: 700;
+                     cursor: pointer; transition: background .12s, color .12s; font-family: monospace; }
+    .diag-ctrl-btn:hover { background: #1e293b; color: #e2e8f0; border-color: #475569; }
+    .diag-ctrl-btn.active { background: #312e81; color: #a5b4fc; border-color: #4f46e5; }
+    .diag-zoom-label { font-size: 11px; font-weight: 600; color: #64748b;
+                       font-family: monospace; min-width: 38px; text-align: center; }
+    .diag-divider { width: 1px; height: 20px; background: #334155; margin: 0 4px; }
+    .diag-copy-btn { background: #1e293b; color: #94a3b8; border: 1px solid #334155;
+                     padding: 4px 12px; border-radius: 6px; font-size: 11px; font-weight: 600;
+                     cursor: pointer; transition: background .12s; }
+    .diag-copy-btn:hover { background: #334155; color: #e2e8f0; }
+    .diag-copy-btn.copied { background: #14532d; color: #86efac; border-color: #16a34a; }
+    .diagram-fs-canvas { flex: 1; overflow: auto; display: flex;
+                         align-items: flex-start; justify-content: center; padding: 48px 32px; }
+    .diagram-fs-inner { transform-origin: top center; transition: transform .15s ease; }
+    .diagram-loading { color: #334155; font-family: monospace; font-size: 14px;
+                       display: flex; align-items: center; gap: 10px; padding-top: 80px; }
+    .diagram-error { color: #f87171; font-family: monospace; font-size: 12px;
+                     padding: 24px; max-width: 640px; }
+    .diagram-fs-canvas svg { display: block; }
     #yaml-modal .modal-body { padding: 0; background: #0f172a; border-radius: 0 0 14px 14px; overflow: hidden; }
     .yaml-toolbar { display: flex; align-items: center; justify-content: space-between;
                     padding: 10px 16px; background: #1e293b; border-bottom: 1px solid #334155; }
@@ -217,6 +263,7 @@
         <a href="/runs?agent_name={{ a.name }}" class="btn btn-runs" style="text-decoration:none;">📋 Runs</a>
         {% if a.has_yaml %}
         <button class="btn btn-config" onclick="openYamlModal('{{ a.name }}')">⚙ Config</button>
+        <button class="btn btn-diagram" onclick="openDiagramModal('{{ a.name }}', '{{ a.agent_type }}')">◈ Diagram</button>
         <button class="btn btn-run" onclick="openRunModal('{{ a.name }}')"
                 {% if not a.is_active %}title="Activate agent first"{% endif %}>▶ Run</button>
         {% else %}
@@ -255,6 +302,31 @@
       <button class="btn btn-modal-cancel" onclick="closeRunModal()">Cancel</button>
       <button class="btn btn-modal-run" id="modal-run-btn">▶ Run Agent</button>
     </div>
+  </div>
+</div>
+
+<div class="diagram-fs" id="diagram-fs">
+  <div class="diagram-fs-bar">
+    <button class="diagram-fs-close" onclick="closeDiagramModal()">
+      <span style="font-size:16px;line-height:1;">←</span> Close
+    </button>
+    <div class="diagram-fs-meta">
+      <span class="diagram-fs-name" id="diagram-fs-name"></span>
+      <span class="diagram-type-badge" id="diagram-type-badge"></span>
+    </div>
+    <div class="diagram-fs-controls">
+      <button class="diag-ctrl-btn" onclick="diagramZoom(-0.15)" title="Zoom out">−</button>
+      <span class="diag-zoom-label" id="diag-zoom-label">100%</span>
+      <button class="diag-ctrl-btn" onclick="diagramZoom(+0.15)" title="Zoom in">+</button>
+      <button class="diag-ctrl-btn" id="diag-fit-btn" onclick="diagramZoomFit()" title="Fit to screen">Fit</button>
+      <div class="diag-divider"></div>
+      <button class="diag-copy-btn" id="diagram-copy-btn" onclick="copyDiagramSource()">Copy source</button>
+    </div>
+  </div>
+  <div class="diagram-fs-canvas" id="diagram-canvas">
+    <div class="diagram-loading" id="diagram-loading">⏳ Generating diagram…</div>
+    <div class="diagram-fs-inner" id="diagram-svg-wrap" style="display:none;"></div>
+    <div class="diagram-error" id="diagram-error" style="display:none;"></div>
   </div>
 </div>
 
@@ -396,7 +468,7 @@
 
   function closeRunModal() { document.getElementById('run-modal').classList.remove('open'); currentAgent = null; }
   function closeModalOnOverlay(e) { if (e.target === document.getElementById('run-modal')) closeRunModal(); }
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeRunModal(); closeYamlModal(); } });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeRunModal(); closeYamlModal(); closeDiagramModal(); } });
 
   // ── YAML Config Viewer ─────────────────────────────────────────────────────
   let _rawYaml = '';
@@ -480,6 +552,131 @@
     el.className = type;
     el.style.display = 'block';
     setTimeout(() => el.style.display = 'none', 3000);
+  }
+
+  // ── Diagram full-screen viewer ─────────────────────────────────────────────
+  let _diagramSource = '';
+  let _diagramScale  = 1.0;
+
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'dark',
+    themeVariables: {
+      background: '#080d1a',
+      primaryColor: '#1e1b4b',
+      primaryTextColor: '#e0e7ff',
+      primaryBorderColor: '#4f46e5',
+      lineColor: '#6366f1',
+      secondaryColor: '#0f172a',
+      tertiaryColor: '#1e293b',
+      clusterBkg: '#1e293b',
+      fontFamily: 'SF Mono, Fira Code, monospace',
+      fontSize: '14px',
+    },
+    flowchart: { curve: 'basis', padding: 24, nodeSpacing: 50, rankSpacing: 60 },
+    securityLevel: 'loose',
+  });
+
+  // Mouse-wheel zoom on the canvas
+  document.getElementById('diagram-canvas').addEventListener('wheel', e => {
+    e.preventDefault();
+    diagramZoom(e.deltaY < 0 ? 0.1 : -0.1);
+  }, { passive: false });
+
+  async function openDiagramModal(name, agentType) {
+    const type = agentType || 'react';
+    document.getElementById('diagram-fs-name').textContent = name;
+    const badge = document.getElementById('diagram-type-badge');
+    badge.textContent = type;
+    badge.className = 'diagram-type-badge' + (type === 'supervisor' ? ' supervisor' : '');
+    document.getElementById('diagram-loading').style.display = 'flex';
+    document.getElementById('diagram-svg-wrap').style.display = 'none';
+    document.getElementById('diagram-error').style.display = 'none';
+    document.getElementById('diagram-copy-btn').textContent = 'Copy source';
+    document.getElementById('diagram-copy-btn').className = 'diag-copy-btn';
+    _diagramSource = '';
+    _diagramScale  = 1.0;
+    _applyScale();
+    document.getElementById('diagram-fs').classList.add('open');
+    document.body.style.overflow = 'hidden';
+
+    try {
+      const r = await fetch(`/api/v1/agents/${name}/diagram`, { headers });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      _diagramSource = await r.text();
+      await _renderMermaid(_diagramSource);
+    } catch (e) {
+      document.getElementById('diagram-loading').style.display = 'none';
+      const errEl = document.getElementById('diagram-error');
+      errEl.innerHTML = `Failed to load diagram: ${e.message}`;
+      errEl.style.display = 'block';
+    }
+  }
+
+  async function _renderMermaid(source) {
+    const wrap    = document.getElementById('diagram-svg-wrap');
+    const loading = document.getElementById('diagram-loading');
+    try {
+      const { svg } = await mermaid.render('mermaid-' + Date.now(), source);
+      wrap.innerHTML = svg;
+      // Keep the SVG's natural width/height so its internal viewport isn't clipped.
+      // We zoom via CSS transform on the wrapper instead.
+      loading.style.display = 'none';
+      wrap.style.display = 'block';
+      requestAnimationFrame(() => diagramZoomFit());
+    } catch (err) {
+      loading.style.display = 'none';
+      const errEl = document.getElementById('diagram-error');
+      errEl.innerHTML = `<strong>Render error</strong><br><pre style="margin-top:8px;font-size:11px;white-space:pre-wrap;color:#f87171;">${err.message}</pre>`;
+      errEl.style.display = 'block';
+    }
+  }
+
+  function diagramZoom(delta) {
+    _diagramScale = Math.max(0.15, Math.min(5.0, _diagramScale + delta));
+    _applyScale();
+  }
+
+  function diagramZoomFit() {
+    const canvas = document.getElementById('diagram-canvas');
+    const wrap   = document.getElementById('diagram-svg-wrap');
+    const svg    = wrap.querySelector('svg');
+    if (!svg) return;
+    // Reset to 1:1 so getBoundingClientRect reports natural CSS-pixel dimensions.
+    _diagramScale = 1.0;
+    wrap.style.transform = 'scale(1)';
+    document.getElementById('diag-zoom-label').textContent = '100%';
+    const svgRect    = svg.getBoundingClientRect();
+    const canvasRect = canvas.getBoundingClientRect();
+    if (!svgRect.width || !svgRect.height) return;
+    const scaleW = (canvasRect.width  - 64) / svgRect.width;
+    const scaleH = (canvasRect.height - 64) / svgRect.height;
+    _diagramScale = Math.min(scaleW, scaleH, 1.5);
+    _applyScale();
+    canvas.scrollTop  = 0;
+    canvas.scrollLeft = 0;
+  }
+
+  function _applyScale() {
+    const wrap = document.getElementById('diagram-svg-wrap');
+    wrap.style.transform = `scale(${_diagramScale})`;
+    document.getElementById('diag-zoom-label').textContent = Math.round(_diagramScale * 100) + '%';
+  }
+
+  function closeDiagramModal() {
+    document.getElementById('diagram-fs').classList.remove('open');
+    document.body.style.overflow = '';
+    _diagramSource = '';
+  }
+
+  function copyDiagramSource() {
+    if (!_diagramSource) return;
+    navigator.clipboard.writeText(_diagramSource).then(() => {
+      const btn = document.getElementById('diagram-copy-btn');
+      btn.textContent = '✓ Copied';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'Copy source'; btn.classList.remove('copied'); }, 2000);
+    });
   }
 </script>
 {% endblock %}
