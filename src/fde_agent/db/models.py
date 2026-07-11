@@ -572,6 +572,9 @@ class PropguruEvaluationReport(Base):
     analyst_notes: Mapped[str | None] = mapped_column(Text)
     approved_by: Mapped[str | None] = mapped_column(String(100))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Verification loop (Phase 1)
+    verification_retries: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    grader_flags: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

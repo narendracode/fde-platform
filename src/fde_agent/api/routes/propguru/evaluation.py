@@ -46,6 +46,8 @@ def _report_out(r: PropguruEvaluationReport) -> dict[str, Any]:
         "analyst_notes": r.analyst_notes,
         "approved_by": r.approved_by,
         "approved_at": r.approved_at.isoformat() if r.approved_at else None,
+        "verification_retries": r.verification_retries,
+        "grader_flags": r.grader_flags or [],
         "created_at": r.created_at.isoformat(),
         "updated_at": r.updated_at.isoformat(),
     }
@@ -772,4 +774,41 @@ async def get_evaluation_action(
         "status": action.status,
         "title": action.title,
         "enable_refinement": True,
+    }
+
+
+# ── Verification loop (Phase 1) ───────────────────────────────────────────────
+
+class GraderResultRequest(BaseModel):
+    verification_retries: int
+    grader_flags: list[str] = []
+
+
+@router.post("/evaluations/{report_id}/grader-result")
+async def save_grader_result(
+    report_id: str,
+    req: GraderResultRequest,
+    session: AsyncSession = Depends(get_session),
+    _: str = Depends(verify_api_key),
+):
+    """Persist code-grader verdict to the evaluation report (called by the verifier node)."""
+    try:
+        rid = uuid.UUID(report_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid report_id")
+
+    report = (await session.execute(
+        select(PropguruEvaluationReport).where(PropguruEvaluationReport.id == rid)
+    )).scalar_one_or_none()
+    if not report:
+        raise HTTPException(status_code=404, detail=f"Report '{report_id}' not found")
+
+    report.verification_retries = req.verification_retries
+    report.grader_flags = req.grader_flags or []
+    await session.commit()
+    await session.refresh(report)
+    return {
+        "report_id": report_id,
+        "verification_retries": report.verification_retries,
+        "grader_flags": report.grader_flags,
     }

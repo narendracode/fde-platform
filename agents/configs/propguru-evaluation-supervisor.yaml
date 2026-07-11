@@ -54,7 +54,12 @@ agent:
 
     Pass deal_id and report_id through all workers.
     The report_id is created by propguru-data-collector and must be passed to all others.
-    Do not call any worker twice. Call finish only after propguru-evaluator completes.
+
+    NOTE: A code grader automatically verifies propguru-evaluator output after each run.
+    If the grader rejects the output (you will see a [Verifier] FAIL message followed by
+    [Code Grader Feedback]), propguru-evaluator will be re-run automatically — you do NOT
+    need to call it again yourself. Call finish only after you see [Verifier] PASS or
+    [Verifier] GRADER_FLAGGED (escalation).
 
   inputs:
     deal_id:
@@ -82,3 +87,7 @@ agent:
     enable_refinement: true
     refinement_agent: "propguru-evaluation-refiner"
     refinement_preview: "propguru-evaluation"
+    # Verification loop (Phase 1 — code grader on evaluator output)
+    verification_loop: true
+    verification_after_worker: "propguru-evaluator"
+    verification_max_retries: 2

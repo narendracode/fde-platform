@@ -57,6 +57,10 @@ class SupervisorState(TypedDict):
     next_context: dict      # structured key-value context injected as [Runtime context] for the next worker
     rounds: int             # incremented each time the supervisor node runs
     worker_stats: list      # per-invocation token/cost tracking for each worker call
+    # Verification loop (Phase 1) ─────────────────────────────────────────────
+    verification_retries: int   # number of times the code grader has rejected output
+    grader_flags: list          # issue codes from the most recent grader run
+    grader_verdict: str         # "pass" | "fail" | "escalate" — drives verifier routing
 
 
 # ── Supervisor routing decision (structured output) ───────────────────────────
@@ -250,6 +254,129 @@ def _route_from_supervisor(state: SupervisorState) -> str:
     return state.get("next_worker") or END
 
 
+# ── Verification loop (Phase 1) ───────────────────────────────────────────────
+
+def _make_verifier_router(verification_worker: str):
+    """Return a conditional-edge function that routes from the verifier node."""
+    def _route(state: SupervisorState) -> str:
+        verdict = state.get("grader_verdict", "pass")
+        if verdict == "fail":
+            return verification_worker   # retry the evaluator
+        return "supervisor"              # pass or escalate → let supervisor finish
+    return _route
+
+
+def _make_verifier_node(verification_worker: str, max_retries: int):
+    """Return a LangGraph node function that runs the Propguru code grader.
+
+    On PASS  → routes back to supervisor (which will call finish).
+    On FAIL  → dismisses stale proposal, injects feedback, retries evaluator.
+    On ESCALATE (max retries exceeded) → persists flags, routes to supervisor
+              so the HITL proposal reaches the analyst with a grader-flagged note.
+    """
+    from fde_agent.agent.propguru_verifier import (
+        run_propguru_code_grader,
+        save_grader_result,
+        dismiss_stale_action,
+        reset_report_to_draft,
+        extract_report_id,
+        extract_action_id,
+    )
+    from fde_agent.config.settings import settings as _settings
+
+    def verifier_node(state: SupervisorState) -> dict[str, Any]:
+        retries = state.get("verification_retries", 0)
+        messages = state.get("messages", [])
+
+        report_id = extract_report_id(messages)
+        if not report_id:
+            _log.warning("verifier: could not extract report_id from messages — passing through")
+            return {
+                "grader_verdict": "pass",
+                "grader_flags": [],
+                "messages": [AIMessage(
+                    content="[Verifier] report_id not found in message history — skipping checks.",
+                    name="verifier",
+                )],
+            }
+
+        _log.info("verifier: grading report %s (attempt %d/%d)", report_id, retries + 1, max_retries + 1)
+        result = run_propguru_code_grader(report_id, _settings.api_base_url, _settings.api_key)
+
+        # Always persist grader metadata to the report for audit trail
+        save_grader_result(report_id, retries + (0 if result.passed else 1),
+                           result.flags, _settings.api_base_url, _settings.api_key)
+
+        # ── PASS ──────────────────────────────────────────────────────────────
+        if result.passed:
+            _log.info("verifier: PASS — report %s cleared all checks", report_id)
+            return {
+                "grader_verdict": "pass",
+                "grader_flags": [],
+                "messages": [AIMessage(
+                    content=f"[Verifier] PASS — report {report_id} cleared all code-grader checks.",
+                    name="verifier",
+                )],
+            }
+
+        flag_str = ", ".join(result.flags)
+
+        # ── MAX RETRIES EXCEEDED → ESCALATE ───────────────────────────────────
+        if retries >= max_retries:
+            _log.warning(
+                "verifier: ESCALATE — report %s failed grader %d time(s): %s",
+                report_id, retries + 1, flag_str,
+            )
+            return {
+                "grader_verdict": "escalate",
+                "grader_flags": result.flags,
+                "messages": [AIMessage(
+                    content=(
+                        f"[Verifier] GRADER_FLAGGED — report {report_id} did not pass quality checks "
+                        f"after {retries + 1} attempt(s). Flags: {flag_str}. "
+                        f"Escalating existing proposal to HITL with grader-flag marker."
+                    ),
+                    name="verifier",
+                )],
+            }
+
+        # ── FAIL → inject feedback and retry evaluator ─────────────────────────
+        _log.info(
+            "verifier: FAIL (retry %d/%d) — report %s: %s",
+            retries + 1, max_retries, report_id, flag_str,
+        )
+
+        # Dismiss the stale HITL proposal so the evaluator can create a fresh one
+        action_id = extract_action_id(messages)
+        if action_id:
+            dismiss_stale_action(
+                action_id,
+                f"Grader rejected (attempt {retries + 1}/{max_retries + 1}): {flag_str}",
+                _settings.api_base_url,
+                _settings.api_key,
+            )
+        # Reset report status to draft so propguru_propose_evaluation can re-propose
+        reset_report_to_draft(report_id, _settings.api_base_url, _settings.api_key)
+
+        return {
+            "grader_verdict": "fail",
+            "grader_flags": result.flags,
+            "verification_retries": retries + 1,
+            "messages": [
+                AIMessage(
+                    content=(
+                        f"[Verifier] FAIL (attempt {retries + 1}/{max_retries + 1}) — "
+                        f"report {report_id} did not pass checks: {flag_str}."
+                    ),
+                    name="verifier",
+                ),
+                HumanMessage(content=result.feedback),
+            ],
+        }
+
+    return verifier_node
+
+
 # ── Public builder ────────────────────────────────────────────────────────────
 
 def build_supervisor_graph(config: AgentConfig):
@@ -293,6 +420,18 @@ def build_supervisor_graph(config: AgentConfig):
             _worker_node_fn(worker_info["agent"], worker_key, worker_info["config"]),
         )
 
+    # Verification loop config — optional feature driven by feature_flags in the YAML
+    verification_enabled = bool(config.feature_flags.get("verification_loop", False))
+    verification_worker = config.feature_flags.get("verification_after_worker", "")
+    max_retries = int(config.feature_flags.get("verification_max_retries", 2))
+
+    if verification_enabled and verification_worker and verification_worker in workers:
+        _log.info(
+            "supervisor '%s': verification loop enabled after '%s' (max_retries=%d)",
+            config.name, verification_worker, max_retries,
+        )
+        graph.add_node("__verifier__", _make_verifier_node(verification_worker, max_retries))
+
     # Edges
     graph.add_edge(START, "supervisor")
 
@@ -303,9 +442,20 @@ def build_supervisor_graph(config: AgentConfig):
         {worker_key: worker_key for worker_key in workers} | {END: END},
     )
 
-    # Every worker returns unconditionally to supervisor
+    # Worker → next node: verification target goes to verifier; others go back to supervisor
     for worker_key in workers:
-        graph.add_edge(worker_key, "supervisor")
+        if verification_enabled and worker_key == verification_worker and verification_worker in workers:
+            graph.add_edge(worker_key, "__verifier__")
+        else:
+            graph.add_edge(worker_key, "supervisor")
+
+    # Verifier conditional edge: fail → retry evaluator; pass/escalate → supervisor
+    if verification_enabled and verification_worker and verification_worker in workers:
+        graph.add_conditional_edges(
+            "__verifier__",
+            _make_verifier_router(verification_worker),
+            {"supervisor": "supervisor", verification_worker: verification_worker},
+        )
 
     return graph.compile()
 
@@ -345,6 +495,9 @@ def run_supervisor(
         "next_context": {},
         "rounds": 0,
         "worker_stats": [],
+        "verification_retries": 0,
+        "grader_flags": [],
+        "grader_verdict": "",
     }
 
     # Assign a stable run_id so LangSmith can aggregate the full trace cost
@@ -442,4 +595,7 @@ def run_supervisor(
         "blocked": False,
         "rounds": result.get("rounds", 0),
         "sub_agents": worker_stats,
+        "verification_retries": result.get("verification_retries", 0),
+        "grader_flags": result.get("grader_flags", []),
+        "grader_verdict": result.get("grader_verdict", ""),
     }

@@ -73,6 +73,7 @@ services:
       - ./src:/app/src:ro
       - ./scripts:/app/scripts:ro
       - ./alembic:/app/alembic:ro   # live migrations without rebuild
+      - ./tests:/app/tests:ro
     restart: unless-stopped
 
   worker:
@@ -112,6 +113,7 @@ services:
       - ./src:/app/src:ro
       - ./scripts:/app/scripts:ro
       - ./alembic:/app/alembic:ro
+      - ./tests:/app/tests:ro
     restart: unless-stopped
 
   jaeger:
