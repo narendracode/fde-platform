@@ -1,11 +1,15 @@
-"""Propguru Phase 1 — Code Grader on Evaluator Output.
+"""Propguru quality gates on evaluator output.
 
-Pure-Python, zero-LLM quality gate.  Called by the supervisor verifier node
-after propguru-evaluator completes.  Makes up to 3 internal API calls, runs
-deterministic checks, and returns a structured verdict + feedback string.
+Phase 1 — Code Grader (zero LLM cost):
+  Deterministic checks on coverage, boolean validity, price sanity, confidence,
+  and category zero-out.
 
-Checks
-------
+Phase 2 — Model Grader (LLM-as-judge):
+  Grades the evaluator's reasoning text against a 4-criterion rubric using
+  Claude Haiku.  Runs only after the code grader passes.
+
+Checks (Phase 1)
+----------------
 1. Coverage      — at least MIN_COVERAGE of 30 criteria must be scored
 2. Boolean       — boolean criteria must be exactly 0.0 or 1.0
 3. Price sanity  — recommended_price within ±MAX_PRICE_DEVIATION of base_price
@@ -13,10 +17,20 @@ Checks
                    score_factor ≥ HIGH_CONF_MIN_FACTOR
 5. Category zero — no full category (amenity/location/property/society) may have
                    every score missing or at zero
+
+Rubric (Phase 2)                        Weight
+-----------------------------------------------
+reasoning_coherence                      0.35
+price_justification                      0.35
+market_alignment                         0.20
+analyst_guidance                         0.10
+Pass threshold: weighted average ≥ 6.0 / 10
 """
 from __future__ import annotations
 
+import json
 import logging
+import os
 import re
 from dataclasses import dataclass, field
 from typing import Any
@@ -32,14 +46,34 @@ MAX_PRICE_DEVIATION = 0.50      # ±50% from base_price
 HIGH_CONF_MIN_COVERAGE = 27     # 90% of 30
 HIGH_CONF_MIN_FACTOR = 0.60     # minimum score_factor for "high" confidence
 
+# Phase 2 — Model Grader
+MODEL_GRADER_PASS_THRESHOLD = 6.0   # weighted average out of 10.0
+MODEL_GRADER_WEIGHTS: dict[str, float] = {
+    "reasoning_coherence": 0.35,
+    "price_justification": 0.35,
+    "market_alignment": 0.20,
+    "analyst_guidance": 0.10,
+}
+_DEFAULT_MODEL_GRADER_MODEL = "claude-haiku-4-5-20251001"
 
-# ── Result type ───────────────────────────────────────────────────────────────
+
+# ── Result types ──────────────────────────────────────────────────────────────
 
 @dataclass
 class GraderResult:
     passed: bool
     flags: list[str] = field(default_factory=list)
     feedback: str = ""          # injected into evaluator's conversation on FAIL
+
+
+@dataclass
+class ModelGraderResult:
+    passed: bool
+    overall_score: float                    # weighted average 0.0–10.0
+    criteria_scores: dict[str, float]       # per-criterion score 0–10
+    criteria_rationales: dict[str, str]     # LLM explanation per criterion
+    feedback: str                           # narrative feedback for evaluator on FAIL
+    flags: list[str] = field(default_factory=list)
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
@@ -286,14 +320,23 @@ def run_propguru_code_grader(
 
 
 def save_grader_result(
-    report_id: str, retries: int, flags: list[str], base_url: str, api_key: str
+    report_id: str,
+    retries: int,
+    flags: list[str],
+    base_url: str,
+    api_key: str,
+    model_grader_retries: int = 0,
 ) -> None:
     """Persist grader result to the evaluation report (best-effort, non-blocking)."""
     try:
         with _http(base_url, api_key) as c:
             c.post(
                 f"/api/v1/propguru/evaluations/{report_id}/grader-result",
-                json={"verification_retries": retries, "grader_flags": flags},
+                json={
+                    "verification_retries": retries,
+                    "grader_flags": flags,
+                    "model_grader_retries": model_grader_retries,
+                },
             )
     except Exception as exc:
         _log.warning("propguru_verifier: could not persist grader result: %s", exc)
@@ -318,6 +361,264 @@ def reset_report_to_draft(report_id: str, base_url: str, api_key: str) -> None:
             )
     except Exception as exc:
         _log.warning("propguru_verifier: could not reset report status: %s", exc)
+
+
+# ── Phase 2: Model Grader ─────────────────────────────────────────────────────
+
+def _fetch_model_grader_context(
+    report_id: str,
+    action_id: str | None,
+    base_url: str,
+    api_key: str,
+) -> dict | None:
+    """Fetch the evaluation context and reasoning needed for the model grader.
+
+    Returns a dict with keys: report, category_summary, reasoning.
+    Returns None on any infrastructure error (model grader will pass through).
+    """
+    try:
+        with _http(base_url, api_key) as c:
+            r_rep = c.get(f"/api/v1/propguru/evaluations/{report_id}")
+            r_rep.raise_for_status()
+            report = r_rep.json()
+
+            r_scores = c.get(f"/api/v1/propguru/evaluations/{report_id}/scores")
+            r_scores.raise_for_status()
+            scores_payload = r_scores.json()
+
+            reasoning = ""
+            if action_id:
+                r_act = c.get(f"/api/v1/actions/{action_id}")
+                if r_act.status_code == 200:
+                    reasoning = r_act.json().get("reasoning") or ""
+
+        # Build per-category score average (normalized 0–1) for prompt context
+        groups = scores_payload.get("groups", {})
+        category_summary: dict[str, str] = {}
+        for cat, scores in groups.items():
+            scored = [float(s["score"]) for s in scores if s.get("score") is not None]
+            if scored:
+                avg = sum(scored) / len(scored)
+                category_summary[cat] = f"{avg:.2f} avg over {len(scored)} criteria"
+            else:
+                category_summary[cat] = "no scores"
+
+        return {"report": report, "category_summary": category_summary, "reasoning": reasoning}
+    except Exception as exc:
+        _log.warning("model_grader: could not fetch context for %s: %s", report_id, exc)
+        return None
+
+
+def _build_model_grader_prompt(context: dict) -> str:
+    report = context["report"]
+    cat_summary = context["category_summary"]
+    reasoning = context.get("reasoning", "")
+
+    base_price = report.get("base_price") or 0
+    rec_price = report.get("recommended_price") or 0
+    premium_pct = report.get("price_premium_pct") or 0
+    score_factor = report.get("score_factor") or 0
+    confidence = report.get("confidence") or "unknown"
+
+    cat_lines = "\n".join(f"  {cat}: {summary}" for cat, summary in cat_summary.items())
+
+    return f"""You are a real-estate evaluation quality reviewer. Your task is to grade the reasoning
+provided by an AI evaluator for a property deal evaluation.
+
+--- EVALUATION SUMMARY ---
+Score factor (overall quality): {score_factor:.2f} / 1.0
+Confidence: {confidence}
+Base market price: ₹{base_price:,.0f}
+Recommended price: ₹{rec_price:,.0f}  ({premium_pct:+.1f}% premium/discount)
+Category score averages (0 = absent/false, 5 = max for scale_1_5):
+{cat_lines}
+
+--- EVALUATOR REASONING TEXT ---
+{reasoning or "(no reasoning provided)"}
+
+--- YOUR TASK ---
+Grade the reasoning text on exactly these 4 criteria, each scored 0–10:
+
+1. reasoning_coherence (weight 0.35)
+   Does the reasoning chain logically from property data → category analysis → final evaluation?
+   Is there a clear narrative thread rather than isolated facts?
+
+2. price_justification (weight 0.35)
+   Does the reasoning explain WHY the recommended price is appropriate relative to the base price?
+   Does it reference score_factor, market conditions, or specific property strengths/weaknesses?
+
+3. market_alignment (weight 0.20)
+   Does the reasoning mention market comparables, location factors, or demand/supply dynamics
+   that support the pricing decision?
+
+4. analyst_guidance (weight 0.10)
+   Does the reasoning give the HITL analyst actionable context — what to verify, what risks
+   to look out for, or what would change the recommendation?
+
+Score 0–10 for each criterion (0 = completely missing, 5 = partial, 10 = excellent).
+
+Respond with ONLY valid JSON in exactly this format — no prose, no markdown:
+{{
+  "reasoning_coherence": {{"score": <int 0-10>, "rationale": "<1-2 sentences>"}},
+  "price_justification": {{"score": <int 0-10>, "rationale": "<1-2 sentences>"}},
+  "market_alignment": {{"score": <int 0-10>, "rationale": "<1-2 sentences>"}},
+  "analyst_guidance": {{"score": <int 0-10>, "rationale": "<1-2 sentences>"}}
+}}"""
+
+
+def _call_model_grader(context: dict, model_name: str) -> dict:
+    """Call the LLM and return the raw parsed JSON dict from the grader prompt.
+
+    Raises on API error or JSON parse failure — caller handles these cases.
+    """
+    import anthropic  # lazy import — only needed when model grader is enabled
+
+    client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    prompt = _build_model_grader_prompt(context)
+    response = client.messages.create(
+        model=model_name,
+        max_tokens=512,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    raw = response.content[0].text.strip()
+    # Strip markdown code fences if the model wraps the JSON
+    if raw.startswith("```"):
+        raw = re.sub(r"^```[a-z]*\n?", "", raw)
+        raw = re.sub(r"\n?```$", "", raw)
+    return json.loads(raw)
+
+
+def _build_model_grader_feedback(
+    criteria_scores: dict[str, float],
+    criteria_rationales: dict[str, str],
+    overall_score: float,
+) -> str:
+    lines = [
+        "[Model Grader Feedback]",
+        f"Your evaluation reasoning scored {overall_score:.1f}/10 (threshold: {MODEL_GRADER_PASS_THRESHOLD:.1f}).",
+        "The reasoning did not meet the minimum quality bar. Please revise and re-submit.\n",
+        "Per-criterion feedback:",
+    ]
+    for criterion, weight in MODEL_GRADER_WEIGHTS.items():
+        score = criteria_scores.get(criterion, 0.0)
+        rationale = criteria_rationales.get(criterion, "")
+        label = criterion.replace("_", " ").title()
+        lines.append(f"  • {label} (weight {weight:.0%}): {score:.0f}/10 — {rationale}")
+
+    lines.extend([
+        "",
+        "Required actions:",
+        "  1. Expand your reasoning to explain the price recommendation relative to "
+           "base_price and market conditions.",
+        "  2. Reference specific category scores or property features that drive your conclusion.",
+        "  3. Include actionable guidance for the analyst reviewing this proposal.",
+        "",
+        "After revising your reasoning, call propguru_propose_evaluation again with the "
+        "improved reasoning text.",
+    ])
+    return "\n".join(lines)
+
+
+def run_propguru_model_grader(
+    report_id: str,
+    action_id: str | None,
+    base_url: str,
+    api_key: str,
+    model_name: str = _DEFAULT_MODEL_GRADER_MODEL,
+) -> ModelGraderResult:
+    """Run the LLM-as-judge model grader on the evaluator's reasoning text.
+
+    Called only after the code grader passes.  Uses Claude Haiku to score the
+    reasoning on 4 rubric criteria.  Weighted average ≥ MODEL_GRADER_PASS_THRESHOLD
+    required to pass.
+
+    On infrastructure errors (API unavailable, JSON parse failure) the grader
+    returns passed=True with an infra-error flag to avoid blocking the pipeline.
+    """
+    context = _fetch_model_grader_context(report_id, action_id, base_url, api_key)
+    if context is None:
+        return ModelGraderResult(
+            passed=True,
+            overall_score=0.0,
+            criteria_scores={},
+            criteria_rationales={},
+            feedback="",
+            flags=["MODEL_GRADER_INFRA_ERROR"],
+        )
+
+    reasoning = context.get("reasoning", "")
+    if not reasoning or len(reasoning.strip()) < 30:
+        _log.info("model_grader: no substantive reasoning for %s — skipping", report_id)
+        return ModelGraderResult(
+            passed=True,
+            overall_score=0.0,
+            criteria_scores={},
+            criteria_rationales={},
+            feedback="",
+            flags=["MODEL_GRADER_NO_REASONING"],
+        )
+
+    try:
+        raw = _call_model_grader(context, model_name)
+    except json.JSONDecodeError as exc:
+        _log.warning("model_grader: JSON parse error for %s: %s", report_id, exc)
+        return ModelGraderResult(
+            passed=True,
+            overall_score=0.0,
+            criteria_scores={},
+            criteria_rationales={},
+            feedback="",
+            flags=["MODEL_GRADER_PARSE_ERROR"],
+        )
+    except Exception as exc:
+        _log.warning("model_grader: LLM API error for %s: %s", report_id, exc)
+        return ModelGraderResult(
+            passed=True,
+            overall_score=0.0,
+            criteria_scores={},
+            criteria_rationales={},
+            feedback="",
+            flags=["MODEL_GRADER_INFRA_ERROR"],
+        )
+
+    # Extract scores and rationales from the parsed dict
+    criteria_scores: dict[str, float] = {}
+    criteria_rationales: dict[str, str] = {}
+    for criterion in MODEL_GRADER_WEIGHTS:
+        entry = raw.get(criterion, {})
+        criteria_scores[criterion] = float(entry.get("score", 0))
+        criteria_rationales[criterion] = str(entry.get("rationale", ""))
+
+    # Compute weighted average
+    overall_score = sum(
+        criteria_scores.get(c, 0.0) * w
+        for c, w in MODEL_GRADER_WEIGHTS.items()
+    )
+
+    passed = overall_score >= MODEL_GRADER_PASS_THRESHOLD
+    _log.info(
+        "model_grader: report %s overall=%.2f/%s verdict=%s",
+        report_id, overall_score, MODEL_GRADER_PASS_THRESHOLD,
+        "PASS" if passed else "FAIL",
+    )
+
+    if passed:
+        return ModelGraderResult(
+            passed=True,
+            overall_score=overall_score,
+            criteria_scores=criteria_scores,
+            criteria_rationales=criteria_rationales,
+            feedback="",
+        )
+
+    return ModelGraderResult(
+        passed=False,
+        overall_score=overall_score,
+        criteria_scores=criteria_scores,
+        criteria_rationales=criteria_rationales,
+        feedback=_build_model_grader_feedback(criteria_scores, criteria_rationales, overall_score),
+        flags=["REASONING_QUALITY"],
+    )
 
 
 # ── Message-parsing utilities (used by supervisor_agent.py) ──────────────────

@@ -48,6 +48,7 @@ def _report_out(r: PropguruEvaluationReport) -> dict[str, Any]:
         "approved_at": r.approved_at.isoformat() if r.approved_at else None,
         "verification_retries": r.verification_retries,
         "grader_flags": r.grader_flags or [],
+        "model_grader_retries": r.model_grader_retries,
         "created_at": r.created_at.isoformat(),
         "updated_at": r.updated_at.isoformat(),
     }
@@ -777,11 +778,12 @@ async def get_evaluation_action(
     }
 
 
-# ── Verification loop (Phase 1) ───────────────────────────────────────────────
+# ── Verification loop ─────────────────────────────────────────────────────────
 
 class GraderResultRequest(BaseModel):
     verification_retries: int
     grader_flags: list[str] = []
+    model_grader_retries: int = 0
 
 
 @router.post("/evaluations/{report_id}/grader-result")
@@ -791,7 +793,7 @@ async def save_grader_result(
     session: AsyncSession = Depends(get_session),
     _: str = Depends(verify_api_key),
 ):
-    """Persist code-grader verdict to the evaluation report (called by the verifier node)."""
+    """Persist grader verdicts to the evaluation report (called by the verifier node)."""
     try:
         rid = uuid.UUID(report_id)
     except ValueError:
@@ -805,10 +807,12 @@ async def save_grader_result(
 
     report.verification_retries = req.verification_retries
     report.grader_flags = req.grader_flags or []
+    report.model_grader_retries = req.model_grader_retries
     await session.commit()
     await session.refresh(report)
     return {
         "report_id": report_id,
         "verification_retries": report.verification_retries,
         "grader_flags": report.grader_flags,
+        "model_grader_retries": report.model_grader_retries,
     }

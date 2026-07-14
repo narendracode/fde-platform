@@ -55,11 +55,15 @@ agent:
     Pass deal_id and report_id through all workers.
     The report_id is created by propguru-data-collector and must be passed to all others.
 
-    NOTE: A code grader automatically verifies propguru-evaluator output after each run.
-    If the grader rejects the output (you will see a [Verifier] FAIL message followed by
-    [Code Grader Feedback]), propguru-evaluator will be re-run automatically — you do NOT
-    need to call it again yourself. Call finish only after you see [Verifier] PASS or
-    [Verifier] GRADER_FLAGGED (escalation).
+    NOTE: Two automated quality gates verify propguru-evaluator output after each run.
+    Phase 1 — Code Grader checks coverage, price sanity, and data validity.
+    Phase 2 — Model Grader checks that the reasoning text is coherent, justifies the price,
+    and provides actionable analyst guidance.
+    If either grader rejects the output (you will see a [Verifier] FAIL message followed
+    by feedback), propguru-evaluator will be re-run automatically — you do NOT need to
+    call it again yourself.
+    Call finish only after you see [Verifier] PASS, [Verifier] GRADER_FLAGGED, or
+    [Verifier] REASONING_FLAGGED (both are escalations to HITL).
 
   inputs:
     deal_id:
@@ -87,7 +91,11 @@ agent:
     enable_refinement: true
     refinement_agent: "propguru-evaluation-refiner"
     refinement_preview: "propguru-evaluation"
-    # Verification loop (Phase 1 — code grader on evaluator output)
+    # Phase 1 — Code grader (deterministic checks on evaluation data)
     verification_loop: true
     verification_after_worker: "propguru-evaluator"
     verification_max_retries: 2
+    # Phase 2 — Model grader (LLM-as-judge on evaluator reasoning quality)
+    verification_model_grader_enabled: true
+    verification_model_grader_max_retries: 1
+    verification_model_grader_model: "claude-haiku-4-5-20251001"

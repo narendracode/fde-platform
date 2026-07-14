@@ -57,10 +57,11 @@ class SupervisorState(TypedDict):
     next_context: dict      # structured key-value context injected as [Runtime context] for the next worker
     rounds: int             # incremented each time the supervisor node runs
     worker_stats: list      # per-invocation token/cost tracking for each worker call
-    # Verification loop (Phase 1) ─────────────────────────────────────────────
-    verification_retries: int   # number of times the code grader has rejected output
+    # Verification loop ────────────────────────────────────────────────────────
+    verification_retries: int   # Phase 1: times code grader has rejected output
     grader_flags: list          # issue codes from the most recent grader run
     grader_verdict: str         # "pass" | "fail" | "escalate" — drives verifier routing
+    model_grader_retries: int   # Phase 2: times model grader has rejected reasoning
 
 
 # ── Supervisor routing decision (structured output) ───────────────────────────
@@ -266,16 +267,26 @@ def _make_verifier_router(verification_worker: str):
     return _route
 
 
-def _make_verifier_node(verification_worker: str, max_retries: int):
-    """Return a LangGraph node function that runs the Propguru code grader.
+def _make_verifier_node(
+    verification_worker: str,
+    max_retries: int,
+    model_grader_enabled: bool = False,
+    model_grader_max_retries: int = 1,
+    model_grader_model: str = "claude-haiku-4-5-20251001",
+):
+    """Return a LangGraph node function that runs the Propguru quality gates.
+
+    Phase 1 (code grader) always runs first.
+    Phase 2 (model grader) runs only after Phase 1 passes, if enabled.
 
     On PASS  → routes back to supervisor (which will call finish).
     On FAIL  → dismisses stale proposal, injects feedback, retries evaluator.
     On ESCALATE (max retries exceeded) → persists flags, routes to supervisor
-              so the HITL proposal reaches the analyst with a grader-flagged note.
+              so the HITL proposal reaches the analyst with a grader-flag marker.
     """
     from fde_agent.agent.propguru_verifier import (
         run_propguru_code_grader,
+        run_propguru_model_grader,
         save_grader_result,
         dismiss_stale_action,
         reset_report_to_draft,
@@ -284,8 +295,14 @@ def _make_verifier_node(verification_worker: str, max_retries: int):
     )
     from fde_agent.config.settings import settings as _settings
 
+    def _do_dismiss_and_reset(action_id: str | None, report_id: str, note: str) -> None:
+        if action_id:
+            dismiss_stale_action(action_id, note, _settings.api_base_url, _settings.api_key)
+        reset_report_to_draft(report_id, _settings.api_base_url, _settings.api_key)
+
     def verifier_node(state: SupervisorState) -> dict[str, Any]:
         retries = state.get("verification_retries", 0)
+        mg_retries = state.get("model_grader_retries", 0)
         messages = state.get("messages", [])
 
         report_id = extract_report_id(messages)
@@ -300,16 +317,75 @@ def _make_verifier_node(verification_worker: str, max_retries: int):
                 )],
             }
 
-        _log.info("verifier: grading report %s (attempt %d/%d)", report_id, retries + 1, max_retries + 1)
-        result = run_propguru_code_grader(report_id, _settings.api_base_url, _settings.api_key)
+        action_id = extract_action_id(messages)
 
-        # Always persist grader metadata to the report for audit trail
-        save_grader_result(report_id, retries + (0 if result.passed else 1),
-                           result.flags, _settings.api_base_url, _settings.api_key)
+        # ── Phase 1: Code Grader ───────────────────────────────────────────────
+        _log.info(
+            "verifier: code-grading report %s (attempt %d/%d)",
+            report_id, retries + 1, max_retries + 1,
+        )
+        code_result = run_propguru_code_grader(report_id, _settings.api_base_url, _settings.api_key)
 
-        # ── PASS ──────────────────────────────────────────────────────────────
-        if result.passed:
-            _log.info("verifier: PASS — report %s cleared all checks", report_id)
+        if not code_result.passed:
+            flag_str = ", ".join(code_result.flags)
+
+            # Save before deciding whether to escalate or retry
+            save_grader_result(
+                report_id, retries + 1, code_result.flags,
+                _settings.api_base_url, _settings.api_key,
+                model_grader_retries=mg_retries,
+            )
+
+            if retries >= max_retries:
+                _log.warning(
+                    "verifier: ESCALATE (code) — report %s failed %d time(s): %s",
+                    report_id, retries + 1, flag_str,
+                )
+                return {
+                    "grader_verdict": "escalate",
+                    "grader_flags": code_result.flags,
+                    "messages": [AIMessage(
+                        content=(
+                            f"[Verifier] GRADER_FLAGGED — report {report_id} did not pass "
+                            f"code-grader checks after {retries + 1} attempt(s). Flags: {flag_str}. "
+                            f"Escalating to HITL with grader-flag marker."
+                        ),
+                        name="verifier",
+                    )],
+                }
+
+            _log.info(
+                "verifier: FAIL code (retry %d/%d) — report %s: %s",
+                retries + 1, max_retries, report_id, flag_str,
+            )
+            _do_dismiss_and_reset(
+                action_id, report_id,
+                f"Code grader rejected (attempt {retries + 1}/{max_retries + 1}): {flag_str}",
+            )
+            return {
+                "grader_verdict": "fail",
+                "grader_flags": code_result.flags,
+                "verification_retries": retries + 1,
+                "messages": [
+                    AIMessage(
+                        content=(
+                            f"[Verifier] FAIL (attempt {retries + 1}/{max_retries + 1}) — "
+                            f"report {report_id} did not pass code-grader checks: {flag_str}."
+                        ),
+                        name="verifier",
+                    ),
+                    HumanMessage(content=code_result.feedback),
+                ],
+            }
+
+        # ── Phase 2: Model Grader (only runs after code grader passes) ─────────
+        if not model_grader_enabled:
+            _log.info("verifier: PASS — report %s (model grader disabled)", report_id)
+            save_grader_result(
+                report_id, retries, [],
+                _settings.api_base_url, _settings.api_key,
+                model_grader_retries=mg_retries,
+            )
             return {
                 "grader_verdict": "pass",
                 "grader_flags": [],
@@ -319,58 +395,86 @@ def _make_verifier_node(verification_worker: str, max_retries: int):
                 )],
             }
 
-        flag_str = ", ".join(result.flags)
+        _log.info(
+            "verifier: model-grading report %s (attempt %d/%d)",
+            report_id, mg_retries + 1, model_grader_max_retries + 1,
+        )
+        mg_result = run_propguru_model_grader(
+            report_id, action_id,
+            _settings.api_base_url, _settings.api_key,
+            model_grader_model,
+        )
+        combined_flags = mg_result.flags
 
-        # ── MAX RETRIES EXCEEDED → ESCALATE ───────────────────────────────────
-        if retries >= max_retries:
-            _log.warning(
-                "verifier: ESCALATE — report %s failed grader %d time(s): %s",
-                report_id, retries + 1, flag_str,
+        save_grader_result(
+            report_id, retries, combined_flags,
+            _settings.api_base_url, _settings.api_key,
+            model_grader_retries=mg_retries + (0 if mg_result.passed else 1),
+        )
+
+        if mg_result.passed:
+            score_str = (
+                f"score {mg_result.overall_score:.1f}/10"
+                if mg_result.overall_score > 0
+                else "skipped (no reasoning)"
             )
+            _log.info("verifier: PASS — report %s model-grader %s", report_id, score_str)
             return {
-                "grader_verdict": "escalate",
-                "grader_flags": result.flags,
+                "grader_verdict": "pass",
+                "grader_flags": combined_flags,
                 "messages": [AIMessage(
                     content=(
-                        f"[Verifier] GRADER_FLAGGED — report {report_id} did not pass quality checks "
-                        f"after {retries + 1} attempt(s). Flags: {flag_str}. "
-                        f"Escalating existing proposal to HITL with grader-flag marker."
+                        f"[Verifier] PASS — report {report_id} cleared code-grader and "
+                        f"model-grader checks ({score_str})."
                     ),
                     name="verifier",
                 )],
             }
 
-        # ── FAIL → inject feedback and retry evaluator ─────────────────────────
-        _log.info(
-            "verifier: FAIL (retry %d/%d) — report %s: %s",
-            retries + 1, max_retries, report_id, flag_str,
-        )
-
-        # Dismiss the stale HITL proposal so the evaluator can create a fresh one
-        action_id = extract_action_id(messages)
-        if action_id:
-            dismiss_stale_action(
-                action_id,
-                f"Grader rejected (attempt {retries + 1}/{max_retries + 1}): {flag_str}",
-                _settings.api_base_url,
-                _settings.api_key,
+        # Model grader FAIL
+        mg_flag_str = ", ".join(mg_result.flags)
+        if mg_retries >= model_grader_max_retries:
+            _log.warning(
+                "verifier: ESCALATE (model) — report %s failed %d time(s): score=%.2f",
+                report_id, mg_retries + 1, mg_result.overall_score,
             )
-        # Reset report status to draft so propguru_propose_evaluation can re-propose
-        reset_report_to_draft(report_id, _settings.api_base_url, _settings.api_key)
+            return {
+                "grader_verdict": "escalate",
+                "grader_flags": combined_flags,
+                "model_grader_retries": mg_retries + 1,
+                "messages": [AIMessage(
+                    content=(
+                        f"[Verifier] REASONING_FLAGGED — report {report_id} reasoning scored "
+                        f"{mg_result.overall_score:.1f}/10 after {mg_retries + 1} attempt(s). "
+                        f"Escalating to HITL with reasoning-quality marker."
+                    ),
+                    name="verifier",
+                )],
+            }
 
+        _log.info(
+            "verifier: FAIL model (retry %d/%d) — report %s score=%.2f",
+            mg_retries + 1, model_grader_max_retries, report_id, mg_result.overall_score,
+        )
+        _do_dismiss_and_reset(
+            action_id, report_id,
+            f"Model grader rejected reasoning (attempt {mg_retries + 1}/{model_grader_max_retries + 1}): "
+            f"score {mg_result.overall_score:.1f}/10",
+        )
         return {
             "grader_verdict": "fail",
-            "grader_flags": result.flags,
-            "verification_retries": retries + 1,
+            "grader_flags": combined_flags,
+            "model_grader_retries": mg_retries + 1,
             "messages": [
                 AIMessage(
                     content=(
-                        f"[Verifier] FAIL (attempt {retries + 1}/{max_retries + 1}) — "
-                        f"report {report_id} did not pass checks: {flag_str}."
+                        f"[Verifier] FAIL model-grader (attempt {mg_retries + 1}/"
+                        f"{model_grader_max_retries + 1}) — "
+                        f"report {report_id} reasoning score {mg_result.overall_score:.1f}/10."
                     ),
                     name="verifier",
                 ),
-                HumanMessage(content=result.feedback),
+                HumanMessage(content=mg_result.feedback),
             ],
         }
 
@@ -424,13 +528,26 @@ def build_supervisor_graph(config: AgentConfig):
     verification_enabled = bool(config.feature_flags.get("verification_loop", False))
     verification_worker = config.feature_flags.get("verification_after_worker", "")
     max_retries = int(config.feature_flags.get("verification_max_retries", 2))
+    # Phase 2: model grader feature flags
+    mg_enabled = bool(config.feature_flags.get("verification_model_grader_enabled", False))
+    mg_max_retries = int(config.feature_flags.get("verification_model_grader_max_retries", 1))
+    mg_model = str(config.feature_flags.get(
+        "verification_model_grader_model", "claude-haiku-4-5-20251001"
+    ))
 
     if verification_enabled and verification_worker and verification_worker in workers:
         _log.info(
-            "supervisor '%s': verification loop enabled after '%s' (max_retries=%d)",
-            config.name, verification_worker, max_retries,
+            "supervisor '%s': verification loop enabled after '%s' "
+            "(code_max_retries=%d model_grader=%s)",
+            config.name, verification_worker, max_retries, mg_enabled,
         )
-        graph.add_node("__verifier__", _make_verifier_node(verification_worker, max_retries))
+        graph.add_node(
+            "__verifier__",
+            _make_verifier_node(
+                verification_worker, max_retries,
+                mg_enabled, mg_max_retries, mg_model,
+            ),
+        )
 
     # Edges
     graph.add_edge(START, "supervisor")
@@ -498,6 +615,7 @@ def run_supervisor(
         "verification_retries": 0,
         "grader_flags": [],
         "grader_verdict": "",
+        "model_grader_retries": 0,
     }
 
     # Assign a stable run_id so LangSmith can aggregate the full trace cost
@@ -598,4 +716,5 @@ def run_supervisor(
         "verification_retries": result.get("verification_retries", 0),
         "grader_flags": result.get("grader_flags", []),
         "grader_verdict": result.get("grader_verdict", ""),
+        "model_grader_retries": result.get("model_grader_retries", 0),
     }
