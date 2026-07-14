@@ -35,8 +35,8 @@ agent:
     max_rounds: 10
 
   model:
-    provider: anthropic
-    name: claude-haiku-4-5-20251001
+    provider: openai
+    name: gpt-4o-mini
     temperature: 0.0
     max_tokens: 1024
     max_cost_usd: 0.20
@@ -98,4 +98,4 @@ agent:
     # Phase 2 — Model grader (LLM-as-judge on evaluator reasoning quality)
     verification_model_grader_enabled: true
     verification_model_grader_max_retries: 1
-    verification_model_grader_model: "claude-haiku-4-5-20251001"
+    verification_model_grader_model: "gpt-4o-mini"

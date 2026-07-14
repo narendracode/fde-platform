@@ -18,8 +18,8 @@ agent:
       description: "Comma-separated shift codes"
 
   model:
-    provider: anthropic
-    name: claude-sonnet-4-6
+    provider: openai
+    name: gpt-4o
     temperature: 0.0
     max_tokens: 2048
     max_cost_usd: 0.50

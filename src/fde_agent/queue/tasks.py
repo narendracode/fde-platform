@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from fde_agent.agent.react_agent import run_agent
 from fde_agent.config.loader import load_agent_config
 from fde_agent.config.settings import settings
-from fde_agent.db.models import AgentRun
+from fde_agent.db.models import AgentRun, PropguruDeal
 from fde_agent.queue.celery_app import celery_app
 
 logger = get_task_logger(__name__)
@@ -85,11 +85,19 @@ def run_agent_task(
 
     except Exception as exc:
         logger.exception("Agent run %s failed: %s", run_id, exc)
+        is_final_failure = self.request.retries >= self.max_retries
         with _get_sync_session() as session:
             run = session.get(AgentRun, uuid.UUID(run_id))
             if run:
                 run.status = "failed"
                 run.error = str(exc)
                 run.completed_at = datetime.now(UTC)
+                # On final failure, unlock the deal so the user can re-trigger evaluation
+                if is_final_failure:
+                    deal_id_str = (run.input or {}).get("extra_context", {}).get("deal_id")
+                    if deal_id_str:
+                        deal = session.get(PropguruDeal, uuid.UUID(deal_id_str))
+                        if deal and deal.stage == "evaluation_pending":
+                            deal.stage = "lead"
                 session.commit()
         raise self.retry(exc=exc)

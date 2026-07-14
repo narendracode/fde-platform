@@ -163,7 +163,7 @@ def _supervisor_node_fn(supervisor_config: AgentConfig, workers: dict[str, dict]
     workers = {worker_key: {"config": AgentConfig, "agent": compiled_graph, "description": str}}
     """
     model = _build_model(supervisor_config.model)
-    router = model.with_structured_output(SupervisorDecision)
+    router = model.with_structured_output(SupervisorDecision, method="function_calling")
 
     # Build the worker menu once (it doesn't change between calls)
     worker_menu = "\n".join(
@@ -272,7 +272,7 @@ def _make_verifier_node(
     max_retries: int,
     model_grader_enabled: bool = False,
     model_grader_max_retries: int = 1,
-    model_grader_model: str = "claude-haiku-4-5-20251001",
+    model_grader_model: str = "gpt-4o-mini",
 ):
     """Return a LangGraph node function that runs the Propguru quality gates.
 
@@ -532,7 +532,7 @@ def build_supervisor_graph(config: AgentConfig):
     mg_enabled = bool(config.feature_flags.get("verification_model_grader_enabled", False))
     mg_max_retries = int(config.feature_flags.get("verification_model_grader_max_retries", 1))
     mg_model = str(config.feature_flags.get(
-        "verification_model_grader_model", "claude-haiku-4-5-20251001"
+        "verification_model_grader_model", "gpt-4o-mini"
     ))
 
     if verification_enabled and verification_worker and verification_worker in workers:

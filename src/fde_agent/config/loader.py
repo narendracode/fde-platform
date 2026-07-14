@@ -15,8 +15,8 @@ from fde_agent.config.settings import settings
 # ── Sub-models ────────────────────────────────────────────────────────────────
 
 class ModelConfig(BaseModel):
-    provider: str = "anthropic"
-    name: str = "claude-sonnet-4-6"
+    provider: str = "openai"
+    name: str = "gpt-4o"
     temperature: float = 0.2
     max_tokens: int = 4096
     max_cost_usd: float = 1.0

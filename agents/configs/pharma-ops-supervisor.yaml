@@ -37,8 +37,8 @@ agent:
   # A lightweight model is sufficient here — routing decisions are simple JSON.
   # Workers use their own models (defined in their own YAMLs).
   model:
-    provider: anthropic
-    name: claude-haiku-4-5-20251001   # fast + cheap; routing doesn't need a large model
+    provider: openai
+    name: gpt-4o-mini   # fast + cheap; routing doesn't need a large model
     temperature: 0.0                  # deterministic routing
     max_tokens: 512
     max_cost_usd: 0.10

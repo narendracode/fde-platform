@@ -54,7 +54,7 @@ MODEL_GRADER_WEIGHTS: dict[str, float] = {
     "market_alignment": 0.20,
     "analyst_guidance": 0.10,
 }
-_DEFAULT_MODEL_GRADER_MODEL = "claude-haiku-4-5-20251001"
+_DEFAULT_MODEL_GRADER_MODEL = "gpt-4o-mini"
 
 
 # ── Result types ──────────────────────────────────────────────────────────────
@@ -471,16 +471,16 @@ def _call_model_grader(context: dict, model_name: str) -> dict:
 
     Raises on API error or JSON parse failure — caller handles these cases.
     """
-    import anthropic  # lazy import — only needed when model grader is enabled
+    import openai  # lazy import — only needed when model grader is enabled
 
-    client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     prompt = _build_model_grader_prompt(context)
-    response = client.messages.create(
+    response = client.chat.completions.create(
         model=model_name,
         max_tokens=512,
         messages=[{"role": "user", "content": prompt}],
     )
-    raw = response.content[0].text.strip()
+    raw = response.choices[0].message.content.strip()
     # Strip markdown code fences if the model wraps the JSON
     if raw.startswith("```"):
         raw = re.sub(r"^```[a-z]*\n?", "", raw)

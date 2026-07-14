@@ -17,8 +17,8 @@ agent:
       description: "Evaluation report UUID from propguru-data-collector"
 
   model:
-    provider: anthropic
-    name: claude-sonnet-4-6
+    provider: openai
+    name: gpt-4o
     temperature: 0.0
     max_tokens: 4096
     max_cost_usd: 1.00
