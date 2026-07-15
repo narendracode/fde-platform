@@ -32,7 +32,7 @@ from fde_agent.config.settings import settings
 logging.basicConfig(level=settings.log_level.upper())
 
 app = FastAPI(
-    title="Fundly Agent Platform",
+    title="Agent Platform",
     description="Central API for deploying, running, and auditing AI agents.",
     version="0.1.0",
     docs_url="/docs",

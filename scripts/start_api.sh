@@ -3,7 +3,7 @@
 # Order: wait → migrate → seed → serve
 set -e
 
-echo "=== Fundly API startup ==="
+echo "=== API startup ==="
 
 echo "--- [1/4] Waiting for PostgreSQL..."
 uv run python scripts/wait_for_db.py

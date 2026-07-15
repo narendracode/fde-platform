@@ -1,7 +1,7 @@
 .PHONY: help up down logs migrate seed seed-orders dashboard ci-deploy launch-agent lint test shell-api shell-worker
 
 help:
-	@echo "Fundly Agent Platform"
+	@echo "Agent Platform"
 	@echo ""
 	@echo "  ── Infrastructure ────────────────────────────────────"
 	@echo "  make up            Start all services (Docker)"
