@@ -1,776 +1,679 @@
-# Propguru — Property Evaluation System Design
-**Status:** Design / Pre-implementation
-**Domain:** Real estate — residential property buy/sell
-**Platform pattern:** Follows Sandhar implementation (supervisor-worker agents, HITL canvas, simulations)
+# Propguru AI Agent Platform — System Design
+
+> This document shows system architecture of the POC. Actual prod infra system design would be extension of current system design.
 
 ---
 
-## 1. Business Context
+## 1. Architecture Philosophy
 
-Propguru buys and sells residential properties (houses and apartments). It does not deal with buyers or sellers directly — all business flows through **Channel Partners (CPs)**.
+The system is built in three distinct layers. This separation is the central design decision — it determines how the platform scales across multiple use cases.
 
 ```
-Seller → CP-1 (deal sourcing) → Propguru → CP-2 (distribution) → Buyer
+┌───────────────────────────────────────────────────────────────┐
+│                     PLATFORM CORE                             │
+│  FastAPI · LangGraph · Celery · Redis · YAML agent registry  │
+│  AgentRun tracking · AgentAction HITL · Verification loop    │
+│  Model-agnostic LLM integration · Tool registry              │
+│  (Shared by ALL domains and use cases)                        │
+├───────────────────────────────────────────────────────────────┤
+│                   DOMAIN: PROPGURU                            │
+│  propguru_* DB tables · Domain tools · Domain page routes    │
+│  Domain UI templates · Domain API routes                     │
+│  (Shared by ALL Propguru use cases)                           │
+├───────────────────────────────────────────────────────────────┤
+│             USE CASE: PROPERTY EVALUATION                     │
+│  4-agent evaluation pipeline · 30-criteria scoring model     │
+│  2-phase quality verification · Refinement canvas            │
+│  Evaluation YAML configs · Evaluation-specific tools         │
+│  (One of many planned Propguru use cases)                     │
+└───────────────────────────────────────────────────────────────┘
 ```
 
-Business economics: Propguru acquires a property at price **X**, refurbishes, and sells at **X + Y** (profit).
+### Adding a New Use Case
 
-The only use case being implemented is **Evaluation** — the process by which Propguru determines the acquisition price X for a property brought in by a Channel Partner.
+When Propguru adds a new use case (e.g., Channel Partner Lead Scoring, Refurbishment Estimation), the additions are:
+
+1. **Domain schema** — new DB tables for domain entities (migration only)
+2. **Domain tools** — Python functions agents call to read/write domain data
+3. **Agent configs** — YAML files defining model, system prompt, tools, feature flags
+4. **API routes** — FastAPI routes to trigger runs and expose data
+5. **UI templates** — Jinja2 templates or nextjs app for the analyst interface
+
+**The platform core changes zero times.** Orchestration, HITL, task queue, model routing, audit trail — all reused.
 
 ---
 
-## 2. Evaluation Domain: How It Works Today
-
-A dedicated back-office analyst team evaluates each incoming deal. The evaluation involves:
-
-1. Going through **30 structured data points** covering amenities, location, property attributes, and society/building quality.
-2. Scoring each data point.
-3. Looking up **market data** for the locality — historical transactions, price trends, comparable sales — sourced from partners like housing.com.
-4. Applying an established **pricing algorithm** (trade secret) to compute the final offer price.
-5. Locking the price and communicating it to the Channel Partner.
-
-**Problems today:**
-- Manual → slow (days per deal)
-- Analyst bottleneck → capacity constraint, opportunity loss
-- Inconsistent scoring across analysts → price variance on similar properties
-- No audit trail on why a price was set
-
-**What AI adds:**
-- Automated data collection and scoring for the 30 criteria
-- Consistent, algorithm-driven price calculation
-- HITL for analyst oversight and override
-- Full audit trail of every score, rationale, and override
-- Path to full automation when confidence is high
-
----
-
-## 3. Domain Model
-
-### 3.1 Entity Overview
+## 2. Full System Architecture
 
 ```
-PropguruChannelPartner
-    │  1
-    ├──── PropguruDeal (1 CP per deal — the sourcing CP)
-    │           │ 1
-    │           ├──── PropguruProperty (1 property per deal)
-    │           │
-    │           └──── PropguruEvaluationReport  ←──┐
-    │                       │ 1                     │
-    │                       ├─── PropguruEvalScore  │  (30 rows — one per criterion)
-    │                       │        │               │
-    │                       │        └──── PropguruEvaluationCriteria (master)
-    │                       │
-    │                       └─── PropguruMarketComp (comps pulled for the locality)
-    │
-    └──── PropguruDeal (0-N on distribution side — assigned buyer CPs)
+┌──────────────────────────────────────────────────────────────────────┐
+│                        CLIENT (Browser)                              │
+│   /propguru/deals    /propguru/evaluation    /propguru/master        │
+│   Jinja2 or nextjs app  + vanilla JS + server-rendered partials               │
+└─────────────────────────┬────────────────────────────────────────────┘
+                          │ HTTP
+┌─────────────────────────▼────────────────────────────────────────────┐
+│                   FastAPI Application (port 8000)        [PLATFORM]  │
+│                                                                      │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐  │
+│  │  Domain Pages    │  │  Domain API      │  │  Platform API    │  │
+│  │  /propguru/*     │  │  /api/v1/        │  │  /api/v1/agents/ │  │
+│  │  (HTML)  [DOM]   │  │  propguru/* [DOM]│  │  (activate, run) │  │
+│  └──────────────────┘  └────────┬─────────┘  └──────────────────┘  │
+└───────────────────────────────── │ ────────────────────────────────── ┘
+                                   │
+         ┌─────────────────────────▼────────────────────────┐
+         │              PostgreSQL (fde_agent DB)            │
+         │                                                   │
+         │   PLATFORM TABLES          DOMAIN TABLES          │
+         │   ──────────────           ────────────           │
+         │   agents                   propguru_properties    │
+         │   agent_runs               propguru_deals         │
+         │   agent_actions            propguru_channel_...   │
+         │                            propguru_eval_*        │
+         │                            propguru_market_comps  │
+         └───────────────────────────────────────────────────┘
+                          │ .delay()
+┌─────────────────────────▼────────────────────────────────────────────┐
+│                    Celery Worker             [PLATFORM]               │
+│                                                                      │
+│   run_agent_task → run_agent → run_supervisor                        │
+│                                                                      │
+│   ┌─────────────────────────────────────────────────────────────┐   │
+│   │     LangGraph Supervisor Graph          [PLATFORM PATTERN]  │   │
+│   │                                                             │   │
+│   │   START → [supervisor] → propguru-data-collector           │   │
+│   │               ↑               ↓                            │   │
+│   │           [supervisor] ← propguru-market-analyst           │   │
+│   │               ↑               ↓                            │   │
+│   │           [supervisor] ← propguru-scorer                   │   │
+│   │               ↑               ↓                            │   │
+│   │           [supervisor] ← propguru-evaluator → [verifier]   │   │
+│   │               ↑                                   ↓        │   │
+│   │               └──── FAIL: retry ──────────────────┘        │   │
+│   │               └──── PASS: finish ─────────────────┘        │   │
+│   └─────────────────────────────────────────────────────────────┘   │
+└──────────────────────────────────────────────────────────────────────┘
+                          │
+             ┌────────────▼────────────┐
+             │    Redis                │
+             │    Celery broker        │
+             │    Result backend       │
+             └─────────────────────────┘
 ```
 
-### 3.2 DB Tables
+### Technology Stack
 
-#### `propguru_channel_partners`
-| Column | Type | Notes |
+| Layer | Technology | Role |
 |---|---|---|
-| `id` | UUID PK | |
-| `cp_code` | String(20) UNIQUE | e.g., `CP-001` |
-| `name` | String(200) | |
-| `cp_type` | String(20) | `sourcing` / `distribution` / `both` |
-| `phone` | String(20) | |
-| `email` | String(100) | |
-| `city` | String(100) | |
-| `status` | String(20) | `active` / `inactive` |
-| `commission_pct` | Float | default commission % |
-| `created_at` | Timestamp | |
-| `updated_at` | Timestamp | |
+| Web framework | FastAPI (Python 3.11) | Async REST API + HTML page routes |
+| ORM | SQLAlchemy 2.x (async) | DB access; async in API, sync in Celery |
+| Database | PostgreSQL 16 | Persistent store — platform + domain tables |
+| Task broker/backend | Redis 7 | Celery message queue + result storage |
+| Task worker | Celery 5 | Executes agent pipelines asynchronously |
+| AI orchestration | LangGraph (StateGraph) | Supervisor-worker multi-agent graphs |
+| AI model integration | LangChain + OpenAI SDK | Tool execution and LLM calls |
+| AI models | GPT-4o (workers), GPT-4o-mini (supervisor + grader) | Configurable per agent via YAML |
+| Templates | Jinja2 or nextjs app | Server-rendered pages with partial refreshes |
+| Migrations | Alembic | Incremental schema versioning |
+| Package manager | `uv` | All installs use `uv run`, not `pip` |
+| Container | Docker | `make up` starts all services |
 
-#### `propguru_deals`
-| Column | Type | Notes |
-|---|---|---|
-| `id` | UUID PK | |
-| `deal_code` | String(30) UNIQUE | e.g., `DEAL-001` |
-| `property_id` | UUID FK → `propguru_properties` | |
-| `sourcing_cp_id` | UUID FK → `propguru_channel_partners` | CP who brought the deal |
-| `sourcing_cp_commission_pct` | Float | agreed commission for sourcing CP |
-| `stage` | String(30) | `lead` / `evaluation_pending` / `evaluation_done` / `agreement_signed` / `listed` / `sold` / `lost` |
-| `lead_source` | String(50) | `channel_partner` / `referral` |
-| `notes` | Text | |
-| `target_acquisition_price` | Float (nullable) | set after evaluation approved |
-| `final_sale_price` | Float (nullable) | set on deal close |
-| `created_at` | Timestamp | |
-| `updated_at` | Timestamp | |
+---
+
+## 3. Platform Core
+
+### 3.1 Agent Registry
+
+Agents are defined in YAML files (`agents/configs/*.yaml`) and stored in the `agents` DB table when activated. No code change is required to change a model, update a prompt, enable a feature flag, or add a new tool to an agent.
+
+```yaml
+agent:
+  name: propguru-evaluation-supervisor
+  type: supervisor            # supervisor | react
+  model:
+    provider: openai          # openai | anthropic — no code change to switch
+    name: gpt-4o-mini
+    temperature: 0.0
+  tools: [...]                # tool names from the tool registry
+  feature_flags:
+    verification_loop: true
+    verification_model_grader_enabled: true
+```
+
+`load_agent_config(name)` reads YAML from disk, validates via Pydantic, and returns a typed `AgentConfig`. The Celery task uses this at runtime — no agent state is baked into code.
+
+### 3.2 Tool Registry
+
+Tools are Python functions registered by name. Agents declare which tools they use in their YAML. The orchestration layer resolves names to callables at runtime.
+
+```python
+# Tool registration (src/fde_agent/agent/tools/__init__.py)
+TOOL_REGISTRY = {
+    "propguru_get_property":         propguru_get_property,
+    "propguru_get_criteria":         propguru_get_criteria,
+    "propguru_save_evaluation_score": propguru_save_evaluation_score,
+    "propguru_calculate_price":      propguru_calculate_price,
+    "propguru_propose_evaluation":   propguru_propose_evaluation,
+    ...
+}
+```
+
+Adding a new data source means: write a new tool function + register it + reference it in the agent's YAML. The agent and orchestration layer require no changes.
+
+### 3.3 Model-Agnostic LLM Integration
+
+The platform builds the LangChain model instance from the `ModelConfig` in the agent's YAML:
+
+```python
+if config.model.provider == "openai":
+    model = ChatOpenAI(model=config.model.name, temperature=config.model.temperature)
+elif config.model.provider == "anthropic":
+    model = ChatAnthropic(model=config.model.name, temperature=config.model.temperature)
+```
+
+Switching an agent from GPT-4o to Claude Sonnet: change two lines in the YAML and re-activate. Zero code changes.
+
+**The OpenAI structured output caveat**: `SupervisorDecision` has a `context: dict[str, Any]` field. OpenAI's strict JSON schema mode rejects this. Fix applied:
+```python
+router = model.with_structured_output(SupervisorDecision, method="function_calling")
+```
+This is the only OpenAI-specific line in the platform; it uses function_calling fallback mode which is also supported by Anthropic's tool_use format via LangChain.
+
+### 3.4 Supervisor-Worker Orchestration (LangGraph)
+
+The platform implements the supervisor-worker pattern as a LangGraph `StateGraph`. This pattern is reused by every multi-agent use case:
+
+```python
+graph = StateGraph(SupervisorState)
+
+# Supervisor node: reads history, decides next worker or FINISH
+graph.add_node("supervisor", supervisor_node)
+graph.add_conditional_edges("supervisor", _route_from_supervisor, {...})
+
+# Worker nodes: domain-specific ReAct agents
+for worker_name in config.workers:
+    graph.add_node(worker_name, worker_node_fn(worker_name, config))
+    graph.add_edge(worker_name, "supervisor")   # default: loop back to supervisor
+
+# Optional verification node: wired per feature flag
+if feature_flags.get("verification_loop"):
+    graph.add_node("__verifier__", verifier_node)
+    # Override: designated worker routes to verifier instead of supervisor
+    graph.add_edge(verification_worker, "__verifier__")
+    graph.add_conditional_edges("__verifier__", _verifier_router, {
+        "supervisor": "supervisor",
+        verification_worker: verification_worker,
+    })
+```
+
+**`SupervisorState` (shared state across all nodes)**:
+```python
+class SupervisorState(TypedDict):
+    messages: Annotated[list, add_messages]
+    next_worker: str
+    next_instruction: str
+    next_context: dict            # carries deal_id, report_id, action_id etc.
+    rounds: int
+    worker_stats: list
+    verification_retries: int     # Phase 1 code grader retry count
+    grader_flags: list
+    grader_verdict: str
+    model_grader_retries: int     # Phase 2 model grader retry count
+```
+
+### 3.5 HITL Workflow
+
+The platform HITL pattern is: agent calls a "propose" tool → creates an `AgentAction` record with `status="pending_review"` → analyst sees proposal in the UI → explicitly approves/rejects/refines → only then does any domain state change.
+
+This is enforced at the platform level. No domain use case can bypass it — the "propose" tool only creates a record; the "approve" API endpoint is what actually mutates domain state (deal stage, price, etc.).
+
+### 3.6 Verification Loop
+
+The verification loop is a platform pattern enabled per agent via feature flags:
+
+```yaml
+feature_flags:
+  verification_loop: true
+  verification_after_worker: "propguru-evaluator"    # which worker triggers it
+  verification_max_retries: 2
+  verification_model_grader_enabled: true
+  verification_model_grader_max_retries: 1
+  verification_model_grader_model: "gpt-4o-mini"
+```
+
+The verifier node is domain-specific (it knows what to check), but the loop wiring — conditional routing, retry counting, state updates, feedback injection — is platform infrastructure.
+
+### 3.7 Async Task Execution (Celery)
+
+All agent pipeline executions are dispatched as Celery tasks:
+
+```python
+@celery_app.task(bind=True, max_retries=2, default_retry_delay=10)
+def run_agent_task(self, run_id, agent_name, user_message, extra_context):
+    # 1. Set AgentRun.status = "running"
+    # 2. load_agent_config(agent_name)
+    # 3. run_agent/run_supervisor → LangGraph graph.invoke()
+    # 4. On success: AgentRun.status = "completed", store output
+    # 5. On failure: AgentRun.status = "failed"
+    #    If final failure: reset domain entity state (e.g. deal.stage = "lead")
+    #    Else: raise self.retry(exc=exc)
+```
+
+The domain-entity state reset on final failure (`deal.stage = "lead"`) is implemented per use case inside the task's exception handler, using the `deal_id` stored in `run.input["extra_context"]`.
+
+
+---
+
+## 4. Database Schema
+
+### 4.1 Platform Tables
+
+These tables are shared across all domains and use cases.
+
+#### `agents`
+```
+id          UUID PK
+name        VARCHAR(100) UNIQUE   -- "propguru-evaluation-supervisor"
+description TEXT
+version     VARCHAR(20)
+config      JSONB                 -- full parsed YAML
+is_active   BOOLEAN DEFAULT false
+```
+
+#### `agent_runs`
+One row per pipeline execution.
+```
+id                  UUID PK
+agent_id            UUID FK → agents
+status              VARCHAR(20)   -- pending | running | completed | failed
+task_id             VARCHAR(100)  -- Celery task ID
+input               JSONB         -- {message, extra_context}
+output              JSONB NULLABLE
+error               TEXT NULLABLE
+input_tokens        INTEGER DEFAULT 0
+output_tokens       INTEGER DEFAULT 0
+cost_usd            FLOAT DEFAULT 0
+langsmith_run_id    VARCHAR(100)
+langsmith_trace_url TEXT
+otel_trace_id       VARCHAR(64)
+started_at          TIMESTAMPTZ
+completed_at        TIMESTAMPTZ
+created_at          TIMESTAMPTZ
+```
+
+#### `agent_actions`
+HITL proposals. Immutable — never deleted, never overwritten.
+```
+id              UUID PK
+agent_name      VARCHAR(100)
+action_type     VARCHAR(50)    -- "propguru_propose_evaluation"
+status          VARCHAR(20)    -- pending_review | approved | rejected | dismissed
+title           VARCHAR(300)
+summary         TEXT
+reasoning       TEXT           -- full AI narrative (also used by model grader)
+input_data      JSONB
+output_data     JSONB
+approved_by     VARCHAR(100)
+approved_at     TIMESTAMPTZ
+dismissed_at    TIMESTAMPTZ
+notes           TEXT
+created_at      TIMESTAMPTZ
+updated_at      TIMESTAMPTZ
+```
+
+### 4.2 Domain Tables — Propguru
+
+These tables are shared across all Propguru use cases (evaluation, CP scoring, refurbishment, etc.).
 
 #### `propguru_properties`
-| Column | Type | Notes |
-|---|---|---|
-| `id` | UUID PK | |
-| `property_code` | String(30) UNIQUE | e.g., `PROP-001` |
-| `address_line1` | String(300) | |
-| `city` | String(100) | |
-| `locality` | String(150) | e.g., "Whitefield, Bengaluru" |
-| `pincode` | String(10) | |
-| `property_type` | String(30) | `apartment` / `independent_house` |
-| `carpet_area_sqft` | Float | |
-| `built_up_area_sqft` | Float (nullable) | |
-| `bedrooms` | Integer | |
-| `bathrooms` | Integer | |
-| `floor_number` | Integer (nullable) | null for independent house |
-| `total_floors` | Integer (nullable) | total floors in building |
-| `building_age_years` | Integer (nullable) | |
-| `facing` | String(20) | `east` / `west` / `north` / `south` |
-| `latitude` | Float (nullable) | for distance calculations |
-| `longitude` | Float (nullable) | |
-| `created_at` | Timestamp | |
-| `updated_at` | Timestamp | |
+```
+id                  UUID PK
+property_code       VARCHAR(20) UNIQUE   -- PROP-001 to PROP-010
+address_line1       TEXT
+locality            VARCHAR(100)
+city                VARCHAR(100)
+pincode             VARCHAR(10)
+property_type       VARCHAR(30)          -- apartment | independent_house
+bedrooms            INTEGER
+bathrooms           INTEGER
+carpet_area_sqft    FLOAT
+built_up_area_sqft  FLOAT
+floor_number        INTEGER NULLABLE
+total_floors        INTEGER NULLABLE
+building_age_years  INTEGER
+facing              VARCHAR(20)
+latitude            FLOAT
+longitude           FLOAT
+created_at          TIMESTAMPTZ
+updated_at          TIMESTAMPTZ
+```
 
-#### `propguru_evaluation_criteria` (master — 30 data points)
-| Column | Type | Notes |
-|---|---|---|
-| `id` | UUID PK | |
-| `criterion_code` | String(20) UNIQUE | e.g., `CRIT-001` |
-| `name` | String(200) | e.g., "Swimming Pool" |
-| `category` | String(30) | `amenity` / `location` / `property` / `society` |
-| `weight` | Float | 1.0–10.0, higher = more price impact |
-| `scoring_type` | String(20) | `boolean` (yes/no) / `scale_1_5` / `proximity_km` |
-| `description` | Text | what the analyst checks |
-| `is_active` | Boolean | |
-| `sort_order` | Integer | |
-| `created_at` | Timestamp | |
+#### `propguru_channel_partners`
+```
+id              UUID PK
+cp_code         VARCHAR(20) UNIQUE
+name            VARCHAR(200)
+cp_type         VARCHAR(30)     -- sourcing | distribution | both
+city            VARCHAR(100)
+phone           VARCHAR(30)
+email           VARCHAR(200)
+commission_pct  FLOAT
+is_active       BOOLEAN DEFAULT true
+created_at      TIMESTAMPTZ
+updated_at      TIMESTAMPTZ
+```
+
+#### `propguru_deals`
+```
+id                         UUID PK
+deal_code                  VARCHAR(20) UNIQUE   -- DEAL-001 to DEAL-005
+property_id                UUID FK → propguru_properties
+sourcing_cp_id             UUID FK → propguru_channel_partners (nullable)
+sourcing_cp_commission_pct FLOAT
+stage                      VARCHAR(30)
+  -- lead | evaluation_pending | evaluation_done
+  -- | agreement_signed | listed | sold | lost
+lead_source                VARCHAR(50)
+notes                      TEXT
+target_acquisition_price   FLOAT NULLABLE
+final_sale_price           FLOAT NULLABLE
+created_at                 TIMESTAMPTZ
+updated_at                 TIMESTAMPTZ
+```
+
+### 4.3 Use Case Tables — Evaluation
+
+These tables are specific to the Property Acquisition Evaluation use case.
+
+#### `propguru_evaluation_criteria` (30 rows, seeded)
+```
+id              UUID PK
+criterion_code  VARCHAR(20) UNIQUE  -- CRIT-001 to CRIT-030
+category        VARCHAR(30)         -- amenity | location | property | society
+name            VARCHAR(200)
+description     TEXT
+weight          FLOAT               -- 2.0 to 8.0
+scoring_type    VARCHAR(20)         -- boolean | scale_1_5 | proximity_km
+is_active       BOOLEAN DEFAULT true
+sort_order      INTEGER
+```
 
 #### `propguru_evaluation_reports`
-| Column | Type | Notes |
-|---|---|---|
-| `id` | UUID PK | |
-| `deal_id` | UUID FK → `propguru_deals` | |
-| `version` | Integer | auto-increments on re-evaluation |
-| `status` | String(20) | `draft` / `pending_review` / `approved` / `rejected` |
-| `market_rate_per_sqft` | Float | from market comp analysis |
-| `base_price` | Float | `market_rate_per_sqft × carpet_area_sqft` |
-| `score_factor` | Float | weighted score percentage 0–1 |
-| `price_premium_pct` | Float | score_factor × premium_multiplier |
-| `recommended_price` | Float | `base_price × (1 + price_premium_pct)` |
-| `final_price` | Float (nullable) | may differ from recommended after analyst override |
-| `confidence` | String(20) | `high` / `medium` / `low` |
-| `agent_reasoning` | Text | agent's explanation |
-| `analyst_notes` | Text (nullable) | analyst override rationale |
-| `approved_by` | String(100) (nullable) | |
-| `approved_at` | Timestamp (nullable) | |
-| `created_at` | Timestamp | |
-| `updated_at` | Timestamp | |
+```
+id                      UUID PK
+deal_id                 UUID FK → propguru_deals
+version                 INTEGER DEFAULT 1       -- increments on refinement
+status                  VARCHAR(20)             -- draft | proposed | approved | rejected
+market_rate_per_sqft    FLOAT NULLABLE
+base_price              FLOAT NULLABLE
+score_factor            FLOAT NULLABLE          -- weighted normalized score [0,1]
+price_premium_pct       FLOAT NULLABLE          -- score_factor × 35%
+recommended_price       FLOAT NULLABLE
+final_price             FLOAT NULLABLE          -- may differ after analyst override
+confidence              VARCHAR(20) NULLABLE    -- high | medium | low
+agent_reasoning         TEXT NULLABLE
+analyst_notes           TEXT NULLABLE
+approved_by             VARCHAR(100) NULLABLE
+approved_at             TIMESTAMPTZ NULLABLE
+verification_retries    INTEGER DEFAULT 0       -- Phase 1 grader retries
+grader_flags            JSONB NULLABLE
+model_grader_retries    INTEGER DEFAULT 0       -- Phase 2 grader retries
+created_at              TIMESTAMPTZ
+updated_at              TIMESTAMPTZ
+```
 
 #### `propguru_evaluation_scores`
-| Column | Type | Notes |
-|---|---|---|
-| `id` | UUID PK | |
-| `report_id` | UUID FK → `propguru_evaluation_reports` | |
-| `criterion_id` | UUID FK → `propguru_evaluation_criteria` | |
-| `score` | Float | 0–5 normalized score (or 0/1 for boolean) |
-| `raw_value` | String(200) | actual collected value e.g., "0.8 km", "yes", "3" |
-| `source` | String(20) | `agent` / `analyst` |
-| `notes` | Text (nullable) | why this score was given |
-| `created_at` | Timestamp | |
-| `updated_at` | Timestamp | |
+```
+id              UUID PK
+report_id       UUID FK → propguru_evaluation_reports
+criterion_id    UUID FK → propguru_evaluation_criteria
+score           FLOAT                   -- 0–5 (or 0/1 for boolean)
+raw_value       TEXT NULLABLE           -- "0.8 km", "yes", "3"
+source          VARCHAR(20)             -- "agent" | "analyst"
+notes           TEXT NULLABLE
+UNIQUE(report_id, criterion_id)
+```
+
+**Critical business rule**: The score save endpoint enforces boolean type constraints:
+```python
+if scoring_type == "boolean" and score not in (0.0, 1.0):
+    raise HTTPException(422, "Boolean criterion score must be 0.0 or 1.0")
+```
+This prevents AI from storing partial boolean values (e.g. 0.5) that would produce category scores above 100%.
 
 #### `propguru_market_comps`
-| Column | Type | Notes |
-|---|---|---|
-| `id` | UUID PK | |
-| `locality` | String(150) | |
-| `property_type` | String(30) | |
-| `avg_price_per_sqft` | Float | |
-| `min_price_per_sqft` | Float | |
-| `max_price_per_sqft` | Float | |
-| `price_trend_6m_pct` | Float | % change in last 6 months (+ = rising) |
-| `transaction_count_6m` | Integer | number of comparable transactions |
-| `data_source` | String(100) | e.g., "housing.com" |
-| `as_of_date` | Date | |
-| `created_at` | Timestamp | |
+```
+id                   UUID PK
+locality             VARCHAR(100) INDEXED    -- lookup key
+avg_price_per_sqft   FLOAT
+min_price_per_sqft   FLOAT
+max_price_per_sqft   FLOAT
+price_trend_6m_pct   FLOAT
+transaction_count_6m INTEGER
+data_source          VARCHAR(100)
+as_of_date           DATE
+```
 
 ---
 
-## 4. The 30 Evaluation Criteria (Seed Data)
+## 5. Evaluation Use Case — Agent Pipeline
 
-Grouped by category, with indicative weights and scoring types.
+### 5.1 Agent Configs
 
-### A. Amenities (10 criteria)
-| Code | Name | Weight | Scoring Type |
-|---|---|---|---|
-| CRIT-001 | Swimming Pool | 6 | boolean |
-| CRIT-002 | Clubhouse | 5 | boolean |
-| CRIT-003 | Gymnasium | 5 | boolean |
-| CRIT-004 | Children's Playground | 4 | boolean |
-| CRIT-005 | Jogging / Cycling Track | 3 | boolean |
-| CRIT-006 | Indoor Games Room | 2 | boolean |
-| CRIT-007 | Tennis / Badminton Court | 3 | boolean |
-| CRIT-008 | Landscaped Garden | 4 | boolean |
-| CRIT-009 | Multipurpose Hall | 2 | boolean |
-| CRIT-010 | Rooftop / Terrace Access | 3 | boolean |
+Six YAML files define the evaluation pipeline agents:
 
-### B. Location Connectivity (10 criteria)
-| Code | Name | Weight | Scoring Type |
-|---|---|---|---|
-| CRIT-011 | Proximity — Metro / Railway Station | 8 | proximity_km |
-| CRIT-012 | Proximity — Highway / Expressway | 5 | proximity_km |
-| CRIT-013 | Proximity — Airport | 5 | proximity_km |
-| CRIT-014 | Proximity — School (Top-rated) | 7 | proximity_km |
-| CRIT-015 | Proximity — Hospital | 7 | proximity_km |
-| CRIT-016 | Proximity — Mall / Shopping Centre | 6 | proximity_km |
-| CRIT-017 | Proximity — Park / Greenery | 5 | proximity_km |
-| CRIT-018 | Proximity — IT / Business Park | 7 | proximity_km |
-| CRIT-019 | Public Bus Connectivity | 4 | scale_1_5 |
-| CRIT-020 | Daily Essentials / Market Access | 5 | proximity_km |
-
-### C. Property Attributes (5 criteria)
-| Code | Name | Weight | Scoring Type |
-|---|---|---|---|
-| CRIT-021 | Floor Level | 4 | scale_1_5 |
-| CRIT-022 | Facing Direction | 4 | scale_1_5 |
-| CRIT-023 | Property Age | 6 | scale_1_5 |
-| CRIT-024 | Covered Parking | 5 | scale_1_5 |
-| CRIT-025 | Power Backup | 3 | boolean |
-
-### D. Building / Society (5 criteria)
-| Code | Name | Weight | Scoring Type |
-|---|---|---|---|
-| CRIT-026 | Gated Community with Security | 6 | boolean |
-| CRIT-027 | Society Type (premium/standard/standalone) | 5 | scale_1_5 |
-| CRIT-028 | Lift Availability | 4 | boolean |
-| CRIT-029 | Water Supply Quality | 4 | scale_1_5 |
-| CRIT-030 | Society Maintenance Quality | 5 | scale_1_5 |
-
-**Scoring logic:**
-- `boolean`: 1.0 = present, 0.0 = absent
-- `scale_1_5`: raw value 1–5 → normalized as `(value - 1) / 4`
-- `proximity_km`: closer is better — scored by bands (e.g., < 0.5 km = 5, 0.5–1 = 4, 1–2 = 3, 2–4 = 2, > 4 = 1)
-
-**Price formula:**
-```
-score_factor      = Σ(weight_i × score_i) / Σ(weight_i)   [0.0–1.0]
-price_premium_pct = score_factor × MAX_PREMIUM_PCT          [MAX = 35% in POC]
-recommended_price = base_price × (1 + price_premium_pct)
-```
-`base_price = market_rate_per_sqft × carpet_area_sqft`
-
----
-
-## 5. Agent Architecture
-
-### 5.1 Agent Tree
-
-```
-propguru-evaluation-supervisor  (supervisor, orchestrates 4 workers)
-    │
-    ├── propguru-data-collector
-    │       Reads property record, scores boolean and scale criteria
-    │       from property attributes. Flags criteria it cannot auto-score.
-    │
-    ├── propguru-market-analyst
-    │       Queries propguru_market_comps for the property's locality.
-    │       Computes base price (market_rate × carpet_area).
-    │       Returns 6-month trend, transaction count, price band.
-    │
-    ├── propguru-scorer
-    │       For each of the 30 criteria:
-    │         - Uses data-collector output for property/amenity criteria
-    │         - Applies proximity scoring for location criteria
-    │         - Saves scores to propguru_evaluation_scores
-    │
-    └── propguru-evaluator
-            Reads scores from DB, computes score_factor and recommended_price.
-            Determines confidence: high / medium / low.
-            Proposes evaluation for analyst review via propguru_propose_evaluation (HITL).
-            Feature flags: enable_refinement: true, refinement_agent: propguru-evaluation-refiner
-
-propguru-evaluation-refiner  (standalone — one turn per chat message in canvas)
-    Conversational refinement of the evaluation.
-    Analyst can: adjust a specific score, ask why a score was given,
-    change the final price, add notes. Each change re-computes the price.
-```
-
-### 5.2 Model Selection
-| Agent | Model | Rationale |
-|---|---|---|
-| `propguru-evaluation-supervisor` | claude-haiku-4-5 | Lightweight routing only |
-| `propguru-data-collector` | claude-sonnet-4-6 | Interprets property data, handles missing fields |
-| `propguru-market-analyst` | claude-sonnet-4-6 | Market data reasoning |
-| `propguru-scorer` | claude-sonnet-4-6 | 30 scores in one pass, needs consistency |
-| `propguru-evaluator` | claude-sonnet-4-6 | Price reasoning + HITL proposal |
-| `propguru-evaluation-refiner` | claude-sonnet-4-6 | Conversational, needs domain reasoning |
-
-### 5.3 YAML Agent Files
 ```
 agents/configs/
-  propguru-evaluation-supervisor.yaml
-  propguru-data-collector.yaml
-  propguru-market-analyst.yaml
-  propguru-scorer.yaml
-  propguru-evaluator.yaml
-  propguru-evaluation-refiner.yaml
+  propguru-evaluation-supervisor.yaml   -- orchestrates 4 workers
+  propguru-data-collector.yaml          -- property attribute scoring
+  propguru-market-analyst.yaml          -- market comp + base price
+  propguru-scorer.yaml                  -- 30-criteria scoring
+  propguru-evaluator.yaml               -- price calc + HITL proposal
+  propguru-evaluation-refiner.yaml      -- conversational refinement canvas
 ```
+
+### 5.2 Worker Agents Detail
+
+#### Worker 1: `propguru-data-collector`
+**Model**: GPT-4o | **Tools**: `propguru_create_evaluation_report`, `propguru_get_property`, `propguru_get_criteria`, `propguru_save_evaluation_score`
+
+Applies hard-coded domain rules from property attributes:
+
+| Criterion | Scoring Rule |
+|---|---|
+| CRIT-021 Floor Level | Ground/1st=2, 2–5th=3, 6–10th=4, 11+=5, top floor−1 |
+| CRIT-022 Facing | East=5, North=4, West=3, South=2 |
+| CRIT-023 Property Age | 0–2y=5, 3–5y=4, 6–10y=3, 11–20y=2, 20+=1 |
+| CRIT-025 Power Backup | Boolean from property data |
+| CRIT-026–030 Society | 3/5 neutral default when data unavailable |
+
+Creates the draft `PropguruEvaluationReport`, returns `report_id`.
+
+#### Worker 2: `propguru-market-analyst`
+**Model**: GPT-4o | **Tools**: `propguru_get_market_comp`, `propguru_update_report`
+
+1. Fetches comp by exact `locality` match → fallback to broader area → fallback to ₹10,000/sqft + `confidence="low"`
+2. `base_price = avg_price_per_sqft × carpet_area_sqft`
+3. Writes `market_rate_per_sqft` and `base_price` onto the report
+
+#### Worker 3: `propguru-scorer`
+**Model**: GPT-4o | **Tools**: `propguru_get_criteria`, `propguru_save_evaluation_score`, `propguru_score_proximity`
+
+Proximity tool converts distance to score:
+- < 0.5 km = 5, 0.5–1 km = 4, 1–2 km = 3, 2–3 km = 2, > 3 km = 1
+
+Amenity criteria for independent houses scored 0 (no society amenities).
+
+#### Worker 4: `propguru-evaluator`
+**Model**: GPT-4o | **Tools**: `propguru_get_evaluation_report`, `propguru_get_evaluation_scores`, `propguru_calculate_price`, `propguru_propose_evaluation`
+
+Calls `propguru_calculate_price` (server-side computation via API), then creates `AgentAction` with `status="pending_review"`.
+
+**Price calculation** (server-side in `evaluation.py:calculate_price`):
+```python
+def normalize(score, scoring_type):
+    if scoring_type == "boolean":      return min(1.0, max(0.0, score))
+    if scoring_type == "scale_1_5":   return (score - 1.0) / 4.0
+    if scoring_type == "proximity_km": return score / 5.0
+
+score_factor      = Σ(weight × normalize(score)) / Σ(weight)
+price_premium_pct = score_factor × 0.35
+recommended_price = base_price × (1 + price_premium_pct)
+
+confidence = "high"   if scored_count ≥ 27 and score_factor ≥ 0.60
+           = "medium" if scored_count ≥ 21
+           = "low"    otherwise
+```
+
+This normalization formula must be identical in three places: `evaluation.py:calculate_price`, `pages.py` refine preview partial, and any future reporting logic.
 
 ---
 
-## 6. Tool Catalogue
+## 6. Evaluation Use Case — Quality Verification
 
-Parallel to `src/fde_agent/agent/tools/sandhar/`, create:
+### 6.1 Phase 1 — Code Grader (Deterministic)
+
+**File**: `src/fde_agent/agent/propguru_verifier.py`  
+**Cost**: Zero (no LLM calls)
+
+Five sequential checks:
+
+| Check | Threshold | Flag |
+|---|---|---|
+| Coverage | ≥ 28 of 30 criteria scored | `COVERAGE` |
+| Boolean validity | All boolean scores exactly 0.0 or 1.0 | `BOOLEAN_INVALID` |
+| Price sanity | `recommended_price` within ±50% of `base_price` | `PRICE_SANITY` |
+| Confidence calibration | `high` requires ≥27 scored AND score_factor ≥ 0.60 | `CONFIDENCE_MISMATCH` |
+| Category zero-out | Every category must have ≥1 non-zero score | `CATEGORY_ZERO` |
+
+On FAIL: structured feedback injected as `HumanMessage` → evaluator retried (up to 2).
+On max retries: escalate to analyst inbox with `GRADER_FLAGGED`.
+
+### 6.2 Phase 2 — Model Grader (LLM-as-judge)
+
+**Cost**: ~$0.001 per evaluation (GPT-4o-mini, 512 max tokens)
+
+Rubric (weighted average ≥ 6.0/10 to pass):
+
+| Criterion | Weight |
+|---|---|
+| reasoning_coherence | 0.35 |
+| price_justification | 0.35 |
+| market_alignment | 0.20 |
+| analyst_guidance | 0.10 |
+
+Uses OpenAI SDK directly (not LangChain) to avoid schema compatibility issues with `dict[str, Any]` return types.
+
+**Safety**: Any infrastructure error → `passed=True` with `MODEL_GRADER_INFRA_ERROR` flag. Reasoning text < 30 chars → skip grader with `MODEL_GRADER_NO_REASONING`. Pipeline never blocked by grader failures.
+
+On FAIL: model grader feedback injected → evaluator retried (up to 1). On max retries: escalate with `REASONING_FLAGGED`.
+
+### 6.3 Verifier Node Flow
+
 ```
-src/fde_agent/agent/tools/propguru/
-    __init__.py
-    deals.py        # deal + property read tools
-    evaluation.py   # scoring, pricing, proposal tools
-    evaluation_refiner.py   # refinement canvas tools
+__verifier__ called after propguru-evaluator:
+
+  Phase 1: run_propguru_code_grader(report_id)
+    FAIL + retries remaining  → dismiss action, reset report, inject feedback, → evaluator
+    FAIL + retries exhausted  → grader_verdict = "escalate" → supervisor (FINISH)
+    PASS                      → continue to Phase 2
+
+  Phase 2: run_propguru_model_grader(report_id, action_id)
+    FAIL + retries remaining  → dismiss action, reset report, inject feedback, → evaluator
+    FAIL + retries exhausted  → grader_verdict = "escalate" → supervisor (FINISH)
+    PASS                      → grader_verdict = "pass" → supervisor (FINISH)
 ```
-
-### 6.1 Data Tools (`deals.py`)
-| Tool | Description |
-|---|---|
-| `propguru_get_deal` | Returns deal + property details for a given deal_id |
-| `propguru_get_property_details` | Returns full property record (all columns) |
-| `propguru_list_deals` | Lists deals by stage, optionally filtered |
-
-### 6.2 Evaluation Tools (`evaluation.py`)
-| Tool | Description |
-|---|---|
-| `propguru_get_criteria` | Returns all 30 active evaluation criteria with weights |
-| `propguru_get_market_comp` | Returns market comp data for a locality + property_type |
-| `propguru_save_evaluation_score` | Saves one criterion score (criterion_id, score, raw_value, notes) |
-| `propguru_calculate_price` | Given report_id, reads all scores and computes score_factor + recommended_price; saves to report |
-| `propguru_propose_evaluation` | Creates AgentAction in platform HITL inbox with full evaluation display |
-| `propguru_create_evaluation_report` | Creates a new draft report for a deal |
-
-### 6.3 Refinement Tools (`evaluation_refiner.py`)
-| Tool | Description |
-|---|---|
-| `propguru_refine_get_evaluation` | Returns full evaluation report with all 30 scores |
-| `propguru_refine_update_score` | Updates a specific criterion score; re-calculates price |
-| `propguru_refine_explain_score` | Returns criteria details + current score + scoring bands for explanation |
-| `propguru_refine_update_final_price` | Sets final_price to an analyst-specified value with override note |
 
 ---
 
 ## 7. API Design
 
-All routes under `/api/v1/propguru/` prefix. Follows Sandhar route pattern.
+### 7.1 Authentication
 
+All endpoints: `X-API-Key: dev-secret-key-change-in-prod` (set via `API_KEY` env var).
+
+### 7.2 Platform API Routes
+
+```
+POST /api/v1/agents/{name}/activate    -- seed YAML config into DB + set is_active=true
+GET  /api/v1/agents                    -- list all registered agents
+POST /api/v1/agents/{name}/run         -- trigger a one-off agent run (queues Celery task)
+GET  /api/v1/agents/runs/{run_id}      -- get agent run status and output
+```
+
+### 7.3 Propguru Domain Routes
+
+**Master data:**
+```
+GET/POST        /api/v1/propguru/channel-partners
+GET/PATCH       /api/v1/propguru/channel-partners/{id}
+GET/POST        /api/v1/propguru/properties
+GET/PATCH       /api/v1/propguru/properties/{id}
+POST            /api/v1/propguru/simulation/seed
+POST            /api/v1/propguru/simulation/reset
+```
+
+**Deal pipeline:**
+```
+GET/POST        /api/v1/propguru/deals
+GET             /api/v1/propguru/deals/{id}
+PATCH           /api/v1/propguru/deals/{id}/stage
+```
+
+### 7.4 Evaluation Use Case Routes
+
+```
+POST   /api/v1/propguru/deals/{id}/evaluate          -- trigger evaluation pipeline
+GET    /api/v1/propguru/deals/{id}/evaluation         -- get latest report
+GET    /api/v1/propguru/evaluations/{report_id}       -- full report with scores
+GET    /api/v1/propguru/evaluations/{report_id}/scores  -- scores grouped by category
+POST   /api/v1/propguru/evaluations/{report_id}/calculate-price  -- (called by tool)
+POST   /api/v1/propguru/evaluations/{report_id}/grader-result    -- (called by verifier)
+PATCH  /api/v1/propguru/evaluations/{report_id}/approve
+PATCH  /api/v1/propguru/evaluations/{report_id}/reject
+```
+
+**Route files:**
 ```
 src/fde_agent/api/routes/propguru/
-    __init__.py
-    pages.py          # HTML pages
-    master.py         # CRUD for CPs, criteria, properties
-    deals.py          # Deal CRUD + stage transitions
-    evaluation.py     # Evaluation trigger + approval
-    simulation.py     # Seed + scenario endpoints
+  pages.py       -- HTML page routes (GET /propguru/*)
+  deals.py       -- Deal CRUD + evaluation trigger
+  evaluation.py  -- Score CRUD, price calculation, grader result, approve/reject
+  master.py      -- Properties, channel partners CRUD + PATCH
+  simulation.py  -- /simulation/seed + /simulation/reset
 ```
-
-### 7.1 Master Data Endpoints (`master.py`)
-| Method | Path | Description |
-|---|---|---|
-| GET | `/api/v1/propguru/channel-partners` | List all CPs |
-| POST | `/api/v1/propguru/channel-partners` | Create CP |
-| GET | `/api/v1/propguru/channel-partners/{id}` | Get CP |
-| GET | `/api/v1/propguru/evaluation-criteria` | List all 30 criteria |
-| GET | `/api/v1/propguru/properties` | List properties |
-| GET | `/api/v1/propguru/properties/{id}` | Property detail |
-
-### 7.2 Deal Endpoints (`deals.py`)
-| Method | Path | Description |
-|---|---|---|
-| GET | `/api/v1/propguru/deals` | List deals, filter by stage |
-| POST | `/api/v1/propguru/deals` | Create deal (registers CP + property) |
-| GET | `/api/v1/propguru/deals/{id}` | Deal detail with property + CP |
-| PATCH | `/api/v1/propguru/deals/{id}/stage` | Advance deal stage |
-
-### 7.3 Evaluation Endpoints (`evaluation.py`)
-| Method | Path | Description |
-|---|---|---|
-| POST | `/api/v1/propguru/deals/{id}/evaluate` | Trigger evaluation agent pipeline |
-| GET | `/api/v1/propguru/deals/{id}/evaluation` | Latest evaluation report |
-| GET | `/api/v1/propguru/evaluations/{report_id}` | Full report with all 30 scores |
-| GET | `/api/v1/propguru/evaluations/{report_id}/scores` | Scores grouped by category |
-| PATCH | `/api/v1/propguru/evaluations/{report_id}/approve` | Analyst approval (sets status → approved, target_acquisition_price on deal) |
-| PATCH | `/api/v1/propguru/evaluations/{report_id}/reject` | Reject → triggers re-evaluation |
-
-### 7.4 Simulation Endpoints (`simulation.py`)
-| Method | Path | Description |
-|---|---|---|
-| POST | `/api/v1/propguru/simulation/seed` | Seed all master data (idempotent) |
-| POST | `/api/v1/propguru/simulation/reset` | Delete all data and reseed |
-| GET | `/api/v1/propguru/simulation/scenarios` | List demo scenarios |
-| POST | `/api/v1/propguru/simulation/scenario/{id}` | Run a specific scenario |
 
 ---
 
-## 8. UI Pages
 
-```
-src/fde_agent/templates/propguru/
-    dashboard.html       # Pipeline overview: deal count by stage, recent evaluations
-    deals.html           # Deal list with stage badges + "Start Evaluation" button
-    evaluation.html      # Evaluation workspace: trigger + review + Refine with AI canvas
-    master.html          # CRUD tabs: Channel Partners, Evaluation Criteria, Properties
-    simulation.html      # Scenario cards + seed/reset controls
-    _refine_preview_propguru-evaluation.html   # Server-rendered partial for refinement canvas
-```
+## 8. Configuration and Deployment
 
-### Page Routes (`pages.py`)
-| Path | Template | Description |
-|---|---|---|
-| `/propguru` | `propguru/dashboard.html` | Command centre — deal pipeline funnel, recent evaluations |
-| `/propguru/deals` | `propguru/deals.html` | Deal list, stage filter, create deal form |
-| `/propguru/evaluation` | `propguru/evaluation.html` | Evaluation trigger + review workspace |
-| `/propguru/master` | `propguru/master.html` | CPs, criteria, properties CRUD |
-| `/propguru/simulation` | `propguru/simulation.html` | Seed + scenario panel |
-| `/propguru/evaluation/{report_id}/refine-preview` | partial | SSE canvas preview refresh |
+### 8.1 Environment Variables
 
-### Navigation
-Propguru pages appear as a separate nav section in the sidebar, parallel to Sandhar, following the same active_page pattern.
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | Async PostgreSQL (asyncpg — FastAPI) |
+| `DATABASE_URL_SYNC` | Sync PostgreSQL (psycopg2 — Celery worker) |
+| `REDIS_URL` | Redis connection |
+| `CELERY_BROKER_URL` | Redis channel for task queue |
+| `CELERY_RESULT_BACKEND` | Redis for task results |
+| `OPENAI_API_KEY` | Required for all agents using OpenAI provider |
+| `ANTHROPIC_API_KEY` | Required for agents using Anthropic provider |
+| `API_KEY` | Application API key (`X-API-Key` header) |
+| `LANGSMITH_API_KEY` | Optional — LangSmith tracing |
+| `AGENTS_CONFIG_DIR` | Path to `agents/configs/` directory |
 
----
-
-## 9. HITL + Refinement Design
-
-### 9.1 Evaluation Proposal (AgentAction)
-
-When `propguru-evaluator` completes its calculation, it calls `propguru_propose_evaluation` which creates an `AgentAction` with:
-
-```json
-{
-  "title": "Property Evaluation — PROP-001 (Whitefield 3BHK)",
-  "summary": "Recommended price ₹1.42 Cr — confidence: high — 26/30 criteria scored",
-  "confidence": "high",
-  "display_data": [
-    {"label": "Property", "value": "3BHK, 1250 sqft, Whitefield, Bengaluru"},
-    {"label": "Market Rate", "value": "₹9,200/sqft"},
-    {"label": "Base Price", "value": "₹1.15 Cr"},
-    {"label": "Score Factor", "value": "83% (strong amenities, good connectivity)"},
-    {"label": "Price Premium", "value": "+23.4%"},
-    {"label": "Recommended Price", "value": "₹1.42 Cr"},
-    {"label": "Criteria Scored", "value": "26/30 auto-scored, 4 need analyst review"}
-  ],
-  "tags": ["propguru", "evaluation", "high_confidence"],
-  "approval_action": {
-    "method": "PATCH",
-    "url": "/api/v1/propguru/evaluations/{report_id}/approve"
-  }
-}
-```
-
-The action shows in `/approvals` (generic inbox) and on `/propguru/evaluation`.
-
-### 9.2 Refinement Canvas (propguru-evaluation-refiner)
-
-Feature flag on `propguru-evaluator.yaml`:
-```yaml
-feature_flags:
-  enable_refinement: true
-  refinement_agent: "propguru-evaluation-refiner"
-  refinement_preview: "propguru-evaluation"
-```
-
-The preview partial (`_refine_preview_propguru-evaluation.html`) shows:
-- Recommended price prominently
-- Score factor bar
-- Top-5 criteria by weight with their scores and raw values
-- Category subtotals (Amenities / Location / Property / Society)
-- Final price (if analyst has set an override)
-
-**Example refinement turns:**
-```
-Analyst: "Why did swimming pool score so low?"
-Agent: [calls propguru_refine_explain_score] → "Swimming pool is present (score: 1.0/1.0, boolean type).
-        With weight 6, it contributed +0.33% to the premium. It is fully scored."
-
-Analyst: "The proximity to metro is wrong — it's actually 0.6 km not 2 km."
-Agent: [calls propguru_refine_update_score(criterion=CRIT-011, raw_value="0.6 km", score=4.0)]
-        → "Updated. Metro proximity now scores 4.0/5.0 (was 2.0). Recommended price updated:
-           ₹1.42 Cr → ₹1.47 Cr (+₹5 lakhs). Score factor: 83% → 86%."
-
-Analyst: "Looks good. Set the final price at ₹1.45 Cr."
-Agent: [calls propguru_refine_update_final_price(1_45_00_000)]
-        → "Final price set to ₹1.45 Cr. Reason recorded: analyst override — price positioned
-           between recommended and market ceiling."
-```
-
-Deep-link pattern identical to Sandhar: `?refine=<action_id>` in URL. "← Back to Evaluation" preserves the active refinement session.
-
-### 9.3 Approval Flow
-
-```
-Deal created → Stage: evaluation_pending
-    │
-    ▼
-Agent pipeline triggered → propguru_propose_evaluation → AgentAction in inbox
-    │
-    ▼
-Analyst opens /propguru/evaluation → reviews report + scores
-    │
-    ├── Option A: Approve directly → PATCH /evaluations/{id}/approve
-    │             → report status: approved
-    │             → deal stage: evaluation_done
-    │             → deal.target_acquisition_price = report.final_price
-    │
-    ├── Option B: Refine with AI → open canvas → adjust scores / final price → approve from canvas
-    │
-    └── Option C: Reject → deal stays at evaluation_pending → can re-trigger agent
-```
-
-### 9.4 Path to Full Automation
-
-The `human_in_the_loop` feature flag on `propguru-evaluator.yaml` controls the HITL step:
+### 8.2 \Services
 
 ```yaml
-feature_flags:
-  human_in_the_loop: true    # set to false for full automation
-```
-
-When `false`, `propguru_propose_evaluation` auto-approves the evaluation without creating an `AgentAction`. The deal stage advances automatically. This is a configuration change, not a code change.
-
----
-
-## 10. Simulation Scenarios
-
-### Seed Data
-**Channel Partners:** 8 CPs (4 sourcing, 4 distribution, 2 both)
-**Properties:** 10 pre-configured properties across 3 cities, 2 property types
-**Market Comps:** 5 localities with simulated market rates and 6-month trend data
-**Deals:** 5 pre-created deals in various stages for demo
-
-### Scenario Definitions
-| ID | Name | What It Sets Up |
-|---|---|---|
-| `s1-normal` | Normal Evaluation | Clean 3BHK apartment, all 30 data points available, good market data → high-confidence evaluation → agent proposes → analyst approves |
-| `s2-luxury` | Luxury Property | All 10 amenities present, metro < 0.5 km, IT park < 1 km → score factor ~95% → premium pricing → demonstrates high-end deal |
-| `s3-missing-data` | Incomplete Data | 8 criteria cannot be auto-scored (e.g., indoor games, water quality unknown) → medium confidence → analyst must fill gaps in canvas |
-| `s4-analyst-override` | Price Override | Agent recommends ₹1.2 Cr but analyst knows the seller expects ₹1.3 Cr; uses refinement canvas to document rationale and set final price |
-| `s5-market-drop` | Market Downturn | Market comp shows -8% price trend in last 6 months → base price lower → agent flags in reasoning → demonstrates constraint-aware pricing |
-
----
-
-## 11. DB Migration Plan
-
-Following the Sandhar numbering convention (which ends at 015):
-
-| Migration | File | Tables Created |
-|---|---|---|
-| 016 | `016_propguru_master.py` | `propguru_channel_partners`, `propguru_evaluation_criteria` |
-| 017 | `017_propguru_deals.py` | `propguru_properties`, `propguru_deals` |
-| 018 | `018_propguru_evaluation.py` | `propguru_evaluation_reports`, `propguru_evaluation_scores`, `propguru_market_comps` |
-
----
-
-## 12. File Structure
-
-```
-alembic/versions/
-  016_propguru_master.py
-  017_propguru_deals.py
-  018_propguru_evaluation.py
-
-agents/configs/
-  propguru-evaluation-supervisor.yaml
-  propguru-data-collector.yaml
-  propguru-market-analyst.yaml
-  propguru-scorer.yaml
-  propguru-evaluator.yaml
-  propguru-evaluation-refiner.yaml
-
-src/fde_agent/
-  db/models.py                               ← append Propguru models
-  agent/tools/propguru/
-    __init__.py
-    deals.py
-    evaluation.py
-    evaluation_refiner.py
-  agent/tools/__init__.py                    ← register propguru tools
-  api/routes/propguru/
-    __init__.py
-    pages.py
-    master.py
-    deals.py
-    evaluation.py
-    simulation.py
-  api/app.py                                 ← include propguru routers
-  templates/propguru/
-    dashboard.html
-    deals.html
-    evaluation.html
-    master.html
-    simulation.html
-    _refine_preview_propguru-evaluation.html
-
-tests/
-  test_propguru_evaluation.py
-  test_propguru_simulation.py
+services:
+  postgres:   # PostgreSQL 16 — persistent volume
+  redis:      # Redis 7 — broker + result backend
+  api:        # FastAPI (uvicorn) — port 8000, hot-reload via volume mount
+  worker:     # Celery worker — does NOT hot-reload; needs restart after code changes
+  jaeger:     # OpenTelemetry trace UI — port 16686
 ```
 
 ---
 
-## 13. Tests
-
-### `test_propguru_simulation.py`
-- Seed creates all channel partners, evaluation criteria (30), properties, market comps
-- Reset wipes and reseeds correctly
-- Each scenario endpoint returns 200 and expected payload fields
-- `s3-missing-data` scenario creates a deal with known-missing criteria
-
-### `test_propguru_evaluation.py`
-- Price formula: score_factor calculation with known inputs
-- `propguru_calculate_price` tool returns correct recommended_price
-- Proximity scoring bands produce correct score values
-- Boolean criteria scoring (present=1.0, absent=0.0)
-- PATCH `/evaluations/{id}/approve` sets deal.target_acquisition_price and advances stage
-- Agent action created by `propguru_propose_evaluation` has required display_data fields
-
----
-
-## 14. Navigation / Company Visibility
-
-The platform gates company-specific sidebar sections via the `COMPANIES_TO_SHOW` environment variable (already implemented in `settings.py` and `_templates.py`).
-
-### How it works (existing pattern)
-1. `settings.py` — `companies_to_show: str = "sandhar,fundly"` (default, from `.env`)
-2. `_templates.py` — parses the string into a list and injects it as a Jinja2 global: `templates.env.globals["companies"] = [...]`
-3. `base.html` — wraps each company nav section in a guard:
-   ```jinja2
-   {% if 'sandhar' in companies %}
-     <div class="sidebar-section"> ... Sandhar links ... </div>
-   {% endif %}
-   ```
-
-### What Propguru adds
-
-**`base.html`** — add a new guarded section after the Sandhar block:
-```jinja2
-{% if 'propguru' in companies %}
-<div class="sidebar-divider"></div>
-<div class="sidebar-section">
-  <div class="sidebar-section-label">Propguru</div>
-  <a href="/propguru" class="sidebar-link {% if active_page == 'propguru_dashboard' %}active{% endif %}">
-    <span class="icon">🏠</span> Dashboard
-  </a>
-  <a href="/propguru/deals" class="sidebar-link {% if active_page == 'propguru_deals' %}active{% endif %}">
-    <span class="icon">📋</span> Deals
-  </a>
-  <a href="/propguru/evaluation" class="sidebar-link {% if active_page == 'propguru_evaluation' %}active{% endif %}">
-    <span class="icon">🔍</span> Evaluation
-  </a>
-  <a href="/propguru/master" class="sidebar-link {% if active_page == 'propguru_master' %}active{% endif %}">
-    <span class="icon">🗂</span> Master Data
-  </a>
-  <a href="/propguru/simulation" class="sidebar-link {% if active_page == 'propguru_simulation' %}active{% endif %}">
-    <span class="icon">🎮</span> Simulation
-  </a>
-</div>
-{% endif %}
-```
-
-**`.env` / `settings.py` default** — update the default to include `propguru`:
-```
-COMPANIES_TO_SHOW=sandhar,fundly,propguru
-```
-
-No code change required — toggling Propguru's nav on/off is purely a config value.
-
-Each Propguru page route passes the correct `active_page` key to the template (e.g., `"propguru_dashboard"`, `"propguru_deals"`, `"propguru_evaluation"`, `"propguru_master"`, `"propguru_simulation"`), following the same pattern as `sandhar_pages.py`.
-
----
-
-## 15. Implementation Phases
-
-Dependencies drive the order: database models must exist before tools can query them; tools must be registered before YAML agents can use them; agents must work before the UI has anything meaningful to show; the refinement canvas depends on all of the above being stable.
-
----
-
-### Phase 1 — Data Foundation
-**Goal:** The database exists, master data is browsable, seed/reset works. No agents yet.
-
-**Why first:** Every subsequent piece — tools, agents, UI — depends on the DB schema and seed data being in place. Phase 1 can be independently verified by browsing the master data page and running the seed endpoint.
-
-| Task | Files |
-|---|---|
-| DB migrations 016, 017, 018 | `alembic/versions/016_propguru_master.py` `017_propguru_deals.py` `018_propguru_evaluation.py` |
-| ORM models | Append all 7 Propguru models to `src/fde_agent/db/models.py` |
-| Simulation seed + reset endpoints | `src/fde_agent/api/routes/propguru/simulation.py` |
-| Master data API routes | `src/fde_agent/api/routes/propguru/master.py` (CPs, criteria, properties) |
-| Navigation — `base.html` Propguru block | `src/fde_agent/templates/base.html` |
-| `settings.py` default update | `companies_to_show` default → `"sandhar,fundly,propguru"` |
-| Master Data UI page | `src/fde_agent/templates/propguru/master.html` |
-| Simulation UI page | `src/fde_agent/templates/propguru/simulation.html` |
-| Page routes for master + simulation | `src/fde_agent/api/routes/propguru/pages.py` |
-| Register propguru routers in app | `src/fde_agent/api/app.py` |
-
-**Verification:** Run `POST /api/v1/propguru/simulation/seed` → visit `/propguru/master` → all 30 criteria, 8 channel partners, 10 properties are visible. Propguru section appears in sidebar when `COMPANIES_TO_SHOW` includes `propguru`.
-
----
-
-### Phase 2 — Agent Pipeline + Deal Flow
-**Goal:** Create a deal, trigger the evaluation agent pipeline, review the output, approve it. Full HITL flow end-to-end. No refinement canvas yet.
-
-**Why second:** Agent tools call the deal and evaluation API endpoints, so those routes must exist. The supervisor + 4 worker agents then use those tools. The UI surfaces the results.
-
-| Task | Files |
-|---|---|
-| Deal API routes (CRUD + stage transitions) | `src/fde_agent/api/routes/propguru/deals.py` |
-| Evaluation API routes (trigger, get report, scores, approve, reject) | `src/fde_agent/api/routes/propguru/evaluation.py` |
-| Agent tools — deals | `src/fde_agent/agent/tools/propguru/deals.py` (`propguru_get_deal`, `propguru_get_property_details`, `propguru_list_deals`) |
-| Agent tools — evaluation | `src/fde_agent/agent/tools/propguru/evaluation.py` (`propguru_get_criteria`, `propguru_get_market_comp`, `propguru_save_evaluation_score`, `propguru_calculate_price`, `propguru_propose_evaluation`, `propguru_create_evaluation_report`) |
-| Register propguru tools in tool registry | `src/fde_agent/agent/tools/__init__.py` |
-| Agent YAML configs — 5 agents | `propguru-evaluation-supervisor.yaml` `propguru-data-collector.yaml` `propguru-market-analyst.yaml` `propguru-scorer.yaml` `propguru-evaluator.yaml` |
-| Deals UI page | `src/fde_agent/templates/propguru/deals.html` |
-| Evaluation UI page (trigger + review + approve/reject, no canvas) | `src/fde_agent/templates/propguru/evaluation.html` |
-| Dashboard UI page | `src/fde_agent/templates/propguru/dashboard.html` |
-| Page routes for dashboard, deals, evaluation | `src/fde_agent/api/routes/propguru/pages.py` (extend from Phase 1) |
-| Scenarios s1-normal, s2-luxury, s3-missing-data, s5-market-drop | `src/fde_agent/api/routes/propguru/simulation.py` (extend from Phase 1) |
-
-**Verification:** Trigger scenario s1-normal → seed a deal → click "Start Evaluation" → watch agent pipeline progress → evaluation report appears with 30 scores and a recommended price → click Approve → deal stage advances to `evaluation_done` → `target_acquisition_price` set on the deal.
-
----
-
-### Phase 3 — Refinement Canvas + Tests
-**Goal:** Analyst can open a conversational canvas on any pending evaluation, adjust individual scores through chat, set a final price override, and approve from within the canvas. Full test coverage.
-
-**Why last:** The refinement canvas depends on the evaluation agent and HITL action both being stable (Phase 2). The refiner tools call the same evaluation endpoints added in Phase 2 — no new API routes needed.
-
-| Task | Files |
-|---|---|
-| Refinement tools | `src/fde_agent/agent/tools/propguru/evaluation_refiner.py` (`propguru_refine_get_evaluation`, `propguru_refine_update_score`, `propguru_refine_explain_score`, `propguru_refine_update_final_price`) |
-| Register refinement tools | `src/fde_agent/agent/tools/__init__.py` |
-| Refinement agent YAML | `agents/configs/propguru-evaluation-refiner.yaml` |
-| Feature flags on evaluator YAML | `enable_refinement: true`, `refinement_agent: propguru-evaluation-refiner`, `refinement_preview: propguru-evaluation` |
-| Preview partial template | `src/fde_agent/templates/propguru/_refine_preview_propguru-evaluation.html` |
-| Preview server route | `src/fde_agent/api/routes/propguru/pages.py` — `GET /propguru/evaluation/{report_id}/refine-preview` |
-| Refinement canvas UI (SSE chat, deep-link, Back button) | `src/fde_agent/templates/propguru/evaluation.html` (extend from Phase 2) |
-| Scenario s4-analyst-override | `src/fde_agent/api/routes/propguru/simulation.py` |
-| Test suite | `tests/test_propguru_evaluation.py` `tests/test_propguru_simulation.py` |
-
-**Verification:** Open any `pending_review` evaluation → click "✦ Refine with AI" → canvas opens with score breakdown on the left and chat on the right → type "Metro station is only 0.6 km" → agent updates CRIT-011 score → recommended price updates in preview → click Approve → session saved, deal approved. URL contains `?refine=<action_id>`. Browser Back closes the canvas without ending the session.
-
----
-
-### Dependency Summary
-
-```
-Phase 1 ──► Phase 2 ──► Phase 3
-  │              │            │
-  DB models      Tools        Refiner tools
-  Migrations     Agents       Refiner YAML
-  Seed data      Routes       Canvas UI
-  Master UI      Deal UI      Preview partial
-  Nav change     Eval UI      Tests
-                 Dashboard
-```
-
-Nothing in Phase 2 can start until migrations and the seed function are working (Phase 1). Nothing in Phase 3 can start until the base evaluation pipeline produces a valid `AgentAction` in the inbox (Phase 2). Each phase is independently demonstrable before the next begins.
-
----
-
-## 16. Implementation Considerations
-
-1. **No custom scoring algorithm in code.** The formula (`score_factor × max_premium`) is stored in constants. Weights are in the DB (editable per criteria record). This keeps the "trade secret" aspect configurable without code changes.
-
-2. **Market data is simulated.** In production, this would call housing.com or similar APIs. For the POC, `propguru_market_comps` is seeded with realistic but fabricated data. The tool `propguru_get_market_comp` queries this table — the integration layer is a future concern.
-
-3. **Criteria are soft-coded.** The 30 data points are DB records, not code. Propguru can add/remove/reweight criteria from the master UI without a deployment.
-
-4. **Follows Sandhar patterns exactly.** No new platform patterns introduced. The HITL, refinement canvas, AgentAction mechanics, Celery execution, YAML config loading, and `companies_to_show` nav gating all reuse existing platform code.
-
-5. **`companies` field in YAML.** All propguru YAMLs declare `companies: [propguru]` to allow future company-scoped filtering on the agents page.
