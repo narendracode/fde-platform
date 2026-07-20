@@ -1,194 +1,85 @@
-# AI Agent Platform — LangFlow POC
+# Project
 
-## Project Overview
+Multi-domain AI agent platform POC. Architecture: **Platform Core → Domain → Use Case**.
 
-Multi-domain AI agent platform POC. Domains currently implemented:
-- **Propguru** — Real-estate deal evaluation with 4-agent AI pipeline and HITL refinement
-- **Sandhar** — Manufacturing shift planning (separate agent chain)
-- **Pharma / Fundly** — Order dispatch and email marketing demos
+- **Platform Core** — LangGraph react agents, Celery task queue, HITL workflow, tool registry, model-agnostic LLM factory
+- **Domains** — Propguru (real-estate), Sandhar (manufacturing), Pharma/Fundly (demos)
+- **Use Cases** — Propguru: property acquisition evaluation (4-agent pipeline, 30-criteria scoring, refinement canvas)
 
-App runs at `http://localhost:8000`. API docs at `/docs`.
+Stack: FastAPI + SQLAlchemy (async) + PostgreSQL + Redis + Celery | Jinja2 + HTMX-style partials | `uv` | Docker Compose
 
-## Tech Stack
+App: `http://localhost:8000` — API docs: `/docs` — Default API key: `dev-secret-key-change-in-prod`
 
-- **Backend**: FastAPI + SQLAlchemy (async) + PostgreSQL + Redis
-- **AI**: LangGraph react agents, LangChain tools, Anthropic Claude models
-- **Templates**: Jinja2 HTML (server-rendered pages + HTMX-style partial responses)
-- **Task queue**: Celery workers (background evaluations)
-- **Package manager**: `uv` (not pip/poetry)
-- **Container**: Docker Compose (`make up`)
+# Goals
 
-## Running the Project
+Build a modular, model-agnostic, tool-agnostic agent platform where new use cases can be added by:
+1. Creating domain DB tables + SQLAlchemy models
+2. Writing LangChain tools in `src/fde_agent/agent/tools/<domain>/`
+3. Registering tools in `_TOOL_REGISTRY` (`tools/__init__.py`)
+4. Writing agent YAML manifests in `agents/configs/`
+5. Adding FastAPI routes + Jinja2 templates
+
+Platform core (LangGraph, Celery, HITL, verification loop) is never touched per use case.
+
+Propguru evaluation pipeline is the **reference implementation** for the platform pattern, not the product itself.
+
+# Commands
 
 ```bash
-make up          # Start all services (Docker). Builds and runs api + worker + postgres + redis
-make migrate     # Run Alembic migrations (run after first up)
-make seed        # Seed agent configs into DB
+make up          # Build + start all services (api, worker, postgres, redis, mysql, jaeger, adminer)
+make migrate     # Run Alembic migrations
+make seed        # Seed agent configs into DB (also runs automatically on every `make up`)
 
-# Propguru-specific reset (wipes + reseeds evaluation tables)
+# Propguru: reset + reseed evaluation data (wipes reports + scores, keeps HITL history)
 curl -s -X POST http://localhost:8000/api/v1/propguru/simulation/reset \
   -H "X-API-Key: dev-secret-key-change-in-prod" | python3 -m json.tool
-
 curl -s -X POST http://localhost:8000/api/v1/propguru/simulation/seed \
   -H "X-API-Key: dev-secret-key-change-in-prod" | python3 -m json.tool
-```
 
-Default API key: `dev-secret-key-change-in-prod` (set via `API_KEY` env var or `.env`).
-
-## Project Structure
-
-```
-src/fde_agent/
-  api/
-    routes/
-      propguru/
-        pages.py          # HTML page routes (GET /propguru/*)
-        deals.py          # Deal CRUD + evaluation trigger
-        evaluation.py     # Score CRUD + price calculation
-        master.py         # Properties, channel partners CRUD + PATCH
-        simulation.py     # /simulation/seed + /simulation/reset
-      actions.py          # HITL approve/reject/refine endpoints
-  agent/
-    tools/propguru/       # LangGraph tool definitions (data-collector, scorer, etc.)
-  db/
-    models.py             # SQLAlchemy ORM models
-    session.py            # get_session dependency
-  templates/propguru/
-    evaluation.html       # Main evaluation page with URL deep-linking + refine canvas
-    deals.html            # Deals pipeline table
-    master.html           # Properties + channel partners management
-    _refine_preview_propguru-evaluation.html  # Server-rendered partial for canvas left pane
-  config/settings.py      # App settings (API key, DB URL, model names)
-
-agents/configs/           # YAML manifests for each agent
-  propguru-data-collector.yaml
-  propguru-market-analyst.yaml
-  propguru-scorer.yaml
-  propguru-evaluator.yaml
-  propguru-evaluation-refiner.yaml
-  propguru-evaluation-supervisor.yaml
-```
-
-## Propguru Domain
-
-### Deal Lifecycle
-
-```
-lead → evaluation_pending → evaluation_done → listed → sold
-```
-
-Seeded deals (DEAL-001 to DEAL-005) always start in `lead` stage so the full pipeline can be demoed.
-
-### Evaluation Pipeline (4 agents)
-
-1. **data-collector** — Gathers property facts from DB
-2. **market-analyst** — Fetches market comps, calculates base price per sqft
-3. **scorer** — Scores all 30 criteria for the property
-4. **evaluator** — Computes final price, confidence, reasoning
-
-Triggered via: `POST /api/v1/propguru/deals/{deal_id}/evaluate`
-
-### Evaluation Criteria
-
-30 criteria across 4 categories: `amenity`, `location`, `property`, `society`
-
-Three scoring types:
-| Type | Stored value | Normalization to [0,1] |
-|------|-------------|------------------------|
-| `boolean` | **0.0 or 1.0 only** | `min(1, max(0, score))` |
-| `scale_1_5` | 1.0 – 5.0 | `(score - 1) / 4` |
-| `proximity_km` | 0.0 – 5.0 | `score / 5` |
-
-**Critical**: The API (`evaluation.py:_validate_score`) rejects boolean scores that are not exactly `0.0` or `1.0` with HTTP 422. Agents that try to store `3.0` for a boolean criterion will get an error — this was an intentional fix to prevent >100% category scores.
-
-### Score Display (UI)
-
-- `boolean` → rendered as `✓ Yes` / `✗ No` badges (green/grey pill)
-- `scale_1_5` / `proximity_km` → rendered as `N / 5` with a progress bar
-
-### DB Tables (Propguru)
-
-```
-propguru_channel_partners
-propguru_evaluation_criteria
-propguru_properties
-propguru_deals
-propguru_evaluation_reports     (one per deal per evaluation run; version increments on refinement)
-propguru_evaluation_scores      (one row per criterion per report)
-propguru_market_comps
-```
-
-`agent_actions` and `propguru_refine_sessions` tables are NOT cleared by `/simulation/reset` — they persist for audit/HITL history.
-
-### Seeded Data
-
-- 10 properties (PROP-001 to PROP-010) — real Indian apartment addresses in Bengaluru, Pune, Hyderabad, Mumbai, Chennai
-- 5 deals (DEAL-001 to DEAL-005) — all start in `lead` stage
-- 2 channel partners (CP-001, CP-002)
-
-## URL State Machine (evaluation.html)
-
-Three URL states:
-```
-/propguru/evaluation              → deal list, nothing selected
-/propguru/evaluation?deal_id=X    → deal selected, report visible, scrolled to report
-/propguru/evaluation?deal_id=X&refine=1  → refine canvas open
-```
-
-- `history.pushState` on opening deal/canvas (creates back-button entry)
-- `history.replaceState` on closing canvas (no extra history entry)
-- `popstate` event handles all three states on browser back/forward
-- On page load, `loadDeals()` reads URL params and auto-selects deal / opens canvas
-
-## API Conventions
-
-- All routes use `async/await` with `AsyncSession` from `get_session` dependency
-- Auth: `Depends(verify_api_key)` — reads `X-API-Key` header
-- `PATCH` endpoints use Pydantic models with `model_dump(exclude_none=True)` for partial updates
-- Lookup by UUID or code: try `uuid.UUID(id_or_code)` first, fall back to code field
-- Score fetch in update endpoints: always fetch the criterion BEFORE writing the score (needed for validation)
-
-## Agent Config Pattern
-
-Agent manifests live in `agents/configs/*.yaml`. To activate an agent:
-```bash
-curl -s -X POST http://localhost:8000/api/v1/agents/{agent-name}/activate \
-  -H "X-API-Key: dev-secret-key-change-in-prod"
-```
-
-The propguru evaluation supervisor activates its sub-agents automatically.
-
-## Important Constraints
-
-1. **`/simulation/reset` wipes evaluation data** — Do not call this carelessly if you need to preserve existing evaluation reports or refinement history.
-2. **Boolean scores are strictly 0 or 1** — Any other value will cause >100% category totals and is rejected at the API layer.
-3. **Normalization must match in all three places** — `evaluation.py:calculate_price`, `pages.py` (refine preview partial), and any future display logic must all use the same per-type normalization formula.
-4. **`await` chains in JS** — `selectDeal()` and `renderReport()` are async. Missing `await` causes race conditions where `scrollIntoView` or canvas open fires before the report is rendered.
-5. **`uv` not pip** — Always use `uv run python` or `uv run pytest` inside the container.
-
-## Common curl Commands
-
-```bash
-API=http://localhost:8000
-KEY="dev-secret-key-change-in-prod"
-
-# List all deals
-curl -s "$API/api/v1/propguru/deals" -H "X-API-Key: $KEY" | python3 -m json.tool
+# Activate evaluation supervisor (also activates sub-agents)
+curl -s -X POST http://localhost:8000/api/v1/agents/propguru-evaluation-supervisor/activate \
+  -H "X-API-Key: dev-secret-key-change-in-prod" | python3 -m json.tool
 
 # Trigger evaluation for a deal
-curl -s -X POST "$API/api/v1/propguru/deals/{deal_id}/evaluate" \
-  -H "X-API-Key: $KEY" | python3 -m json.tool
+curl -s -X POST "http://localhost:8000/api/v1/propguru/deals/{deal_id}/evaluate" \
+  -H "X-API-Key: dev-secret-key-change-in-prod" | python3 -m json.tool
 
-# Activate propguru evaluation supervisor
-curl -s -X POST "$API/api/v1/agents/propguru-evaluation-supervisor/activate" \
-  -H "X-API-Key: $KEY" | python3 -m json.tool
+# List deals
+curl -s http://localhost:8000/api/v1/propguru/deals \
+  -H "X-API-Key: dev-secret-key-change-in-prod" | python3 -m json.tool
 
-# Reset + reseed Propguru data
-curl -s -X POST "$API/api/v1/propguru/simulation/reset" -H "X-API-Key: $KEY"
-curl -s -X POST "$API/api/v1/propguru/simulation/seed"  -H "X-API-Key: $KEY"
-
-# Update a property address
-curl -s -X PATCH "$API/api/v1/propguru/properties/{property_id_or_code}" \
-  -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
+# PATCH a property
+curl -s -X PATCH "http://localhost:8000/api/v1/propguru/properties/{id_or_code}" \
+  -H "X-API-Key: dev-secret-key-change-in-prod" -H "Content-Type: application/json" \
   -d '{"address_line1": "New Address", "locality": "Koramangala"}'
 ```
+
+Run Python/tests inside container: `uv run python ...` / `uv run pytest ...`
+
+# Code Style / Conventions
+
+- **Async everywhere** — all routes use `async/await` with `AsyncSession` from `get_session` dependency
+- **`uv` not pip** — never use `pip install` or `poetry`; always `uv run` inside container
+- **PATCH pattern** — Pydantic model + `model_dump(exclude_none=True)` for partial updates; never overwrite unset fields
+- **ID lookup** — try `uuid.UUID(id_or_code)` first, fall back to code field (e.g. `DEAL-001`)
+- **Score write** — always fetch the criterion row BEFORE writing a score (validation requires criterion type)
+- **Agents** — YAML manifests in `agents/configs/`. Loaded fresh from disk on every task run. DB `agents` table is metadata only.
+- **Tools** — registered in `_TOOL_REGISTRY` dict in `tools/__init__.py` at process start. Never stored in DB.
+- **Async vs sync agent runs** — `POST /run/async` + `run_agent_task.delay()` for all domain pipelines (Celery). `POST /run` (sync) blocks the HTTP thread and is unused in production.
+- **Refinement** runs synchronously inside the HTTP request as a streaming SSE response — not via Celery.
+
+@docs/propguru-prd.md
+@docs/propguru-system-design.md
+
+# Hard stops
+
+1. **Boolean scores are strictly `0.0` or `1.0`** — `evaluation.py:_validate_score` rejects anything else with HTTP 422. Storing `3.0` for a boolean criterion causes >100% category scores.
+2. **`/simulation/reset` wipes evaluation data** — drops all `propguru_evaluation_reports` and `propguru_evaluation_scores` rows. `agent_actions` and `propguru_refine_sessions` are preserved.
+3. **Normalization must match in all three places** — `evaluation.py:calculate_price`, `pages.py` refine preview partial, and any future display logic must use the same formula per scoring type (`boolean`: clamp 0–1, `scale_1_5`: `(s-1)/4`, `proximity_km`: `s/5`).
+4. **`await` chains in JS** — `selectDeal()` and `renderReport()` are async. Missing `await` causes race conditions where `scrollIntoView` or canvas open fires before the report renders.
+
+# Known gotchas / issues
+
+- **Celery worker doesn't hot-reload** — code changes to tools or agent task logic require `make up` (container restart), not just saving the file.
+- **OpenAI structured output** — requires `method="function_calling"` in `with_structured_output()`; the default JSON mode fails for complex nested schemas.
+- **Deal stuck in `evaluation_pending`** — if a Celery task crashes mid-run, the deal stage is not rolled back automatically. Reset via `/simulation/reset` + `/simulation/seed` or manually patch the deal stage.
