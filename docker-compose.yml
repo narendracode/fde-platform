@@ -138,6 +138,27 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      MYSQL_USER: ${MYSQL_USER:-fde}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-fdepass}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-fde_dev}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./crm.sql:/docker-entrypoint-initdb.d/crm.sql:ro
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-rootpass}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   redis_data:
+  mysql_data:
