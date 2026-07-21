@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /Users/narendra/Projects/AI/langflow-poc/.claude/hooks/post-edit-lint.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /Users/narendra/Projects/AI/langflow-poc/.claude/hooks/stop-restart.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
