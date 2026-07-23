@@ -4,8 +4,8 @@ help:
 	@echo "Agent Platform"
 	@echo ""
 	@echo "  ── Infrastructure ────────────────────────────────────"
-	@echo "  make up            Start all services (Docker, foreground)
-  make upd           Start all services (Docker, daemon / background)"
+	@echo "  make up            Start all services (Docker, foreground)"
+	@echo "  make upd           Start all services (Docker, daemon / background)"
 	@echo "  make down          Stop all services"
 	@echo "  make logs          Tail logs for all services"
 	@echo ""
