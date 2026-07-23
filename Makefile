@@ -1,10 +1,11 @@
-.PHONY: help up down logs migrate seed seed-orders dashboard ci-deploy launch-agent lint test shell-api shell-worker
+.PHONY: help up upd down logs migrate seed seed-orders dashboard ci-deploy launch-agent lint test shell-api shell-worker
 
 help:
 	@echo "Agent Platform"
 	@echo ""
 	@echo "  ── Infrastructure ────────────────────────────────────"
-	@echo "  make up            Start all services (Docker)"
+	@echo "  make up            Start all services (Docker, foreground)
+  make upd           Start all services (Docker, daemon / background)"
 	@echo "  make down          Stop all services"
 	@echo "  make logs          Tail logs for all services"
 	@echo ""
@@ -44,6 +45,17 @@ up:
 	@echo "✓ Agent API    → http://localhost:8000/docs"
 	@echo "✓ Jaeger UI    → http://localhost:16686"
 	@echo "✓ Adminer      → http://localhost:8080"
+
+upd:
+	cp -n .env.example .env 2>/dev/null || true
+	chmod +x scripts/start_api.sh scripts/start_worker.sh
+	docker compose up --build -d
+	@echo ""
+	@echo "✓ Agent API    → http://localhost:8000/docs"
+	@echo "✓ Jaeger UI    → http://localhost:16686"
+	@echo "✓ Adminer      → http://localhost:8080"
+	@echo ""
+	@echo "  Tip: run 'make logs' to tail all service logs"
 
 down:
 	docker compose down
