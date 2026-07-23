@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block title %}Stores — AI Memory{% endblock %}
+
+{% block head_extra %}
+<style>
+  .page-header {
+    background: #fff; border-bottom: 1px solid #e5e7eb;
+    padding: 20px 32px; display: flex; align-items: center; justify-content: space-between;
+  }
+  .page-header h1 { font-size: 20px; font-weight: 700; color: #111827; }
+  .page-header p { font-size: 13px; color: #6b7280; margin-top: 2px; }
+  .content { padding: 28px 32px; }
+
+  .stores-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px; margin-bottom: 32px;
+  }
+  .store-card {
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+    padding: 20px; text-decoration: none; color: inherit;
+    transition: box-shadow .15s, border-color .15s; display: block;
+  }
+  .store-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.08); border-color: #a5b4fc; }
+  .store-card-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+  .store-icon { font-size: 28px; line-height: 1; }
+  .store-name { font-size: 15px; font-weight: 700; color: #111827; }
+  .store-slug { font-size: 11px; color: #6b7280; font-family: monospace; margin-top: 2px; }
+  .store-desc { font-size: 12px; color: #6b7280; line-height: 1.5; margin-bottom: 12px; }
+  .store-meta { display: flex; gap: 12px; flex-wrap: wrap; }
+  .store-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600;
+  }
+  .badge-company { background: #ede9fe; color: #5b21b6; }
+  .badge-active { background: #dcfce7; color: #166534; }
+  .badge-inactive { background: #fee2e2; color: #991b1b; }
+  .badge-docs { background: #f0f9ff; color: #0369a1; }
+  .badge-chunks { background: #f5f3ff; color: #5b21b6; }
+
+  .btn-primary {
+    background: #6366f1; color: #fff; border: none; border-radius: 8px;
+    padding: 9px 18px; font-size: 13px; font-weight: 600; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn-primary:hover { background: #4f46e5; }
+
+  /* Modal */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5);
+    z-index: 1000; align-items: center; justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: #fff; border-radius: 12px; padding: 28px; width: 480px;
+    max-width: 95vw; box-shadow: 0 20px 60px rgba(0,0,0,.2);
+  }
+  .modal h2 { font-size: 17px; font-weight: 700; margin-bottom: 20px; }
+  .form-row { margin-bottom: 16px; }
+  .form-row label { display: block; font-size: 12px; font-weight: 600; color: #374151; margin-bottom: 5px; }
+  .form-row input, .form-row select, .form-row textarea {
+    width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 7px;
+    font-size: 13px; color: #111827;
+  }
+  .form-row textarea { resize: vertical; min-height: 70px; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+  .btn-outline {
+    background: #fff; color: #374151; border: 1px solid #d1d5db; border-radius: 8px;
+    padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .btn-outline:hover { background: #f9fafb; }
+
+  .empty-state { text-align: center; padding: 60px 20px; color: #9ca3af; }
+  .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>🧠 Stores</h1>
+    <p>Platform-level knowledge bases powering semantic memory for AI agents</p>
+  </div>
+  <button class="btn-primary" onclick="openCreateModal()">+ New Store</button>
+</div>
+
+<div class="content">
+  {% if stores %}
+  <div class="stores-grid">
+    {% for s in stores %}
+    <a href="/stores/{{ s.slug }}" class="store-card">
+      <div class="store-card-header">
+        <div class="store-icon">🗂</div>
+        <div>
+          <div class="store-name">{{ s.name }}</div>
+          <div class="store-slug">{{ s.slug }}</div>
+        </div>
+      </div>
+      {% if s.description %}
+      <div class="store-desc">{{ s.description }}</div>
+      {% endif %}
+      <div class="store-meta">
+        <span class="store-badge badge-company">{{ s.company }}</span>
+        <span class="store-badge {% if s.is_active %}badge-active{% else %}badge-inactive{% endif %}">
+          {% if s.is_active %}active{% else %}inactive{% endif %}
+        </span>
+        <span class="store-badge badge-docs">{{ s.doc_count }} docs</span>
+        <span class="store-badge badge-chunks">{{ s.chunk_count }} chunks</span>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="icon">🧠</div>
+    <div style="font-size:15px;font-weight:600;color:#374151;margin-bottom:6px">No stores yet</div>
+    <div>Create a knowledge base store and upload documents for your agents to query.</div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Create Store Modal -->
+<div class="modal-overlay" id="create-modal">
+  <div class="modal">
+    <h2>New Store</h2>
+    <div class="form-row">
+      <label>Slug (unique identifier)</label>
+      <input id="new-slug" type="text" placeholder="vastu-shastra" />
+    </div>
+    <div class="form-row">
+      <label>Name</label>
+      <input id="new-name" type="text" placeholder="Vastu Shastra Knowledge Base" />
+    </div>
+    <div class="form-row">
+      <label>Description</label>
+      <textarea id="new-desc" placeholder="Rules and principles for Vastu Shastra property evaluation."></textarea>
+    </div>
+    <div class="form-row">
+      <label>Company</label>
+      <select id="new-company">
+        <option value="propguru">propguru</option>
+        <option value="sandhar">sandhar</option>
+        <option value="fundly">fundly</option>
+        <option value="platform">platform</option>
+      </select>
+    </div>
+    <div class="form-row">
+      <label>Embedding Model</label>
+      <select id="new-model">
+        <option value="text-embedding-3-small">text-embedding-3-small (1536-dim, fast)</option>
+        <option value="text-embedding-3-large">text-embedding-3-large (3072-dim, best)</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-outline" onclick="closeCreateModal()">Cancel</button>
+      <button class="btn-primary" onclick="createStore()">Create Store</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API_KEY = 'dev-secret-key-change-in-prod';
+
+function openCreateModal() {
+  document.getElementById('create-modal').classList.add('open');
+}
+function closeCreateModal() {
+  document.getElementById('create-modal').classList.remove('open');
+}
+
+async function createStore() {
+  const slug = document.getElementById('new-slug').value.trim();
+  const name = document.getElementById('new-name').value.trim();
+  if (!slug || !name) { alert('Slug and name are required.'); return; }
+
+  const resp = await fetch('/api/v1/stores', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+    body: JSON.stringify({
+      slug,
+      name,
+      description: document.getElementById('new-desc').value.trim() || null,
+      company: document.getElementById('new-company').value,
+      embedding_model: document.getElementById('new-model').value,
+    }),
+  });
+  if (resp.ok) {
+    window.location.href = '/stores/' + slug;
+  } else {
+    const err = await resp.json();
+    alert('Error: ' + (err.detail || JSON.stringify(err)));
+  }
+}
+
+document.getElementById('create-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeCreateModal();
+});
+</script>
+{% endblock %}

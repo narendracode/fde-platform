@@ -1,0 +1,92 @@
+agent:
+  name: propguru-vastu-scorer
+  type: react
+  description: >
+    Scores CRIT-031 (Vastu Compliance) for a property by querying the vastu-shastra
+    knowledge base and applying Vastu Shastra principles to the property's attributes.
+    Produces a 1-5 scale score with detailed reasoning.
+  version: "1.0.0"
+  companies: [propguru]
+
+  model:
+    provider: openai
+    name: gpt-4o
+    temperature: 0.0
+    max_tokens: 1024
+    max_cost_usd: 0.10
+
+  tools:
+    - name: query_semantic_store
+      enabled: true
+    - name: propguru_save_evaluation_score
+      enabled: true
+
+  system_prompt: |
+    You are a Vastu Shastra expert scoring property compliance for a real estate evaluation.
+
+    Your task: Score CRIT-031 (Vastu Compliance) for the property on a scale_1_5 scoring type.
+
+    Score meaning:
+      5 = Highly Vastu compliant (North/East/NE facing entrance, auspicious room layout, excellent energy flow)
+      4 = Good Vastu compliance (mostly auspicious directions with minor issues)
+      3 = Neutral (mixed Vastu indicators, no major doshas, no strong benefits)
+      2 = Some Vastu doshas present (unfavourable directions or layout issues)
+      1 = Significant Vastu doshas (South/SW facing entrance, major energy blockages)
+
+    [Runtime context] provides: report_id, facing, property_type, bedrooms, latitude, longitude.
+
+    Workflow (follow EXACTLY):
+    1. Compose a targeted query from the property's facing direction and type.
+       Example: "North-East facing apartment Vastu compliance entrance main door"
+    2. Call query_semantic_store with store_slug="vastu-shastra" and your query.
+    3. If results are returned, use them to evaluate Vastu compliance.
+       If no results (store empty), apply standard Vastu principles:
+         - North: 4 | North-East: 5 | East: 4 | North-West: 3
+         - West: 3 | South-East: 2 | South: 2 | South-West: 1
+    4. Factor in property_type:
+       - apartment: apply facing direction rules strictly
+       - independent_house: also consider plot shape and entrance gate direction
+    5. Call propguru_save_evaluation_score with:
+         report_id = (from runtime context)
+         criterion_code = "CRIT-031"
+         score = (your 1.0-5.0 score as a float, e.g. 4.0)
+         raw_value = (e.g. "North-East facing, Vastu compliant")
+         notes = (2-3 sentence reasoning citing specific Vastu principles)
+
+    Always assign a score — never skip CRIT-031.
+    Use the exact report_id from [Runtime context]; do not generate or guess this value.
+
+  memory:
+    stores:
+      - slug: vastu-shastra
+        type: semantic
+        top_k: 5
+        score_threshold: 0.70
+
+  inputs:
+    report_id:
+      type: string
+      required: true
+      description: "UUID of the evaluation report to score"
+    facing:
+      type: string
+      required: false
+      description: "Property facing direction (e.g. 'north', 'east', 'south-west')"
+    property_type:
+      type: string
+      required: false
+      description: "apartment | independent_house"
+    bedrooms:
+      type: integer
+      required: false
+      description: "Number of bedrooms"
+
+  guardrails:
+    max_iterations: 6
+    timeout_seconds: 120
+
+  observability:
+    langsmith_tracing: true
+    log_inputs: true
+    log_outputs: true
+    log_tool_calls: false

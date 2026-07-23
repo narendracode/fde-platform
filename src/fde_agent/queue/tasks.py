@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from fde_agent.agent.react_agent import run_agent
 from fde_agent.config.loader import load_agent_config
 from fde_agent.config.settings import settings
-from fde_agent.db.models import AgentRun, PropguruDeal
+from fde_agent.db.models import AgentRun, MemoryChunk, MemoryDocument, PropguruDeal
 from fde_agent.queue.celery_app import celery_app
 
 logger = get_task_logger(__name__)
@@ -101,3 +101,80 @@ def run_agent_task(
                             deal.stage = "lead"
                 session.commit()
         raise self.retry(exc=exc)
+
+
+@celery_app.task(
+    name="fde_agent.queue.tasks.embed_document_task",
+    bind=True,
+    max_retries=2,
+    default_retry_delay=30,
+)
+def embed_document_task(
+    self,
+    document_id: str,
+    store_id: str,
+    chunk_size: int = 512,
+    chunk_overlap: int = 64,
+    embedding_model: str = "text-embedding-3-small",
+) -> dict:
+    """Chunk and embed an approved memory document, writing vectors to memory_chunks."""
+    with _get_sync_session() as session:
+        doc: MemoryDocument | None = session.get(MemoryDocument, uuid.UUID(document_id))
+        if doc is None:
+            raise ValueError(f"MemoryDocument {document_id} not found")
+        if not doc.raw_content:
+            return {"status": "skipped", "reason": "no content"}
+
+        # Delete existing chunks (re-indexing support)
+        session.query(MemoryChunk).filter(MemoryChunk.document_id == doc.id).delete()
+        session.commit()
+
+        # Chunk text (~4 chars per token)
+        char_size = chunk_size * 4
+        char_overlap = chunk_overlap * 4
+        text = doc.raw_content
+        raw_chunks: list[str] = []
+        start = 0
+        while start < len(text):
+            end = min(start + char_size, len(text))
+            chunk = text[start:end].strip()
+            if chunk:
+                raw_chunks.append(chunk)
+            if end == len(text):
+                break
+            start = end - char_overlap
+
+        if not raw_chunks:
+            return {"status": "skipped", "reason": "no chunks produced"}
+
+        # Embed all chunks in one API call (batch)
+        try:
+            from openai import OpenAI
+            oai = OpenAI()
+            emb_resp = oai.embeddings.create(
+                model=embedding_model,
+                input=raw_chunks,
+            )
+            embeddings = [item.embedding for item in sorted(emb_resp.data, key=lambda x: x.index)]
+        except Exception as exc:
+            logger.exception("Embedding API failed for document %s: %s", document_id, exc)
+            raise self.retry(exc=exc)
+
+        # Insert chunks with embeddings
+        for idx, (chunk_text, embedding) in enumerate(zip(raw_chunks, embeddings)):
+            chunk = MemoryChunk(
+                document_id=doc.id,
+                store_id=uuid.UUID(store_id),
+                chunk_index=idx,
+                content=chunk_text,
+                token_count=len(chunk_text) // 4,
+                embedding=embedding,
+            )
+            session.add(chunk)
+        session.commit()
+
+        logger.info(
+            "Embedded document %s: %d chunks written to store %s",
+            document_id, len(raw_chunks), store_id,
+        )
+        return {"status": "completed", "chunks_written": len(raw_chunks)}

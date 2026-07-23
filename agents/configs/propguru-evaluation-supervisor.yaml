@@ -2,9 +2,9 @@ agent:
   name: propguru-evaluation-supervisor
   type: supervisor
   description: >
-    Orchestrates the Propguru property evaluation pipeline. Calls four specialist
+    Orchestrates the Propguru property evaluation pipeline. Calls specialist
     workers in sequence to collect property data, fetch market comps, score all
-    30 criteria, then compute and propose the recommended acquisition price.
+    31 criteria (including Vastu), then compute and propose the recommended acquisition price.
   version: "1.0.0"
   companies: [propguru]
 
@@ -14,14 +14,19 @@ agent:
         Scores LOCATION connectivity criteria (CRIT-011 to CRIT-020) using locality
         knowledge and propguru_score_proximity. All other criteria (AMENITY, PROPERTY,
         SOCIETY) are pre-scored by the pre-evaluate API before this pipeline starts. Call FIRST.
+    - agent: propguru-vastu-scorer
+      description: >
+        Scores CRIT-031 (Vastu Compliance) on a 1-5 scale by querying the vastu-shastra
+        knowledge base and applying Vastu Shastra principles to the property's facing direction
+        and type. Call SECOND, after propguru-scorer.
     - agent: propguru-evaluator
       description: >
-        Reads all saved scores, calls propguru_calculate_price to compute
+        Reads all saved scores (including CRIT-031 Vastu), calls propguru_calculate_price to compute
         score_factor and recommended_price, determines confidence, and
         proposes the evaluation for analyst review via HITL. Call LAST.
 
   routing:
-    max_rounds: 10
+    max_rounds: 15
 
   model:
     provider: openai
@@ -41,8 +46,9 @@ agent:
     - Set market_rate_per_sqft and base_price from the market comp database
 
     Call workers in this EXACT sequence:
-    1. propguru-scorer    — Scores LOCATION criteria (CRIT-011..020) using locality + coordinates from context
-    2. propguru-evaluator — Calculates price from all scores and proposes to HITL
+    1. propguru-scorer       — Scores LOCATION criteria (CRIT-011..020) using locality + coordinates from context
+    2. propguru-vastu-scorer — Scores CRIT-031 (Vastu Compliance) using the vastu-shastra knowledge base
+    3. propguru-evaluator    — Calculates price from all scores (including Vastu) and proposes to HITL
 
     report_id, deal_id, locality, city, latitude, longitude are automatically injected into every worker from [Runtime context].
     You do NOT need to pass them via context — they are already available to each worker.

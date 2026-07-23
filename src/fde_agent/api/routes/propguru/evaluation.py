@@ -1,13 +1,14 @@
 """Propguru evaluation report endpoints — get, scores, approve, reject."""
+
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select, desc
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fde_agent.api.dependencies import verify_api_key
@@ -30,6 +31,7 @@ MAX_PREMIUM_PCT = 0.35  # 35% maximum premium
 
 
 # ── Serializers ────────────────────────────────────────────────────────────────
+
 
 def _report_out(r: PropguruEvaluationReport) -> dict[str, Any]:
     return {
@@ -56,7 +58,9 @@ def _report_out(r: PropguruEvaluationReport) -> dict[str, Any]:
     }
 
 
-def _score_out(s: PropguruEvaluationScore, criterion: PropguruEvaluationCriteria | None = None) -> dict[str, Any]:
+def _score_out(
+    s: PropguruEvaluationScore, criterion: PropguruEvaluationCriteria | None = None
+) -> dict[str, Any]:
     entry: dict = {
         "id": str(s.id),
         "report_id": str(s.report_id),
@@ -81,6 +85,7 @@ def _score_out(s: PropguruEvaluationScore, criterion: PropguruEvaluationCriteria
 
 # ── Score validation ───────────────────────────────────────────────────────────
 
+
 def _validate_score(score: float, scoring_type: str, code: str = "") -> None:
     """Raise 422 if score is outside the valid range for the criterion type."""
     loc = f" for {code}" if code else ""
@@ -89,7 +94,7 @@ def _validate_score(score: float, scoring_type: str, code: str = "") -> None:
             raise HTTPException(
                 status_code=422,
                 detail=f"Boolean criterion{loc} requires 0 (absent) or 1 (present), got {score}. "
-                       f"Do not use a scale — this is a yes/no field.",
+                f"Do not use a scale — this is a yes/no field.",
             )
     elif scoring_type in ("scale_1_5", "proximity_km"):
         if not (1.0 <= score <= 5.0):
@@ -100,6 +105,7 @@ def _validate_score(score: float, scoring_type: str, code: str = "") -> None:
 
 
 # ── Pydantic schemas ───────────────────────────────────────────────────────────
+
 
 class ApproveRequest(BaseModel):
     final_price: float | None = None
@@ -152,6 +158,7 @@ class SetBasePriceRequest(BaseModel):
 
 # ── Report endpoints ───────────────────────────────────────────────────────────
 
+
 @router.post("/evaluations", status_code=201)
 async def create_evaluation_report(
     req: CreateReportRequest,
@@ -161,9 +168,13 @@ async def create_evaluation_report(
     """Create a new draft evaluation report for a deal."""
     try:
         did = uuid.UUID(req.deal_id)
-        deal = (await session.execute(select(PropguruDeal).where(PropguruDeal.id == did))).scalar_one_or_none()
+        deal = (
+            await session.execute(select(PropguruDeal).where(PropguruDeal.id == did))
+        ).scalar_one_or_none()
     except ValueError:
-        deal = (await session.execute(select(PropguruDeal).where(PropguruDeal.deal_code == req.deal_id))).scalar_one_or_none()
+        deal = (
+            await session.execute(select(PropguruDeal).where(PropguruDeal.deal_code == req.deal_id))
+        ).scalar_one_or_none()
     if not deal:
         raise HTTPException(status_code=404, detail=f"Deal '{req.deal_id}' not found")
 
@@ -193,28 +204,44 @@ async def pre_evaluate(
     # ── Resolve deal + property ────────────────────────────────────────────────
     try:
         uid = uuid.UUID(deal_id)
-        deal = (await session.execute(select(PropguruDeal).where(PropguruDeal.id == uid))).scalar_one_or_none()
+        deal = (
+            await session.execute(select(PropguruDeal).where(PropguruDeal.id == uid))
+        ).scalar_one_or_none()
     except ValueError:
-        deal = (await session.execute(select(PropguruDeal).where(PropguruDeal.deal_code == deal_id))).scalar_one_or_none()
+        deal = (
+            await session.execute(select(PropguruDeal).where(PropguruDeal.deal_code == deal_id))
+        ).scalar_one_or_none()
     if not deal:
         raise HTTPException(status_code=404, detail=f"Deal '{deal_id}' not found")
 
-    prop = (await session.execute(
-        select(PropguruProperty).where(PropguruProperty.id == deal.property_id)
-    )).scalar_one_or_none()
+    prop = (
+        await session.execute(
+            select(PropguruProperty).where(PropguruProperty.id == deal.property_id)
+        )
+    ).scalar_one_or_none()
     if not prop:
         raise HTTPException(status_code=404, detail="Property not found for this deal")
 
     # ── Fetch all active criteria keyed by criterion_code ─────────────────────
-    all_criteria = (await session.execute(
-        select(PropguruEvaluationCriteria).where(PropguruEvaluationCriteria.is_active == True)
-    )).scalars().all()
+    all_criteria = (
+        (
+            await session.execute(
+                select(PropguruEvaluationCriteria).where(
+                    PropguruEvaluationCriteria.is_active == True
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
     criteria_by_code = {c.criterion_code: c for c in all_criteria}
 
     # ── Market comp lookup ─────────────────────────────────────────────────────
-    comp = (await session.execute(
-        select(PropguruMarketComp).where(PropguruMarketComp.locality == prop.locality)
-    )).scalar_one_or_none()
+    comp = (
+        await session.execute(
+            select(PropguruMarketComp).where(PropguruMarketComp.locality == prop.locality)
+        )
+    ).scalar_one_or_none()
 
     fallback_used = False
     if comp:
@@ -251,20 +278,24 @@ async def pre_evaluate(
         if not crit:
             return
         _validate_score(score, crit.scoring_type, code)
-        session.add(PropguruEvaluationScore(
-            report_id=report.id,
-            criterion_id=crit.id,
-            score=score,
-            raw_value=raw,
-            source="agent",
-            notes=notes,
-        ))
+        session.add(
+            PropguruEvaluationScore(
+                report_id=report.id,
+                criterion_id=crit.id,
+                score=score,
+                raw_value=raw,
+                source="agent",
+                notes=notes,
+            )
+        )
         scored.append({"code": code, "score": score})
 
     # ── PROPERTY criteria (CRIT-021 to CRIT-025) ──────────────────────────────
     # CRIT-021 Floor Level
     if is_house:
-        await _save("CRIT-021", 3.0, "independent_house", "N/A for independent house — neutral default")
+        await _save(
+            "CRIT-021", 3.0, "independent_house", "N/A for independent house — neutral default"
+        )
     else:
         fn = prop.floor_number or 0
         tf = prop.total_floors or 0
@@ -281,9 +312,21 @@ async def pre_evaluate(
         await _save("CRIT-021", floor_score, f"floor {fn} of {tf}", f"Rule-based: floor {fn}/{tf}")
 
     # CRIT-022 Facing
-    facing_map = {"east": 5.0, "north": 4.0, "north_east": 3.0, "northeast": 3.0, "west": 3.0, "south": 2.0}
+    facing_map = {
+        "east": 5.0,
+        "north": 4.0,
+        "north_east": 3.0,
+        "northeast": 3.0,
+        "west": 3.0,
+        "south": 2.0,
+    }
     facing_score = facing_map.get((prop.facing or "").lower(), 3.0)
-    await _save("CRIT-022", facing_score, prop.facing or "unknown", f"Facing {prop.facing} → score {facing_score}")
+    await _save(
+        "CRIT-022",
+        facing_score,
+        prop.facing or "unknown",
+        f"Facing {prop.facing} → score {facing_score}",
+    )
 
     # CRIT-023 Property Age
     age = prop.building_age_years or 0
@@ -303,7 +346,12 @@ async def pre_evaluate(
     await _save("CRIT-024", 3.0, "unknown", "No parking data in property record — neutral default")
 
     # CRIT-025 Power Backup — no power backup data in property record
-    await _save("CRIT-025", 0.0, "unknown", "No power backup data in property record — conservative default 0")
+    await _save(
+        "CRIT-025",
+        0.0,
+        "unknown",
+        "No power backup data in property record — conservative default 0",
+    )
 
     # ── SOCIETY criteria (CRIT-026 to CRIT-030) ───────────────────────────────
     if is_house:
@@ -358,7 +406,7 @@ async def pre_evaluate(
         "pre_scored_criteria": [s["code"] for s in scored],
         "market_summary": market_summary,
         "message": f"Pre-evaluation complete: {len(scored)} criteria scored deterministically. "
-                   f"Scorer agent to handle CRIT-011 to CRIT-020 (location).",
+        f"Scorer agent to handle CRIT-011 to CRIT-020 (location).",
     }
 
 
@@ -371,18 +419,24 @@ async def get_latest_evaluation(
     """Get the most recent evaluation report for a deal."""
     try:
         uid = uuid.UUID(deal_id)
-        deal = (await session.execute(select(PropguruDeal).where(PropguruDeal.id == uid))).scalar_one_or_none()
+        deal = (
+            await session.execute(select(PropguruDeal).where(PropguruDeal.id == uid))
+        ).scalar_one_or_none()
     except ValueError:
-        deal = (await session.execute(select(PropguruDeal).where(PropguruDeal.deal_code == deal_id))).scalar_one_or_none()
+        deal = (
+            await session.execute(select(PropguruDeal).where(PropguruDeal.deal_code == deal_id))
+        ).scalar_one_or_none()
     if not deal:
         raise HTTPException(status_code=404, detail=f"Deal '{deal_id}' not found")
 
-    report = (await session.execute(
-        select(PropguruEvaluationReport)
-        .where(PropguruEvaluationReport.deal_id == deal.id)
-        .order_by(desc(PropguruEvaluationReport.created_at))
-        .limit(1)
-    )).scalar_one_or_none()
+    report = (
+        await session.execute(
+            select(PropguruEvaluationReport)
+            .where(PropguruEvaluationReport.deal_id == deal.id)
+            .order_by(desc(PropguruEvaluationReport.created_at))
+            .limit(1)
+        )
+    ).scalar_one_or_none()
     if not report:
         raise HTTPException(status_code=404, detail="No evaluation report found for this deal")
     return _report_out(report)
@@ -399,9 +453,11 @@ async def get_evaluation_report(
         rid = uuid.UUID(report_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid report_id")
-    report = (await session.execute(
-        select(PropguruEvaluationReport).where(PropguruEvaluationReport.id == rid)
-    )).scalar_one_or_none()
+    report = (
+        await session.execute(
+            select(PropguruEvaluationReport).where(PropguruEvaluationReport.id == rid)
+        )
+    ).scalar_one_or_none()
     if not report:
         raise HTTPException(status_code=404, detail=f"Evaluation report '{report_id}' not found")
     return _report_out(report)
@@ -413,32 +469,44 @@ async def get_evaluation_scores(
     session: AsyncSession = Depends(get_session),
     _: str = Depends(verify_api_key),
 ):
-    """Get all 30 scores for a report, grouped by category."""
+    """Get all scores for a report, grouped by category."""
     try:
         rid = uuid.UUID(report_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid report_id")
 
-    report = (await session.execute(
-        select(PropguruEvaluationReport).where(PropguruEvaluationReport.id == rid)
-    )).scalar_one_or_none()
+    report = (
+        await session.execute(
+            select(PropguruEvaluationReport).where(PropguruEvaluationReport.id == rid)
+        )
+    ).scalar_one_or_none()
     if not report:
         raise HTTPException(status_code=404, detail=f"Report '{report_id}' not found")
 
-    scores = (await session.execute(
-        select(PropguruEvaluationScore).where(PropguruEvaluationScore.report_id == rid)
-    )).scalars().all()
+    scores = (
+        (
+            await session.execute(
+                select(PropguruEvaluationScore).where(PropguruEvaluationScore.report_id == rid)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     # Enrich each score with criterion info
     enriched = []
     for s in scores:
-        crit = (await session.execute(
-            select(PropguruEvaluationCriteria).where(PropguruEvaluationCriteria.id == s.criterion_id)
-        )).scalar_one_or_none()
+        crit = (
+            await session.execute(
+                select(PropguruEvaluationCriteria).where(
+                    PropguruEvaluationCriteria.id == s.criterion_id
+                )
+            )
+        ).scalar_one_or_none()
         enriched.append(_score_out(s, crit))
 
-    # Group by category
-    categories = ["amenity", "location", "property", "society"]
+    # Group by category — order determines display order in the UI
+    categories = ["amenity", "location", "property", "society", "vastu"]
     grouped = {cat: [] for cat in categories}
     for item in enriched:
         cat = (item.get("criterion") or {}).get("category", "")
@@ -459,6 +527,7 @@ async def get_evaluation_scores(
 
 # ── Score write endpoints (used by agents + refinement) ───────────────────────
 
+
 @router.post("/evaluations/{report_id}/scores", status_code=201)
 async def save_evaluation_score(
     report_id: str,
@@ -472,43 +541,53 @@ async def save_evaluation_score(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid report_id")
 
-    report = (await session.execute(
-        select(PropguruEvaluationReport).where(PropguruEvaluationReport.id == rid)
-    )).scalar_one_or_none()
+    report = (
+        await session.execute(
+            select(PropguruEvaluationReport).where(PropguruEvaluationReport.id == rid)
+        )
+    ).scalar_one_or_none()
     if not report:
         raise HTTPException(status_code=404, detail=f"Report '{report_id}' not found")
 
     try:
         cid = uuid.UUID(req.criterion_id)
     except ValueError:
-        crit_lookup = (await session.execute(
-            select(PropguruEvaluationCriteria).where(PropguruEvaluationCriteria.criterion_code == req.criterion_id)
-        )).scalar_one_or_none()
+        crit_lookup = (
+            await session.execute(
+                select(PropguruEvaluationCriteria).where(
+                    PropguruEvaluationCriteria.criterion_code == req.criterion_id
+                )
+            )
+        ).scalar_one_or_none()
         if not crit_lookup:
             raise HTTPException(status_code=404, detail=f"Criterion '{req.criterion_id}' not found")
         cid = crit_lookup.id
 
     # Validate score against criterion type before writing
-    crit = (await session.execute(
-        select(PropguruEvaluationCriteria).where(PropguruEvaluationCriteria.id == cid)
-    )).scalar_one_or_none()
+    crit = (
+        await session.execute(
+            select(PropguruEvaluationCriteria).where(PropguruEvaluationCriteria.id == cid)
+        )
+    ).scalar_one_or_none()
     if crit:
         _validate_score(req.score, crit.scoring_type, crit.criterion_code)
 
     # Upsert: update existing score if present
-    existing = (await session.execute(
-        select(PropguruEvaluationScore).where(
-            PropguruEvaluationScore.report_id == rid,
-            PropguruEvaluationScore.criterion_id == cid,
+    existing = (
+        await session.execute(
+            select(PropguruEvaluationScore).where(
+                PropguruEvaluationScore.report_id == rid,
+                PropguruEvaluationScore.criterion_id == cid,
+            )
         )
-    )).scalar_one_or_none()
+    ).scalar_one_or_none()
 
     if existing:
         existing.score = req.score
         existing.raw_value = req.raw_value
         existing.source = req.source
         existing.notes = req.notes
-        existing.updated_at = datetime.now(timezone.utc)
+        existing.updated_at = datetime.now(UTC)
         await session.commit()
         await session.refresh(existing)
         return _score_out(existing)
@@ -542,19 +621,25 @@ async def update_score(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid report_id or score_id")
 
-    score = (await session.execute(
-        select(PropguruEvaluationScore).where(
-            PropguruEvaluationScore.id == sid,
-            PropguruEvaluationScore.report_id == rid,
+    score = (
+        await session.execute(
+            select(PropguruEvaluationScore).where(
+                PropguruEvaluationScore.id == sid,
+                PropguruEvaluationScore.report_id == rid,
+            )
         )
-    )).scalar_one_or_none()
+    ).scalar_one_or_none()
     if not score:
         raise HTTPException(status_code=404, detail="Score not found")
 
     # Validate before writing
-    crit = (await session.execute(
-        select(PropguruEvaluationCriteria).where(PropguruEvaluationCriteria.id == score.criterion_id)
-    )).scalar_one_or_none()
+    crit = (
+        await session.execute(
+            select(PropguruEvaluationCriteria).where(
+                PropguruEvaluationCriteria.id == score.criterion_id
+            )
+        )
+    ).scalar_one_or_none()
     if crit:
         _validate_score(req.score, crit.scoring_type, crit.criterion_code)
 
@@ -564,13 +649,14 @@ async def update_score(
     score.source = req.source
     if req.notes:
         score.notes = req.notes
-    score.updated_at = datetime.now(timezone.utc)
+    score.updated_at = datetime.now(UTC)
     await session.commit()
     await session.refresh(score)
     return _score_out(score, crit)
 
 
 # ── Price calculation ──────────────────────────────────────────────────────────
+
 
 @router.post("/evaluations/{report_id}/calculate-price")
 async def calculate_price(
@@ -584,26 +670,41 @@ async def calculate_price(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid report_id")
 
-    report = (await session.execute(
-        select(PropguruEvaluationReport).where(PropguruEvaluationReport.id == rid)
-    )).scalar_one_or_none()
+    report = (
+        await session.execute(
+            select(PropguruEvaluationReport).where(PropguruEvaluationReport.id == rid)
+        )
+    ).scalar_one_or_none()
     if not report:
         raise HTTPException(status_code=404, detail=f"Report '{report_id}' not found")
 
-    scores = (await session.execute(
-        select(PropguruEvaluationScore).where(PropguruEvaluationScore.report_id == rid)
-    )).scalars().all()
+    scores = (
+        (
+            await session.execute(
+                select(PropguruEvaluationScore).where(PropguruEvaluationScore.report_id == rid)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     if not scores:
-        raise HTTPException(status_code=422, detail="No scores saved yet. Save at least one score before calculating price.")
+        raise HTTPException(
+            status_code=422,
+            detail="No scores saved yet. Save at least one score before calculating price.",
+        )
 
     # Fetch criteria weights
     weighted_sum = 0.0
     total_weight = 0.0
     for s in scores:
-        crit = (await session.execute(
-            select(PropguruEvaluationCriteria).where(PropguruEvaluationCriteria.id == s.criterion_id)
-        )).scalar_one_or_none()
+        crit = (
+            await session.execute(
+                select(PropguruEvaluationCriteria).where(
+                    PropguruEvaluationCriteria.id == s.criterion_id
+                )
+            )
+        ).scalar_one_or_none()
         if crit:
             # Normalize score to 0-1 range; clamp defensively against out-of-range agent values
             if crit.scoring_type == "boolean":
@@ -624,9 +725,17 @@ async def calculate_price(
     recommended_price = base_price * (1 + price_premium_pct) if base_price > 0 else 0.0
 
     # Determine confidence based on coverage
-    all_criteria_count = (await session.execute(
-        select(PropguruEvaluationCriteria).where(PropguruEvaluationCriteria.is_active == True)
-    )).scalars().all()
+    all_criteria_count = (
+        (
+            await session.execute(
+                select(PropguruEvaluationCriteria).where(
+                    PropguruEvaluationCriteria.is_active == True
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
     total_criteria = len(all_criteria_count)
     scored_count = len(scores)
     coverage = scored_count / total_criteria if total_criteria > 0 else 0.0
@@ -642,7 +751,7 @@ async def calculate_price(
     report.price_premium_pct = round(price_premium_pct * 100, 2)
     report.recommended_price = round(recommended_price, 2)
     report.confidence = confidence
-    report.updated_at = datetime.now(timezone.utc)
+    report.updated_at = datetime.now(UTC)
     await session.commit()
     await session.refresh(report)
 
@@ -661,6 +770,7 @@ async def calculate_price(
 
 # ── Approve / Reject ───────────────────────────────────────────────────────────
 
+
 @router.patch("/evaluations/{report_id}/approve")
 async def approve_evaluation(
     report_id: str,
@@ -674,16 +784,18 @@ async def approve_evaluation(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid report_id")
 
-    report = (await session.execute(
-        select(PropguruEvaluationReport).where(PropguruEvaluationReport.id == rid)
-    )).scalar_one_or_none()
+    report = (
+        await session.execute(
+            select(PropguruEvaluationReport).where(PropguruEvaluationReport.id == rid)
+        )
+    ).scalar_one_or_none()
     if not report:
         raise HTTPException(status_code=404, detail=f"Report '{report_id}' not found")
 
     if report.status == "approved":
         raise HTTPException(status_code=409, detail="Report is already approved")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     report.status = "approved"
     report.final_price = req.final_price or report.recommended_price
     report.analyst_notes = req.analyst_notes
@@ -692,9 +804,9 @@ async def approve_evaluation(
     report.updated_at = now
 
     # Advance deal stage and set acquisition price
-    deal = (await session.execute(
-        select(PropguruDeal).where(PropguruDeal.id == report.deal_id)
-    )).scalar_one_or_none()
+    deal = (
+        await session.execute(select(PropguruDeal).where(PropguruDeal.id == report.deal_id))
+    ).scalar_one_or_none()
     if deal:
         deal.stage = "evaluation_done"
         deal.target_acquisition_price = report.final_price
@@ -702,11 +814,17 @@ async def approve_evaluation(
 
     # Mark any pending AgentAction pointing to this approval URL as approved
     action_url = f"/api/v1/propguru/evaluations/{report_id}/approve"
-    pending_actions = (await session.execute(
-        select(AgentAction)
-        .where(AgentAction.status == "pending_review")
-        .where(AgentAction.approval_action["url"].astext == action_url)
-    )).scalars().all()
+    pending_actions = (
+        (
+            await session.execute(
+                select(AgentAction)
+                .where(AgentAction.status == "pending_review")
+                .where(AgentAction.approval_action["url"].astext == action_url)
+            )
+        )
+        .scalars()
+        .all()
+    )
     for action in pending_actions:
         action.status = "approved"
         action.decided_at = now
@@ -738,30 +856,38 @@ async def reject_evaluation(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid report_id")
 
-    report = (await session.execute(
-        select(PropguruEvaluationReport).where(PropguruEvaluationReport.id == rid)
-    )).scalar_one_or_none()
+    report = (
+        await session.execute(
+            select(PropguruEvaluationReport).where(PropguruEvaluationReport.id == rid)
+        )
+    ).scalar_one_or_none()
     if not report:
         raise HTTPException(status_code=404, detail=f"Report '{report_id}' not found")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     report.status = "rejected"
     report.analyst_notes = req.reason
     report.updated_at = now
 
     # Reset deal to lead so the analyst can trigger a fresh evaluation
-    deal = (await session.execute(
-        select(PropguruDeal).where(PropguruDeal.id == report.deal_id)
-    )).scalar_one_or_none()
+    deal = (
+        await session.execute(select(PropguruDeal).where(PropguruDeal.id == report.deal_id))
+    ).scalar_one_or_none()
     if deal and deal.stage == "evaluation_pending":
         deal.stage = "lead"
         deal.updated_at = now
 
     await session.commit()
-    return {"report_id": report_id, "status": "rejected", "deal_stage": deal.stage if deal else None, "reason": req.reason}
+    return {
+        "report_id": report_id,
+        "status": "rejected",
+        "deal_stage": deal.stage if deal else None,
+        "reason": req.reason,
+    }
 
 
 # ── Final price override ───────────────────────────────────────────────────────
+
 
 @router.patch("/evaluations/{report_id}/base-price")
 async def set_base_price(
@@ -776,15 +902,17 @@ async def set_base_price(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid report_id")
 
-    report = (await session.execute(
-        select(PropguruEvaluationReport).where(PropguruEvaluationReport.id == rid)
-    )).scalar_one_or_none()
+    report = (
+        await session.execute(
+            select(PropguruEvaluationReport).where(PropguruEvaluationReport.id == rid)
+        )
+    ).scalar_one_or_none()
     if not report:
         raise HTTPException(status_code=404, detail=f"Report '{report_id}' not found")
 
     report.market_rate_per_sqft = req.market_rate_per_sqft
     report.base_price = req.base_price
-    report.updated_at = datetime.now(timezone.utc)
+    report.updated_at = datetime.now(UTC)
     await session.commit()
     await session.refresh(report)
     return _report_out(report)
@@ -803,16 +931,18 @@ async def update_final_price(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid report_id")
 
-    report = (await session.execute(
-        select(PropguruEvaluationReport).where(PropguruEvaluationReport.id == rid)
-    )).scalar_one_or_none()
+    report = (
+        await session.execute(
+            select(PropguruEvaluationReport).where(PropguruEvaluationReport.id == rid)
+        )
+    ).scalar_one_or_none()
     if not report:
         raise HTTPException(status_code=404, detail=f"Report '{report_id}' not found")
 
     report.final_price = req.final_price
     if req.analyst_notes:
         report.analyst_notes = req.analyst_notes
-    report.updated_at = datetime.now(timezone.utc)
+    report.updated_at = datetime.now(UTC)
     await session.commit()
     await session.refresh(report)
     return _report_out(report)
@@ -837,9 +967,11 @@ async def update_report_status(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid report_id")
 
-    report = (await session.execute(
-        select(PropguruEvaluationReport).where(PropguruEvaluationReport.id == rid)
-    )).scalar_one_or_none()
+    report = (
+        await session.execute(
+            select(PropguruEvaluationReport).where(PropguruEvaluationReport.id == rid)
+        )
+    ).scalar_one_or_none()
     if not report:
         raise HTTPException(status_code=404, detail=f"Report '{report_id}' not found")
 
@@ -869,9 +1001,11 @@ async def trigger_refinement(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid report_id")
 
-    report = (await session.execute(
-        select(PropguruEvaluationReport).where(PropguruEvaluationReport.id == rid)
-    )).scalar_one_or_none()
+    report = (
+        await session.execute(
+            select(PropguruEvaluationReport).where(PropguruEvaluationReport.id == rid)
+        )
+    ).scalar_one_or_none()
     if not report:
         raise HTTPException(status_code=404, detail=f"Report '{report_id}' not found")
 
@@ -912,6 +1046,7 @@ async def trigger_refinement(
 
     try:
         from fde_agent.queue.tasks import run_agent_task
+
         run_agent_task.delay(
             str(run.id),
             "propguru-evaluation-refiner",
@@ -946,19 +1081,23 @@ async def get_evaluation_action(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid report_id")
 
-    report = (await session.execute(
-        select(PropguruEvaluationReport).where(PropguruEvaluationReport.id == rid)
-    )).scalar_one_or_none()
+    report = (
+        await session.execute(
+            select(PropguruEvaluationReport).where(PropguruEvaluationReport.id == rid)
+        )
+    ).scalar_one_or_none()
     if not report:
         raise HTTPException(status_code=404, detail=f"Report '{report_id}' not found")
 
-    action = (await session.execute(
-        select(AgentAction)
-        .where(AgentAction.approval_action["url_params"]["report_id"].as_string() == report_id)
-        .where(AgentAction.status == "pending_review")
-        .order_by(desc(AgentAction.created_at))
-        .limit(1)
-    )).scalar_one_or_none()
+    action = (
+        await session.execute(
+            select(AgentAction)
+            .where(AgentAction.approval_action["url_params"]["report_id"].as_string() == report_id)
+            .where(AgentAction.status == "pending_review")
+            .order_by(desc(AgentAction.created_at))
+            .limit(1)
+        )
+    ).scalar_one_or_none()
 
     if not action:
         raise HTTPException(
@@ -975,6 +1114,7 @@ async def get_evaluation_action(
 
 
 # ── Verification loop ─────────────────────────────────────────────────────────
+
 
 class GraderResultRequest(BaseModel):
     verification_retries: int
@@ -995,9 +1135,11 @@ async def save_grader_result(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid report_id")
 
-    report = (await session.execute(
-        select(PropguruEvaluationReport).where(PropguruEvaluationReport.id == rid)
-    )).scalar_one_or_none()
+    report = (
+        await session.execute(
+            select(PropguruEvaluationReport).where(PropguruEvaluationReport.id == rid)
+        )
+    ).scalar_one_or_none()
     if not report:
         raise HTTPException(status_code=404, detail=f"Report '{report_id}' not found")
 

@@ -67,6 +67,7 @@ from fde_agent.agent.tools.propguru.refiner import (
     propguru_get_report_scores,
     propguru_update_score,
 )
+from fde_agent.agent.tools.memory import query_semantic_store
 
 _TOOL_REGISTRY: dict[str, BaseTool] = {
     "calculator": calculator,
@@ -119,6 +120,8 @@ _TOOL_REGISTRY: dict[str, BaseTool] = {
     "propguru_propose_evaluation": propguru_propose_evaluation,
     "propguru_get_report_scores": propguru_get_report_scores,
     "propguru_update_score": propguru_update_score,
+    # ── Platform Memory ───────────────────────────────────────────────────────
+    "query_semantic_store": query_semantic_store,
 }
 
 

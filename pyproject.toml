@@ -34,6 +34,9 @@ dependencies = [
     "tavily-python>=0.5.0",
     # HTTP client
     "httpx>=0.27.2",
+    # Memory / RAG
+    "pgvector>=0.3.0",
+    "pypdf>=4.0.0",
     # OpenTelemetry — tracing SDK + OTLP HTTP exporter + auto-instrumentation
     "opentelemetry-api>=1.27.0",
     "opentelemetry-sdk>=1.27.0",

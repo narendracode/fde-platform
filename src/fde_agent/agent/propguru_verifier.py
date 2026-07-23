@@ -10,7 +10,7 @@ Phase 2 — Model Grader (LLM-as-judge):
 
 Checks (Phase 1)
 ----------------
-1. Coverage      — at least MIN_COVERAGE of 30 criteria must be scored
+1. Coverage      — at least MIN_COVERAGE of 31 criteria must be scored
 2. Boolean       — boolean criteria must be exactly 0.0 or 1.0
 3. Price sanity  — recommended_price within ±MAX_PRICE_DEVIATION of base_price
 4. Confidence    — "high" confidence requires ≥ HIGH_CONF_MIN_COVERAGE and
@@ -41,9 +41,9 @@ _log = logging.getLogger(__name__)
 
 # ── Thresholds ────────────────────────────────────────────────────────────────
 
-MIN_COVERAGE = 28               # out of 30 — FAIL if fewer than this are scored
+MIN_COVERAGE = 29               # out of 31 — FAIL if fewer than this are scored
 MAX_PRICE_DEVIATION = 0.50      # ±50% from base_price
-HIGH_CONF_MIN_COVERAGE = 27     # 90% of 30
+HIGH_CONF_MIN_COVERAGE = 28     # ~90% of 31
 HIGH_CONF_MIN_FACTOR = 0.60     # minimum score_factor for "high" confidence
 
 # Phase 2 — Model Grader
@@ -175,7 +175,7 @@ def _check_confidence(report: dict, scored_count: int) -> str | None:
     issues: list[str] = []
     if scored_count < HIGH_CONF_MIN_COVERAGE:
         issues.append(
-            f"coverage is {scored_count}/30 (need ≥ {HIGH_CONF_MIN_COVERAGE} for 'high')"
+            f"coverage is {scored_count} criteria scored (need ≥ {HIGH_CONF_MIN_COVERAGE} for 'high')"
         )
     if score_factor < HIGH_CONF_MIN_FACTOR:
         issues.append(

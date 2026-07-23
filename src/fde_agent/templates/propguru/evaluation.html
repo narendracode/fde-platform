@@ -243,7 +243,7 @@
 {% block content %}
 <div class="main">
   <h2>Property Evaluation</h2>
-  <p class="subtitle">AI-driven property scoring across 30 criteria · Analyst review &amp; refinement</p>
+  <p class="subtitle">AI-driven property scoring across 31 criteria · Analyst review &amp; refinement</p>
 
   <!-- Stage filter tabs -->
   <div class="stage-tabs">
@@ -275,10 +275,11 @@
           <div class="lc-who">🤖 AI Agents (automated)</div>
           <div class="lc-label">Pipeline Runs</div>
           <div class="lc-desc">
-            4 agents run in sequence:<br>
+            5 agents run in sequence:<br>
             <strong>Data Collector</strong> — reads property attributes, scores 10 criteria<br>
             <strong>Market Analyst</strong> — fetches locality comps, sets base price<br>
             <strong>Scorer</strong> — scores 20 location &amp; amenity criteria<br>
+            <strong>Vastu Scorer</strong> — scores Vastu compliance (CRIT-031) from knowledge base<br>
             <strong>Evaluator</strong> — calculates price, raises approval request
           </div>
         </div>
@@ -385,7 +386,7 @@
     </div>
 
     <div class="scores-section">
-      <div class="scores-title">Evaluation Scores (30 Criteria)</div>
+      <div class="scores-title">Evaluation Scores (31 Criteria)</div>
       <div id="scores-body"><div class="empty"><span class="spinner"></span></div></div>
     </div>
 
@@ -459,6 +460,7 @@ const CAT_LABELS = {
   location: 'Location Connectivity',
   property: 'Property Attributes',
   society:  'Building / Society',
+  vastu:    'Vastu Compliance',
 };
 
 function toast(msg, ok = true) {
@@ -709,7 +711,7 @@ async function loadScores(reportId) {
   }
   const data = await r.json();
   const groups = data.groups || {};
-  const cats   = ['amenity','location','property','society'];
+  const cats   = ['amenity','location','property','society','vastu'];
   let html = '';
   let hasAnalyst = false;
 

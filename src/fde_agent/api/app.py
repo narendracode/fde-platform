@@ -27,6 +27,8 @@ from fde_agent.api.routes.propguru import (
     evaluation as propguru_evaluation,
     simulation as propguru_simulation,
 )
+from fde_agent.api.routes import stores as stores_api
+from fde_agent.api.routes import stores_pages
 from fde_agent.config.settings import settings
 
 logging.basicConfig(level=settings.log_level.upper())
@@ -76,6 +78,10 @@ app.include_router(propguru_deals.router)
 app.include_router(propguru_evaluation.router)
 app.include_router(propguru_simulation.router)
 app.include_router(propguru_pages.router)
+
+# ── Platform Memory / Stores ─────────────────────────────────────────────────
+app.include_router(stores_api.router)
+app.include_router(stores_pages.router)
 
 
 @app.on_event("startup")

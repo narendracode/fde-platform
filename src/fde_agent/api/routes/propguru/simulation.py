@@ -69,6 +69,8 @@ _CRITERIA = [
     {"criterion_code": "CRIT-028", "name": "Lift Availability", "category": "society", "weight": 4.0, "scoring_type": "boolean", "description": "Functional passenger lift in the building.", "sort_order": 28},
     {"criterion_code": "CRIT-029", "name": "Water Supply Quality", "category": "society", "weight": 4.0, "scoring_type": "scale_1_5", "description": "Water availability and quality. 5=24/7 municipal + backup, 4=regular municipal with backup, 3=timed supply with tank, 2=partial supply, 1=borewell only.", "sort_order": 29},
     {"criterion_code": "CRIT-030", "name": "Society Maintenance Quality", "category": "society", "weight": 5.0, "scoring_type": "scale_1_5", "description": "Overall maintenance of common areas and building. 5=excellent, 1=poor.", "sort_order": 30},
+    # Vastu (1)
+    {"criterion_code": "CRIT-031", "name": "Vastu Compliance", "category": "vastu", "weight": 5.0, "scoring_type": "scale_1_5", "description": "Vastu Shastra compliance. 5=highly compliant (North/NE facing, auspicious layout), 3=neutral, 1=significant Vastu doshas (South-facing, inauspicious layout). Scored by AI using vastu-shastra knowledge base.", "sort_order": 31},
 ]
 
 _PROPERTIES = [

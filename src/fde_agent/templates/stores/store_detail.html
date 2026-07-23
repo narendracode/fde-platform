@@ -1,0 +1,298 @@
+{% extends "base.html" %}
+{% block title %}{{ store.name }} — Store{% endblock %}
+
+{% block head_extra %}
+<style>
+  .page-header {
+    background: #fff; border-bottom: 1px solid #e5e7eb;
+    padding: 16px 32px; display: flex; align-items: center; gap: 12px;
+  }
+  .page-header a { color: #6b7280; text-decoration: none; font-size: 13px; }
+  .page-header a:hover { color: #4f46e5; }
+  .content { padding: 28px 32px; display: grid; grid-template-columns: 300px 1fr; gap: 24px; }
+
+  .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 20px; }
+  .card h2 { font-size: 14px; font-weight: 700; color: #111827; margin-bottom: 14px; }
+
+  .meta-row { display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 0; border-bottom: 1px solid #f3f4f6; font-size: 13px; }
+  .meta-row:last-child { border-bottom: none; }
+  .meta-label { color: #6b7280; font-weight: 500; }
+  .meta-value { color: #111827; font-weight: 600; font-family: monospace; font-size: 12px; }
+
+  .badge {
+    display: inline-flex; padding: 2px 8px; border-radius: 20px;
+    font-size: 11px; font-weight: 600;
+  }
+  .badge-active { background: #dcfce7; color: #166534; }
+  .badge-inactive { background: #fee2e2; color: #991b1b; }
+  .badge-pending { background: #fef3c7; color: #92400e; }
+  .badge-approved { background: #dcfce7; color: #166534; }
+  .badge-rejected { background: #fee2e2; color: #991b1b; }
+
+  .docs-header {
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;
+  }
+  .docs-header h2 { font-size: 15px; font-weight: 700; color: #111827; }
+
+  .doc-row {
+    display: grid; grid-template-columns: 1fr 80px 90px 80px 120px;
+    gap: 12px; align-items: center;
+    padding: 12px 0; border-bottom: 1px solid #f3f4f6; font-size: 13px;
+  }
+  .doc-row:last-child { border-bottom: none; }
+  .doc-row.header { font-size: 11px; font-weight: 700; color: #9ca3af; text-transform: uppercase; }
+  .doc-title { font-weight: 600; color: #111827; }
+  .doc-preview { font-size: 11px; color: #9ca3af; margin-top: 2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .doc-actions { display: flex; gap: 6px; justify-content: flex-end; }
+
+  .btn-primary {
+    background: #6366f1; color: #fff; border: none; border-radius: 8px;
+    padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .btn-primary:hover { background: #4f46e5; }
+  .btn-sm {
+    border: none; border-radius: 6px; padding: 4px 10px;
+    font-size: 12px; font-weight: 600; cursor: pointer;
+  }
+  .btn-approve { background: #dcfce7; color: #166534; }
+  .btn-approve:hover { background: #bbf7d0; }
+  .btn-reject { background: #fee2e2; color: #991b1b; }
+  .btn-reject:hover { background: #fecaca; }
+  .btn-delete { background: #f3f4f6; color: #6b7280; }
+  .btn-delete:hover { background: #e5e7eb; }
+
+  .empty { text-align: center; padding: 40px; color: #9ca3af; font-size: 13px; }
+
+  /* Upload modal */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5);
+    z-index: 1000; align-items: center; justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: #fff; border-radius: 12px; padding: 28px; width: 480px;
+    max-width: 95vw; box-shadow: 0 20px 60px rgba(0,0,0,.2);
+  }
+  .modal h2 { font-size: 17px; font-weight: 700; margin-bottom: 20px; }
+  .form-row { margin-bottom: 16px; }
+  .form-row label { display: block; font-size: 12px; font-weight: 600; color: #374151; margin-bottom: 5px; }
+  .form-row input, .form-row textarea {
+    width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 7px;
+    font-size: 13px; color: #111827;
+  }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+  .btn-outline {
+    background: #fff; color: #374151; border: 1px solid #d1d5db; border-radius: 8px;
+    padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .toast {
+    position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+    background: #111827; color: #fff; padding: 12px 20px; border-radius: 8px;
+    font-size: 13px; opacity: 0; transition: opacity .3s;
+  }
+  .toast.show { opacity: 1; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <a href="/stores">← Stores</a>
+  <span style="color:#d1d5db">/</span>
+  <span style="font-size:15px;font-weight:700;color:#111827">{{ store.name }}</span>
+  <span class="badge {% if store.is_active %}badge-active{% else %}badge-inactive{% endif %}" style="margin-left:auto">
+    {% if store.is_active %}Active{% else %}Inactive{% endif %}
+  </span>
+</div>
+
+<div class="content">
+  <!-- Left: Store metadata -->
+  <div>
+    <div class="card" style="margin-bottom:16px">
+      <h2>Store Details</h2>
+      <div class="meta-row"><span class="meta-label">Slug</span><span class="meta-value">{{ store.slug }}</span></div>
+      <div class="meta-row"><span class="meta-label">Company</span><span class="meta-value">{{ store.company }}</span></div>
+      <div class="meta-row"><span class="meta-label">Type</span><span class="meta-value">{{ store.memory_type }}</span></div>
+      <div class="meta-row"><span class="meta-label">Model</span><span class="meta-value" style="font-size:10px">{{ store.embedding_model }}</span></div>
+      <div class="meta-row"><span class="meta-label">Chunk size</span><span class="meta-value">{{ store.chunk_size }} tokens</span></div>
+      <div class="meta-row"><span class="meta-label">Chunk overlap</span><span class="meta-value">{{ store.chunk_overlap }} tokens</span></div>
+    </div>
+    <div class="card">
+      <h2>Stats</h2>
+      <div class="meta-row">
+        <span class="meta-label">Documents</span>
+        <span class="meta-value">{{ store.doc_count }}</span>
+      </div>
+      <div class="meta-row">
+        <span class="meta-label">Indexed chunks</span>
+        <span class="meta-value">{{ store.chunk_count }}</span>
+      </div>
+      {% if store.description %}
+      <div style="margin-top:14px;padding-top:14px;border-top:1px solid #f3f4f6;font-size:12px;color:#6b7280;line-height:1.6">
+        {{ store.description }}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Right: Document management -->
+  <div class="card">
+    <div class="docs-header">
+      <h2>Documents</h2>
+      <button class="btn-primary" onclick="openUpload()">+ Upload</button>
+    </div>
+
+    {% if docs %}
+    <div class="doc-row header">
+      <div>Title / Preview</div>
+      <div>Type</div>
+      <div>Status</div>
+      <div>Chunks</div>
+      <div style="text-align:right">Actions</div>
+    </div>
+    {% for d in docs %}
+    <div class="doc-row" id="doc-{{ d.id }}">
+      <div>
+        <div class="doc-title">{{ d.title }}</div>
+        <div class="doc-preview">{{ d.preview }}</div>
+        <div style="font-size:10px;color:#9ca3af;margin-top:2px">{{ d.created_at }}</div>
+      </div>
+      <div>{{ d.source_type }}</div>
+      <div><span class="badge badge-{{ d.status }}">{{ d.status }}</span></div>
+      <div style="font-weight:600;color:{% if d.chunk_count > 0 %}#5b21b6{% else %}#9ca3af{% endif %}">
+        {{ d.chunk_count }}
+      </div>
+      <div class="doc-actions">
+        {% if d.status == 'pending' %}
+        <button class="btn-sm btn-approve" onclick="approveDoc('{{ d.id }}')">Approve</button>
+        <button class="btn-sm btn-reject" onclick="rejectDoc('{{ d.id }}')">Reject</button>
+        {% endif %}
+        <button class="btn-sm btn-delete" onclick="deleteDoc('{{ d.id }}')">Delete</button>
+      </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="empty">No documents yet — upload a PDF or text file to get started.</div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Upload modal -->
+<div class="modal-overlay" id="upload-modal">
+  <div class="modal">
+    <h2>Upload Document</h2>
+    <div class="form-row">
+      <label>Title</label>
+      <input id="up-title" type="text" placeholder="Vastu Shastra Guide 2024" />
+    </div>
+    <div class="form-row">
+      <label>File (PDF or .txt)</label>
+      <input id="up-file" type="file" accept=".pdf,.txt,.md" />
+    </div>
+    <div style="font-size:12px;color:#9ca3af;margin-top:-8px">
+      Uploaded documents require approval before they are indexed and available to agents.
+    </div>
+    <div class="modal-actions">
+      <button class="btn-outline" onclick="closeUpload()">Cancel</button>
+      <button class="btn-primary" id="up-btn" onclick="uploadDoc()">Upload</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API_KEY = 'dev-secret-key-change-in-prod';
+const SLUG = '{{ store.slug }}';
+
+function toast(msg, ok = true) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.background = ok ? '#111827' : '#dc2626';
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3500);
+}
+
+function openUpload() { document.getElementById('upload-modal').classList.add('open'); }
+function closeUpload() { document.getElementById('upload-modal').classList.remove('open'); }
+
+async function uploadDoc() {
+  const title = document.getElementById('up-title').value.trim();
+  const fileInput = document.getElementById('up-file');
+  if (!title) { toast('Title is required', false); return; }
+  if (!fileInput.files.length) { toast('Please select a file', false); return; }
+
+  const btn = document.getElementById('up-btn');
+  btn.textContent = 'Uploading…';
+  btn.disabled = true;
+
+  const fd = new FormData();
+  fd.append('title', title);
+  fd.append('file', fileInput.files[0]);
+
+  const resp = await fetch(`/api/v1/stores/${SLUG}/documents`, {
+    method: 'POST',
+    headers: { 'X-API-Key': API_KEY },
+    body: fd,
+  });
+  btn.textContent = 'Upload';
+  btn.disabled = false;
+
+  if (resp.ok) {
+    closeUpload();
+    toast('Document uploaded — pending approval');
+    setTimeout(() => location.reload(), 1000);
+  } else {
+    const err = await resp.json();
+    toast('Upload failed: ' + (err.detail || JSON.stringify(err)), false);
+  }
+}
+
+async function approveDoc(docId) {
+  const resp = await fetch(`/api/v1/stores/${SLUG}/documents/${docId}/approve?approved_by=analyst`, {
+    method: 'PATCH',
+    headers: { 'X-API-Key': API_KEY },
+  });
+  if (resp.ok) {
+    toast('Approved — embedding in background…');
+    setTimeout(() => location.reload(), 1200);
+  } else {
+    toast('Approve failed', false);
+  }
+}
+
+async function rejectDoc(docId) {
+  const notes = prompt('Rejection reason (optional):') || '';
+  const resp = await fetch(`/api/v1/stores/${SLUG}/documents/${docId}/reject`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+    body: JSON.stringify({ notes }),
+  });
+  if (resp.ok) {
+    toast('Document rejected');
+    setTimeout(() => location.reload(), 1000);
+  } else {
+    toast('Reject failed', false);
+  }
+}
+
+async function deleteDoc(docId) {
+  if (!confirm('Delete this document and all its chunks?')) return;
+  const resp = await fetch(`/api/v1/stores/${SLUG}/documents/${docId}`, {
+    method: 'DELETE',
+    headers: { 'X-API-Key': API_KEY },
+  });
+  if (resp.status === 204 || resp.ok) {
+    toast('Document deleted');
+    setTimeout(() => location.reload(), 800);
+  } else {
+    toast('Delete failed', false);
+  }
+}
+
+document.getElementById('upload-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeUpload();
+});
+</script>
+{% endblock %}
