@@ -374,10 +374,13 @@
       <div class="reasoning-box" id="rpt-reasoning" style="display:none"></div>
 
       <div class="action-row" id="action-row">
-        <button class="btn btn-success" onclick="approveReport()">✓ Approve</button>
-        <button class="btn btn-danger"  onclick="rejectReport()">✗ Reject</button>
-        <button class="btn-open-refine" id="refine-btn" onclick="openRefineCanvas()" style="display:none">✦ Refine with AI</button>
-        <span style="color:#9ca3af;font-size:12px;margin-left:6px">Approval locks the price and advances the deal</span>
+        <button class="btn btn-success" id="approve-btn" onclick="approveReport()">✓ Approve</button>
+        <button class="btn btn-danger"  id="reject-btn"  onclick="rejectReport()">✗ Reject</button>
+        <button class="btn-open-refine" id="refine-btn"  onclick="openRefineCanvas()" style="display:none">✦ Refine with AI</button>
+        <button class="btn btn-outline"  id="rerun-btn"
+                style="display:none;color:#7c3aed;border-color:#7c3aed"
+                onclick="rerunEvaluation()">↺ Re-run Evaluation</button>
+        <span id="action-hint" style="color:#9ca3af;font-size:12px;margin-left:6px">Approval locks the price and advances the deal</span>
       </div>
     </div>
 
@@ -610,7 +613,7 @@ async function triggerEval(dealId, dealCode, btn) {
   } else {
     toast(d.detail || 'Failed to start evaluation', false);
     btn.disabled = false;
-    btn.textContent = '▶ Evaluate';
+    btn.innerHTML = btn.id === 'rerun-btn' ? '↺ Re-run Evaluation' : '▶ Evaluate';
   }
 }
 
@@ -667,12 +670,27 @@ async function renderReport(report) {
   else rb.style.display = 'none';
 
   const actionRow = document.getElementById('action-row');
-  const refineBtn = document.getElementById('refine-btn');
-  if (report.status === 'approved' || report.status === 'rejected') {
+  const approveBtn = document.getElementById('approve-btn');
+  const rejectBtn  = document.getElementById('reject-btn');
+  const refineBtn  = document.getElementById('refine-btn');
+  const rerunBtn   = document.getElementById('rerun-btn');
+  const actionHint = document.getElementById('action-hint');
+
+  if (report.status === 'approved') {
     actionRow.style.display = 'none';
-    refineBtn.style.display = 'none';
-  } else {
+  } else if (report.status === 'rejected') {
     actionRow.style.display = 'flex';
+    approveBtn.style.display = 'none';
+    rejectBtn.style.display  = 'none';
+    refineBtn.style.display  = 'none';
+    rerunBtn.style.display   = 'inline-flex';
+    actionHint.textContent   = 'Re-run will start a fresh AI evaluation pipeline for this deal.';
+  } else {
+    actionRow.style.display  = 'flex';
+    approveBtn.style.display = '';
+    rejectBtn.style.display  = '';
+    rerunBtn.style.display   = 'none';
+    actionHint.textContent   = 'Approval locks the price and advances the deal';
     // Show Refine when report has a price (pipeline done) regardless of exact status —
     // draft with recommended_price means the evaluator ran but the status transition was missed
     const canRefine = report.status === 'pending_review' ||
@@ -801,11 +819,18 @@ async function rejectReport() {
   }
 
   if (ok) {
-    toast('Evaluation rejected — re-trigger AI pipeline from the Deals page or table above');
+    toast('Evaluation rejected — click ↺ Re-run to start a fresh evaluation');
     _currentReport.status = 'rejected';
     document.getElementById('rpt-status-badge').innerHTML = RPT_STATUS['rejected'];
-    document.getElementById('action-row').style.display = 'none';
+    // Re-render action row to show the Re-run button
+    renderReport(_currentReport);
   }
+}
+
+async function rerunEvaluation() {
+  if (!_currentDeal) { toast('No deal selected', false); return; }
+  const btn = document.getElementById('rerun-btn');
+  await triggerEval(_currentDeal.id, _currentDeal.deal_code, btn);
 }
 
 // ── Conversational Refine canvas ──────────────────────────────────────────────

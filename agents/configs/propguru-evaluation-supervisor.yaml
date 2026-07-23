@@ -9,22 +9,11 @@ agent:
   companies: [propguru]
 
   workers:
-    - agent: propguru-data-collector
-      description: >
-        Creates the evaluation report (returns report_id). Scores PROPERTY
-        (CRIT-021 to CRIT-025) and SOCIETY (CRIT-026 to CRIT-030) from DB
-        attributes. SKIPS AMENITY (CRIT-001 to CRIT-010) — needs site data.
-        Call FIRST.
-    - agent: propguru-market-analyst
-      description: >
-        Fetches market comp data for the property's locality.
-        Computes the base price from market_rate × carpet_area.
-        Returns 6-month trend and transaction volume. Call SECOND.
     - agent: propguru-scorer
       description: >
-        Scores AMENITY (CRIT-001 to CRIT-010) with locality-based estimates AND
-        LOCATION (CRIT-011 to CRIT-020) using propguru_score_proximity with
-        actual coordinates. Saves all 20 scores to the report. Call THIRD.
+        Scores LOCATION connectivity criteria (CRIT-011 to CRIT-020) using locality
+        knowledge and propguru_score_proximity. All other criteria (AMENITY, PROPERTY,
+        SOCIETY) are pre-scored by the pre-evaluate API before this pipeline starts. Call FIRST.
     - agent: propguru-evaluator
       description: >
         Reads all saved scores, calls propguru_calculate_price to compute
@@ -43,17 +32,20 @@ agent:
 
   system_prompt: |
     You are the property evaluation supervisor for Propguru.
-    Coordinate four specialist agents to evaluate a property and produce a
-    recommended acquisition price for analyst review.
+    Coordinate two specialist agents to complete a property evaluation and produce
+    a recommended acquisition price for analyst review.
+
+    IMPORTANT: Before this pipeline started, a pre-evaluate service already:
+    - Created the evaluation report (report_id is in [Runtime context])
+    - Scored 20 criteria deterministically: AMENITY (CRIT-001..010), PROPERTY (CRIT-021..025), SOCIETY (CRIT-026..030)
+    - Set market_rate_per_sqft and base_price from the market comp database
 
     Call workers in this EXACT sequence:
-    1. propguru-data-collector  — MUST run first (reads property, scores attribute criteria)
-    2. propguru-market-analyst  — MUST run second (fetches market comps, sets base price)
-    3. propguru-scorer          — MUST run third (scores AMENITY CRIT-001..010 and LOCATION CRIT-011..020)
-    4. propguru-evaluator       — MUST run last (calculates price, proposes HITL action)
+    1. propguru-scorer    — Scores LOCATION criteria (CRIT-011..020) using locality + coordinates from context
+    2. propguru-evaluator — Calculates price from all scores and proposes to HITL
 
-    Pass deal_id and report_id through all workers.
-    The report_id is created by propguru-data-collector and must be passed to all others.
+    report_id, deal_id, locality, city, latitude, longitude are automatically injected into every worker from [Runtime context].
+    You do NOT need to pass them via context — they are already available to each worker.
 
     NOTE: Two automated quality gates verify propguru-evaluator output after each run.
     Phase 1 — Code Grader checks coverage, price sanity, and data validity.

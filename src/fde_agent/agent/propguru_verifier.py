@@ -189,19 +189,26 @@ def _check_confidence(report: dict, scored_count: int) -> str | None:
 def _check_category_zeros(
     groups: dict[str, list], criteria: list[dict]
 ) -> list[str]:
-    """Return categories where every scored criterion is 0 or the category has no scores."""
+    """Return categories where every scored criterion is 0 or the category has no scores.
+
+    Boolean criteria at 0 mean "amenity absent" — a valid score, not a missing one.
+    Only flag a category if all its non-boolean criteria are zero or unscored.
+    """
+    crit_type: dict[str, str] = {str(c["id"]): c["scoring_type"] for c in criteria}
+
     crit_by_cat: dict[str, list[str]] = {}
     for c in criteria:
         crit_by_cat.setdefault(c["category"], []).append(str(c["id"]))
 
     zeroed: list[str] = []
-    for cat, expected_ids in crit_by_cat.items():
+    for cat in crit_by_cat:
         cat_scores = [s for s in groups.get(cat, []) if s.get("score") is not None]
         if not cat_scores:
             zeroed.append(cat)
             continue
-        nonzero = [s for s in cat_scores if float(s["score"]) > 0]
-        if not nonzero:
+        # Boolean 0 = "absent" — not a scoring error; only inspect non-boolean criteria
+        non_bool = [s for s in cat_scores if crit_type.get(s.get("criterion_id", "")) != "boolean"]
+        if non_bool and not any(float(s["score"]) > 0 for s in non_bool):
             zeroed.append(cat)
     return zeroed
 

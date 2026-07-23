@@ -19,6 +19,8 @@ from fde_agent.db.models import (
     PropguruEvaluationCriteria,
     PropguruEvaluationReport,
     PropguruEvaluationScore,
+    PropguruMarketComp,
+    PropguruProperty,
 )
 from fde_agent.db.session import get_session
 
@@ -174,6 +176,190 @@ async def create_evaluation_report(
     await session.commit()
     await session.refresh(report)
     return _report_out(report)
+
+
+@router.post("/deals/{deal_id}/pre-evaluate", status_code=201)
+async def pre_evaluate(
+    deal_id: str,
+    session: AsyncSession = Depends(get_session),
+    _: str = Depends(verify_api_key),
+):
+    """Pre-populate an evaluation report with deterministic scores before the agent pipeline runs.
+
+    Creates the report, scores all criteria that can be derived from property data
+    (PROPERTY, SOCIETY, AMENITY), and sets market_rate + base_price from the market comp DB.
+    Returns report_id and context for the scorer agent (location, coordinates, market summary).
+    """
+    # ── Resolve deal + property ────────────────────────────────────────────────
+    try:
+        uid = uuid.UUID(deal_id)
+        deal = (await session.execute(select(PropguruDeal).where(PropguruDeal.id == uid))).scalar_one_or_none()
+    except ValueError:
+        deal = (await session.execute(select(PropguruDeal).where(PropguruDeal.deal_code == deal_id))).scalar_one_or_none()
+    if not deal:
+        raise HTTPException(status_code=404, detail=f"Deal '{deal_id}' not found")
+
+    prop = (await session.execute(
+        select(PropguruProperty).where(PropguruProperty.id == deal.property_id)
+    )).scalar_one_or_none()
+    if not prop:
+        raise HTTPException(status_code=404, detail="Property not found for this deal")
+
+    # ── Fetch all active criteria keyed by criterion_code ─────────────────────
+    all_criteria = (await session.execute(
+        select(PropguruEvaluationCriteria).where(PropguruEvaluationCriteria.is_active == True)
+    )).scalars().all()
+    criteria_by_code = {c.criterion_code: c for c in all_criteria}
+
+    # ── Market comp lookup ─────────────────────────────────────────────────────
+    comp = (await session.execute(
+        select(PropguruMarketComp).where(PropguruMarketComp.locality == prop.locality)
+    )).scalar_one_or_none()
+
+    fallback_used = False
+    if comp:
+        market_rate = comp.avg_price_per_sqft
+        market_source = comp.data_source or "db"
+        market_trend = comp.price_trend_6m_pct
+        market_txn_count = comp.transaction_count_6m
+    else:
+        market_rate = 10000.0
+        market_source = "fallback"
+        market_trend = None
+        market_txn_count = None
+        fallback_used = True
+
+    base_price = round(market_rate * (prop.carpet_area_sqft or 0), 2)
+
+    # ── Create draft report ────────────────────────────────────────────────────
+    report = PropguruEvaluationReport(
+        deal_id=deal.id,
+        version=1,
+        status="draft",
+        market_rate_per_sqft=market_rate,
+        base_price=base_price,
+    )
+    session.add(report)
+    await session.flush()  # populate report.id before scoring
+
+    # ── Deterministic scoring helpers ──────────────────────────────────────────
+    is_house = prop.property_type == "independent_house"
+    scored: list[dict] = []
+
+    async def _save(code: str, score: float, raw: str, notes: str) -> None:
+        crit = criteria_by_code.get(code)
+        if not crit:
+            return
+        _validate_score(score, crit.scoring_type, code)
+        session.add(PropguruEvaluationScore(
+            report_id=report.id,
+            criterion_id=crit.id,
+            score=score,
+            raw_value=raw,
+            source="agent",
+            notes=notes,
+        ))
+        scored.append({"code": code, "score": score})
+
+    # ── PROPERTY criteria (CRIT-021 to CRIT-025) ──────────────────────────────
+    # CRIT-021 Floor Level
+    if is_house:
+        await _save("CRIT-021", 3.0, "independent_house", "N/A for independent house — neutral default")
+    else:
+        fn = prop.floor_number or 0
+        tf = prop.total_floors or 0
+        if fn <= 1:
+            floor_score = 2.0
+        elif fn <= 5:
+            floor_score = 3.0
+        elif fn <= 10:
+            floor_score = 4.0
+        else:
+            floor_score = 5.0
+        if tf > 0 and fn == tf:
+            floor_score = max(1.0, floor_score - 1.0)
+        await _save("CRIT-021", floor_score, f"floor {fn} of {tf}", f"Rule-based: floor {fn}/{tf}")
+
+    # CRIT-022 Facing
+    facing_map = {"east": 5.0, "north": 4.0, "north_east": 3.0, "northeast": 3.0, "west": 3.0, "south": 2.0}
+    facing_score = facing_map.get((prop.facing or "").lower(), 3.0)
+    await _save("CRIT-022", facing_score, prop.facing or "unknown", f"Facing {prop.facing} → score {facing_score}")
+
+    # CRIT-023 Property Age
+    age = prop.building_age_years or 0
+    if age <= 2:
+        age_score = 5.0
+    elif age <= 5:
+        age_score = 4.0
+    elif age <= 10:
+        age_score = 3.0
+    elif age <= 20:
+        age_score = 2.0
+    else:
+        age_score = 1.0
+    await _save("CRIT-023", age_score, f"{age} years", f"Building age {age}yr → score {age_score}")
+
+    # CRIT-024 Covered Parking — no parking data in property record
+    await _save("CRIT-024", 3.0, "unknown", "No parking data in property record — neutral default")
+
+    # CRIT-025 Power Backup — no power backup data in property record
+    await _save("CRIT-025", 0.0, "unknown", "No power backup data in property record — conservative default 0")
+
+    # ── SOCIETY criteria (CRIT-026 to CRIT-030) ───────────────────────────────
+    if is_house:
+        await _save("CRIT-026", 0.0, "independent_house", "Not applicable for independent house")
+        await _save("CRIT-027", 1.0, "independent_house", "Standalone independent — score 1")
+        await _save("CRIT-028", 0.0, "independent_house", "No lift for independent house")
+        await _save("CRIT-029", 3.0, "unknown", "Neutral default — analyst to verify")
+        await _save("CRIT-030", 3.0, "unknown", "Neutral default — analyst to verify")
+    else:
+        for code in ("CRIT-026", "CRIT-028"):
+            await _save(code, 0.0, "unknown", "Unknown — analyst to verify from site visit")
+        for code in ("CRIT-027", "CRIT-029", "CRIT-030"):
+            await _save(code, 3.0, "unknown", "Neutral default — analyst to verify")
+
+    # ── AMENITY criteria (CRIT-001 to CRIT-010, all boolean) ──────────────────
+    amenity_codes = [f"CRIT-{i:03d}" for i in range(1, 11)]
+    if is_house:
+        amenity_note = "No society amenities for independent house"
+        amenity_score = 0.0
+    else:
+        amenity_note = "Unknown — verify from site visit data"
+        amenity_score = 0.0
+    for code in amenity_codes:
+        await _save(code, amenity_score, "unknown", amenity_note)
+
+    await session.commit()
+    await session.refresh(report)
+
+    # ── Build scorer context ───────────────────────────────────────────────────
+    market_summary = {
+        "locality": prop.locality,
+        "market_rate_per_sqft": market_rate,
+        "base_price": base_price,
+        "base_price_lakhs": round(base_price / 100_000, 2),
+        "price_trend_6m_pct": market_trend,
+        "transaction_count_6m": market_txn_count,
+        "data_source": market_source,
+        "fallback_used": fallback_used,
+    }
+
+    return {
+        "report_id": str(report.id),
+        "deal_id": str(deal.id),
+        "deal_code": deal.deal_code,
+        "property_summary": f"{prop.bedrooms}BHK, {prop.carpet_area_sqft} sqft, {prop.locality}, {prop.city}",
+        "locality": prop.locality,
+        "city": prop.city,
+        "latitude": prop.latitude,
+        "longitude": prop.longitude,
+        "property_type": prop.property_type,
+        "pre_scored_count": len(scored),
+        "pre_scored_criteria": [s["code"] for s in scored],
+        "market_summary": market_summary,
+        "message": f"Pre-evaluation complete: {len(scored)} criteria scored deterministically. "
+                   f"Scorer agent to handle CRIT-011 to CRIT-020 (location).",
+    }
 
 
 @router.get("/deals/{deal_id}/evaluation")
@@ -558,11 +744,21 @@ async def reject_evaluation(
     if not report:
         raise HTTPException(status_code=404, detail=f"Report '{report_id}' not found")
 
+    now = datetime.now(timezone.utc)
     report.status = "rejected"
     report.analyst_notes = req.reason
-    report.updated_at = datetime.now(timezone.utc)
+    report.updated_at = now
+
+    # Reset deal to lead so the analyst can trigger a fresh evaluation
+    deal = (await session.execute(
+        select(PropguruDeal).where(PropguruDeal.id == report.deal_id)
+    )).scalar_one_or_none()
+    if deal and deal.stage == "evaluation_pending":
+        deal.stage = "lead"
+        deal.updated_at = now
+
     await session.commit()
-    return {"report_id": report_id, "status": "rejected", "reason": req.reason}
+    return {"report_id": report_id, "status": "rejected", "deal_stage": deal.stage if deal else None, "reason": req.reason}
 
 
 # ── Final price override ───────────────────────────────────────────────────────

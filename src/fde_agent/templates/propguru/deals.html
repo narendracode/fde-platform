@@ -198,7 +198,8 @@ async function loadDeals() {
                 ? `<button class="btn btn-success btn-sm" onclick="triggerEval('${d.id}','${d.deal_code}',this)">▶ Evaluate</button>`
                 : d.stage === 'evaluation_pending'
                   ? `<span style="font-size:11px;color:#92400e;background:#fef3c7;padding:2px 8px;border-radius:10px;font-weight:600;white-space:nowrap">⏳ Running</span>
-                     <a href="/propguru/evaluation?deal_id=${d.id}" class="btn btn-outline btn-sm">View Report</a>`
+                     <a href="/propguru/evaluation?deal_id=${d.id}" class="btn btn-outline btn-sm">View Report</a>
+                     <button class="btn btn-outline btn-sm" style="color:#7c3aed;border-color:#7c3aed" onclick="triggerEval('${d.id}','${d.deal_code}',this)" title="Re-run if evaluation was rejected or stuck">↺ Re-run</button>`
                   : d.stage === 'evaluation_done'
                     ? `<a href="/propguru/evaluation?deal_id=${d.id}" class="btn btn-outline btn-sm">View Report</a>`
                     : '<span style="color:#d1d5db;font-size:12px">—</span>'}

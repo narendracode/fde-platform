@@ -55,6 +55,7 @@ class SupervisorState(TypedDict):
     next_worker: str        # "" = FINISH; otherwise a worker key from config.workers
     next_instruction: str   # the instruction the supervisor wants to give the next worker
     next_context: dict      # structured key-value context injected as [Runtime context] for the next worker
+    pipeline_context: dict  # immutable initial extra_context — auto-merged into every worker call
     rounds: int             # incremented each time the supervisor node runs
     worker_stats: list      # per-invocation token/cost tracking for each worker call
     # Verification loop ────────────────────────────────────────────────────────
@@ -94,7 +95,19 @@ def _worker_node_fn(worker_agent, worker_name: str, worker_config: AgentConfig):
 
     def worker_node(state: SupervisorState) -> dict[str, Any]:
         instruction = state.get("next_instruction", "")
-        worker_context = state.get("next_context") or {}
+        # pipeline_context (immutable initial extra_context) provides ground-truth values
+        # such as report_id and deal_id.  next_context from the supervisor LLM can add or
+        # override fields, but placeholders like "<report_id>" are masked by the real value.
+        pipeline_ctx = state.get("pipeline_context") or {}
+        llm_ctx = state.get("next_context") or {}
+        # LLM-generated context can add new keys but must never override ground-truth
+        # pipeline_context values (report_id, deal_id, etc.).  Also drop placeholders.
+        extra_from_llm = {
+            k: v for k, v in llm_ctx.items()
+            if k not in pipeline_ctx
+            and not (isinstance(v, str) and v.startswith("<") and v.endswith(">"))
+        }
+        worker_context = {**pipeline_ctx, **extra_from_llm}
         _log.info("supervisor → worker '%s': %s", worker_name, instruction[:120])
 
         # Build message — same block order as react_agent.run_agent:
@@ -610,6 +623,7 @@ def run_supervisor(
         "next_worker": "",
         "next_instruction": "",
         "next_context": {},
+        "pipeline_context": dict(extra_context) if extra_context else {},
         "rounds": 0,
         "worker_stats": [],
         "verification_retries": 0,

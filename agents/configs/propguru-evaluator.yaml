@@ -24,7 +24,7 @@ agent:
     market_summary:
       type: string
       required: false
-      description: "JSON summary from propguru-market-analyst including base_price and trend"
+      description: "Market comp summary (locality, rate, base_price, trend) injected by pre-evaluate service"
 
   model:
     provider: openai

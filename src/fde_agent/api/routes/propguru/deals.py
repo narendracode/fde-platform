@@ -5,12 +5,14 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fde_agent.api.dependencies import verify_api_key
+from fde_agent.config.settings import settings
 from fde_agent.db.models import (
     Agent,
     AgentRun,
@@ -281,15 +283,42 @@ async def trigger_evaluation(
             detail=f"Evaluation already in progress for deal '{deal_id}'. Wait for it to complete.",
         )
 
+    # Pre-evaluate: score all deterministic criteria and set base price before queuing
+    pre_eval_url = f"{settings.api_base_url}/api/v1/propguru/deals/{deal.id}/pre-evaluate"
+    headers = {"X-API-Key": settings.api_key, "Content-Type": "application/json"}
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            pre_resp = await client.post(pre_eval_url, headers=headers)
+        if pre_resp.status_code not in (200, 201):
+            raise HTTPException(
+                status_code=500,
+                detail=f"Pre-evaluation failed: {pre_resp.text}",
+            )
+        pre_data = pre_resp.json()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Pre-evaluation error: {exc}") from exc
+
+    extra_context = {
+        "deal_id": str(deal.id),
+        "deal_code": deal.deal_code,
+        "report_id": pre_data["report_id"],
+        "locality": pre_data.get("locality", ""),
+        "city": pre_data.get("city", ""),
+        "latitude": pre_data.get("latitude"),
+        "longitude": pre_data.get("longitude"),
+        "property_type": pre_data.get("property_type", ""),
+        "property_summary": pre_data.get("property_summary", ""),
+        "market_summary": pre_data.get("market_summary", {}),
+    }
+
     run = AgentRun(
         agent_id=agent.id,
         status="pending",
         input={
             "message": f"Evaluate property deal {deal.deal_code}",
-            "extra_context": {
-                "deal_id": str(deal.id),
-                "deal_code": deal.deal_code,
-            },
+            "extra_context": extra_context,
         },
     )
     session.add(run)
@@ -299,10 +328,10 @@ async def trigger_evaluation(
     try:
         from fde_agent.queue.tasks import run_agent_task
         run_agent_task.delay(
-            str(run.id),
-            "propguru-evaluation-supervisor",
-            f"Evaluate property deal {deal.deal_code}",
-            {"deal_id": str(deal.id), "deal_code": deal.deal_code},
+            run_id=str(run.id),
+            agent_name="propguru-evaluation-supervisor",
+            user_message=f"Evaluate property deal {deal.deal_code}",
+            extra_context=extra_context,
         )
     except Exception:
         pass
@@ -311,6 +340,8 @@ async def trigger_evaluation(
         "run_id": str(run.id),
         "deal_id": str(deal.id),
         "deal_code": deal.deal_code,
+        "report_id": pre_data["report_id"],
+        "pre_scored_count": pre_data.get("pre_scored_count", 0),
         "status": "queued",
-        "message": f"Evaluation pipeline started for {deal.deal_code}",
+        "message": f"Evaluation pipeline started for {deal.deal_code} — {pre_data.get('pre_scored_count', 0)} criteria pre-scored",
     }
